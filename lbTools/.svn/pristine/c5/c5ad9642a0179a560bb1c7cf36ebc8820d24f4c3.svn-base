@@ -1,0 +1,921 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--Descripcion: Override de OutputType
+------------------------------------------------------------------------------------------------------------------------------------------------
+(	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@attribute: overrideOutputTypeInfo | Custom attribute para almacenar la informacion del override.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	ca_overrideOutputTypeInfo = attributes overrideOutputTypeInfo
+	(
+		parameters main
+		(
+			--guarda la descripcion del CA y su version.
+			CA_version		type:#float		animatable:false	default:1.1
+			CA_description	type:#string	default:"Almacena la informacion de un override de OutputType."
+				
+			--informacion específica del override
+			type		type:#string	default:"override"	--@var | type | Tipo del custom attribute. Override.
+			subType		type:#string	default:"outputType"	--@var | subType| Indica que tipo de override es. En funcion de este subtipo el override tiene unas propiedades u otras.
+			
+			------------------------------------------------------------
+			-- Parámetros de backup
+			
+			------------------------------------------------------------
+			-- Parámetros de backup y apply
+			--------------------------------------------------
+			--informacion sobre el contenido almacenado en el override
+			outputType	type:#string	default:"" --@var | outputType | Tipo de archivo de la ruta de render.
+			
+			--PNG--
+			pngType type:#string	default:"" --@var | pngType | Tipo de png
+			pngAlpha type:#boolean	default:true --@var | pngAlpha | Flag de alpha en pngs
+			pngInterlaced type:#boolean	default:false --@var | outputType | Flag de entralazado de pngs
+			
+			--EXR--
+			--No funciona--
+
+			--RPF--
+			colorDepth type:#integer default:16 --@var | colorDepth | Get/Set the color depth in bits per channel. Possible values are 8, 16 and 32. 
+			alpha type:#boolean default:true --@var | alpha | Enable/Disable the saving of alpha channel.
+			premultAlpha type:#boolean default:true --@var | premultAlpha | Enable/Disable premultiplied alpha. 
+			description type:#string default:"0" --@var | description | Get/Set the file description string. 
+			author type:#string default:"0" --@var | author | Get/Set the author string.
+			zChannel type:#boolean default:false --@var | zChannel | Get/Set Z-buffer channel saving.
+			mtlIDChannel type:#boolean default:false --@var | mtlIDChannel | Enable/Disable material ID channel saving.
+			nodeIDChannel type:#boolean default:false --@var | nodeIDChannel | Enable/Disable node ID channel saving.
+			uvChannel type:#boolean default:false --@var | uvChannel | Enable/Disable texture coordinates channel saving.
+			normalChannel type:#boolean default:false --@var | normalChannel | Enable/Disable non-clamped color channel saving.
+			realpixChannel type:#boolean default:false --@var | realpixChannel | Enable/Disable non-clamped color channel saving.
+			coverageChannel type:#boolean default:false --@var | coverageChannel | Enable/Disable coverage channel saving.
+			nodeRenderIDChannel type:#boolean default:false --@var | nodeRenderIDChannel | Enable/Disable node render ID channel saving.
+			colorChannel type:#boolean default:false --@var | colorChannel | Enable/Disable color channel saving.
+			transpChannel type:#boolean default:false --@var | transpChannel | Enable/Disable transparency channel saving.
+			velocChannel type:#boolean default:false --@var | velocChannel | Enable/Disable velocity channel saving.
+			weightChannel type:#boolean default:false --@var | weightChannel | Enable/Disable sub-pixel weight channel saving.
+			maskChannel type:#boolean default:false --@var | maskChannel | Enable/Disable sub-pixel mask channel saving.
+			
+			------------------------------------------------------------
+			-- Parámetros de apply
+		)
+	)
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: str_imageSettingsSaver | Struct de apoyo para almacenar los parámetros específicos de cada tipo de imagen en render.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct str_imageSettingsSaver
+	(
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		--PNG--
+		pngType = undefined,	--@var | pngType | Variable que almacena el tipo de PNG que estamos manejando en la escena.
+		pngAlpha = undefined,	--@var | pngAlpha | Variable que almacena si está activado el alpha en los PNGs de salida para render.
+		pngInterlaced = undefined,	--@var | pngAlpha | Variable que almacena si está activado el alpha en los PNGs de salida para render.
+		--EXR--
+		--RPF--
+		colorDepth = undefined, --@var | colorDepth | Get/Set the color depth in bits per channel. Possible values are 8, 16 and 32. 
+		alpha = undefined, --@var | alpha | Enable/Disable the saving of alpha channel.
+		premultAlpha = undefined, --@var | premultAlpha | Enable/Disable premultiplied alpha. 
+		description = undefined, --@var | description | Get/Set the file description string. 
+		author = undefined, --@var | author | Get/Set the author string.
+		zChannel = undefined, --@var | zChannel | Get/Set Z-buffer channel saving.
+		mtlIDChannel = undefined, --@var | mtlIDChannel | Enable/Disable material ID channel saving.
+		nodeIDChannel = undefined, --@var | nodeIDChannel | Enable/Disable node ID channel saving.
+		uvChannel = undefined, --@var | uvChannel | Enable/Disable texture coordinates channel saving.
+		normalChannel = undefined, --@var | normalChannel | Enable/Disable non-clamped color channel saving.
+		realpixChannel = undefined, --@var | realpixChannel | Enable/Disable non-clamped color channel saving.
+		coverageChannel = undefined, --@var | coverageChannel | Enable/Disable coverage channel saving.
+		nodeRenderIDChannel = undefined, --@var | nodeRenderIDChannel | Enable/Disable node render ID channel saving.
+		colorChannel = undefined, --@var | colorChannel | Enable/Disable color channel saving.
+		transpChannel = undefined, --@var | transpChannel | Enable/Disable transparency channel saving.
+		velocChannel = undefined, --@var | velocChannel | Enable/Disable velocity channel saving.
+		weightChannel = undefined, --@var | weightChannel | Enable/Disable sub-pixel weight channel saving.
+		maskChannel = undefined, --@var | maskChannel | Enable/Disable sub-pixel mask channel saving.
+		
+		
+		------------------------------------------------------------------------------------------------
+		--CONSTRUCTOR
+		------------------------------------------------------------------------------------------------
+		------------------------------------------------
+		--@fn: undefined | construct | Constructor del struct. Coge todos los parámetros de tipos de imagen y los almacena.
+		------------------------------------------------
+		fn construct =
+		(
+			--PNG--
+			this.pngType = pngio.getType()
+			this.pngAlpha = pngio.getAlpha()
+			this.pngInterlaced = pngio.getInterlaced()
+			--EXR--
+			--RPF--
+			for _rpfProp in #(#colorDepth, #alpha, #premultAlpha, #description, #author, #zChannel, #mtlIDChannel, #nodeIDChannel, #uvChannel, #normalChannel,
+							#realpixChannel,#coverageChannel,#nodeRenderIDChannel,#colorChannel,#transpChannel,#velocChannel,#weightChannel,#maskChannel) do
+				setProperty this _rpfProp (getProperty rpf.iRPFio _rpfProp)
+			
+		),
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		------------------------------------------------
+		--@fn: undefined | restore | Retorna los parámetros que ha guardado previamente a sus lugares de origen.
+		------------------------------------------------
+		fn restore =
+		(
+			--PNG--
+			pngio.setType this.pngType
+			pngio.setAlpha this.pngAlpha
+			pngio.setInterlaced this.pngInterlaced
+			--EXR--
+			--RPF--
+			for _rpfProp in #(#colorDepth, #alpha, #premultAlpha, #description, #author, #zChannel, #mtlIDChannel, #nodeIDChannel, #uvChannel, #normalChannel,
+							#realpixChannel,#coverageChannel,#nodeRenderIDChannel,#colorChannel,#transpChannel,#velocChannel,#weightChannel,#maskChannel) do
+				setProperty rpf.iRPFio _rpfProp (getProperty this _rpfProp)
+			
+		),
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		--@event | create | Ejecución al crearse la instancia del struct.
+		on create do
+		(
+			this.construct()
+		)
+	)-- struct str_imageSettingsSaver
+	
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollMainDef | UI para modificar los parametros del override.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollMainDef "OutputType Override"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = undefined --@var : parent | Instancia del override que esta manejando el rollout en ese momento
+		
+		local editCA = false --@var : editCA | Variable de atajo para el CA de edición
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		
+		
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		
+		
+		label lblInfo "File Type:" pos:[5,5] --@control | lblInfo | Titulo del override
+		
+		edittext edtType "" pos:[0,25] fieldWidth:110 height:20 readOnly:true
+		
+		button btnPick "Pick" pos:[115,25] width:30 --@control | btnOk | Lanza la ventana de selección de tipo de archivo.
+		
+		button btnOk "OK" pos:[5,50] width:70 --@control | btnOk | Valida los cambios y cierra.
+		button btnCancel "Cancel" pos:[75,50] width:70 --@control | btnCancel | Cancela los cambios y cierra.
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | loadOverrideInfo | Carga los parametros del override en el UI de edicion del mismo.
+		------------------------------------------------
+		fn loadOverrideInfo =
+		(
+			edtType.text = editCA.outputType
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | onCloseOperations | Operaciones necesarias cuando se cierra el rollout.
+		------------------------------------------------
+		fn onCloseOperations =
+		(
+			--TO DO
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			--no carga settings
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--no guarda settings
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al presionar el boton. Salva los cambios.
+		--@control: button | btnPick | Boton presionado.
+		------------------------------------------------
+		on btnPick pressed do
+		(
+			--Por un lado tenemos que salvar los parámetros de todos los tipos de imágenes porque el hecho de seleccionar uno aunque sea sin salvar ya los pisa 
+			--(no podemos saber de antemano cual va a elegir pq es un menu de max).
+			parent.imageSaver.construct()
+			
+			--Cada vez que abrimos el menu de edicion tenemos que pisar los valores que tenemos en la escena por los nuestros para que se muestren.
+			case (editCA.outputType) of
+			(
+				".png":
+				(
+					pngio.setType (editCA.pngType as name)
+					pngio.setAlpha editCA.pngAlpha
+					pngio.setInterlaced editCA.pngInterlaced
+				)
+				".exr":
+				(
+					--No funciona--
+				)
+				".rpf":
+				(
+					for _rpfProp in #(#colorDepth, #alpha, #premultAlpha, #description, #author, #zChannel, #mtlIDChannel, #nodeIDChannel, #uvChannel, #normalChannel,
+										#realpixChannel,#coverageChannel,#nodeRenderIDChannel,#colorChannel,#transpChannel,#velocChannel,#weightChannel,#maskChannel) do
+						setProperty rpf.iRPFio _rpfProp (getProperty editCA _rpfProp)
+				)
+			)
+			
+			
+			newType = getBitmapSaveFileName caption:"Enter the File Type" filename: ("(filename)" + editCA.outputType)
+			
+			if newType != undefined then
+			(
+				newType = getFilenameType newType
+				edtType.text = newType
+				
+				editCA.outputType = newType
+				case newType of
+				(
+					".png":
+					(
+						editCA.pngType = (pngio.getType()) as String
+						editCA.pngAlpha = pngio.getAlpha()
+						editCA.pngInterlaced = pngio.getInterlaced()
+					)
+					".exr":
+					(
+						--No funciona--
+					)
+					".rpf":
+					(
+						for _rpfProp in #(#colorDepth, #alpha, #premultAlpha, #description, #author, #zChannel, #mtlIDChannel, #nodeIDChannel, #uvChannel, #normalChannel,
+											#realpixChannel,#coverageChannel,#nodeRenderIDChannel,#colorChannel,#transpChannel,#velocChannel,#weightChannel,#maskChannel) do
+							setProperty editCA _rpfProp (getProperty rpf.iRPFio _rpfProp)
+					)
+				)
+			)
+			--Aqui volvemos a poner los de la escena
+			parent.imageSaver.restore()
+		)
+		
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al presionar el boton. Salva los cambios.
+		--@control: button | btnOk | Boton presionado.
+		------------------------------------------------
+		on btnOk pressed do
+		(
+			parent.applyEditChanges() --aplica los cambios que se hayan hecho en el override
+			destroyDialog parent.rollMain
+		)
+		
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al presionar el boton. Cambia los cambios.
+		--@control: button | btnOk | Boton presionado.
+		------------------------------------------------
+		on btnCancel pressed do
+		(
+			destroyDialog parent.rollMain
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollMainDef | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		--@gets: point2 | size | tamaño al que se ha redimensionado el rollout
+		------------------------------------------------
+		on rollMainDef resized size do
+		(
+			--no se redimensiona
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollMainDef | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollMainDef open do
+		(
+			parent = lb.passManager.getCurrentEditInstance()
+			editCA = parent.editBackupNode.custAttributes[#overrideOutputTypeInfo]
+			loadOverrideInfo()
+			loadSettings()
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollMainDef | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollMainDef close do
+		(	
+			onCloseOperations()
+			saveSettings()			
+		)
+		
+	)--rollMainDef
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: overrideOutputType | Contiene todas las funciones de un override de OutputType.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct str_overrideOutputType
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+			
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		type = "override",		--@var | type | Indica que es un override.
+		subType = lb.overrides.getFileOverrideName (getThisScriptFilename() as string),	--@var | subType | Indica que tipo de override concreto almacena.
+		relatedTypes = #(), --@var | relatedTypes | Tipos de overrides relacionados.
+		
+		stateMessage = "", --@var | stateMessage | Mensaje del estado actual del override.
+		
+		infoNode,						--@var | infoNode | Nodo de la escena que guarda la información del override de forma permanente.
+		infoNodePrefix = "override-",		--@var | infoNodePrefix | Prefijo de los nodos de la escena que representan cada override.
+		infoNodeCA,						--@var | infoNodeCA | Variable de atajo para el CA de apply
+		
+		editBackupNode,	--@var | editBackupNode | Nodo de backup temporal donde se almacena una copia del CA durante la edicion para poder hacer undo de las operaciones
+		
+		uiObj = undefined,	--@var | uiObj | Objeto de interfaz equivalente a este override, para poder buscar la equivalencia de forma rápida entre un override y el objeto de interface que lo controla.
+		
+		overrideManager = undefined, --@var | overrideManager | override generico del que cuelga este override específico.
+		
+		overrideInfo = ca_overrideOutputTypeInfo,		--@var | overrideInfo | Custom attribute para almacenar los datos de cada override en el objeto.
+		overrideBackup = ca_overrideOutputTypeInfo,	--@var | overrideBackup | Custom attribute para almacenar los datos de cada backup de override en el objeto de backup.
+		
+		imageSaver = str_imageSettingsSaver(), --@var | imageSaver | guarda todos los parámetros de las imágenes
+
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--ROLLOUTS
+		------------------------------------------------------------------------------------------------
+		
+		rollMain = rollMainDef, --@var: rollMain | Almacena el rollout de edicion del override.
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+			
+		------------------------------------------------
+		--@fn: string | getType | Devuelve el tipo del override.
+		------------------------------------------------
+		fn getType =
+		(
+			this.infoNodeCA.type
+		),
+			
+		------------------------------------------------
+		--@fn: string | getSubType | Devuelve el subtipo del override.
+		------------------------------------------------
+		fn getSubType =
+		(
+			this.infoNodeCA.subType
+		),
+		
+		------------------------------------------------
+		--@fn: node | getInfoNode | Devuelve el nodo físico de la escena que contiene la información del override.
+		------------------------------------------------
+		fn getInfoNode =
+		(
+			this.infoNode
+		),
+		
+		------------------------------------------------
+		--@fn: dotneObject | getUiObj | Devuelve el objeto de interface .net que controla este objeto.
+		------------------------------------------------
+		fn getUiObj =
+		(
+			this.uiObj
+		),
+		
+		------------------------------------------------
+		--@fn: override | getOverrideManager | Devuelve el override principal del que cuelga el especifico.
+		------------------------------------------------
+		fn getOverrideManager =
+		(
+			this.overrideManager
+		),
+		
+		------------------------------------------------
+		--@fn: container | getParentContainer | Devuelve el contenedor del que cuelga este override.
+		------------------------------------------------
+		fn getParentContainer =
+		(
+			if this.overrideManager != undefined then this.overrideManager.getParentContainer() else undefined
+		),
+		
+		------------------------------------------------
+		--@fn: string | getInfo | Devuelve la informacion que se debe mostrar en el UI.
+		------------------------------------------------
+		fn getInfo =
+		(
+			this.infoNodeCA.outputType
+		),
+		
+		------------------------------------------------
+		--@fn: name | getState | Devuelve el estado del override. Puede ser #ok, #error o #warning.
+		------------------------------------------------
+		fn getState =
+		(
+			_state = #ok
+			
+			_state
+		),
+		
+		------------------------------------------------
+		--@fn: name | getStateMessage | Devuelve el mensaje del estado actual del override.
+		------------------------------------------------
+		fn getStateMessage =
+		(
+			this.stateMessage
+		),
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | setUiObj | Sustituye el objeto de interface relacionado con el override.
+		--@gets: dotNetObject | newUiObj | Nuevo elemento de interface relacionado con el override.
+		------------------------------------------------
+		fn setUiObj newUiObj =
+		(
+			this.uiObj = newUiObj
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | setOverrideManager | Sustituye el override principal del que cuelga el especifico.
+		--@gets: override | newOverrideManager | Nuevo override principal.
+		------------------------------------------------
+		fn setOverrideManager newOverrideManager =
+		(
+			this.overrideManager = newOverrideManager
+		),
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | updateUIinfo | Actualiza la informacion del override en su objeto de UI si tuviera.		
+		------------------------------------------------
+		fn updateUIinfo =
+		(
+			--si hay nodo que actualizar
+			if this.getUiObj() != undefined then
+			(
+				--actualiza los valores de las columnas
+				(this.getUiObj()).setValue 1 (this.getInfo())
+				(this.getUiObj()).setValue 5 (this.getState() as string)
+					
+				--actualiza el icono de estado
+				lb.passManagerUI.rollMain.updateTrvContainerAppearance mode:#state node:(this.getUiObj())
+					
+				--actualiza los overrides relacionados
+				for _relType in this.relatedTypes do
+				(
+					_relOverrides = (this.getOverrideManager()).getRelativeDescendantsOverride _relType
+					for _relOv in _relOverrides do _relOv.updateUIinfo()
+				)--for
+			)
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | createBackup | Crea el backup de este override antes de aplicarse. Devuelve TRUE si lo consigue y FALSE si no.
+		--@gets: node | backupNode | Objeto en el que hacer el backup.
+		------------------------------------------------
+		fn createBackup backupNode saveLogs:false logLevel:1 =
+		(
+			if savelogs then lb.log.add ("BACKUP process start.") sender:("override." + (this.getSubType())) type:#info level:logLevel
+			--solo si se ha suministrado un nodo de backup
+			if isValidNode backupNode then
+			(
+				--si el nodo de backup no tiene el CA de backup se lo pone
+				if backupNode.custAttributes[#overrideOutputTypeInfo] == undefined then
+					custAttributes.add backupNode (this.overrideBackup) #unique baseobject:false --le añade el atributo
+				
+				backupNode.custAttributes[#overrideOutputTypeInfo].outputType = (lb.io.getFileType rendOutputFilename)
+				
+				--print ("type backup: " + backupNode.custAttributes[#overrideOutputTypeInfo].outputType)
+								
+				if savelogs then lb.log.add ("BACKUP: " + (getFilenameType rendOutputFilename) + " filetype stored.") sender:("override." + (this.getSubType())) type:#ok level:(logLevel+1)
+				
+				case (getFilenameType rendOutputFilename) of
+				(
+					".png":
+					(
+						backupNode.custAttributes[#overrideOutputTypeInfo].pngType = (pngio.getType()) as String
+						backupNode.custAttributes[#overrideOutputTypeInfo].pngAlpha = pngio.getAlpha()
+						backupNode.custAttributes[#overrideOutputTypeInfo].pngInterlaced = pngio.getInterlaced()
+					)
+					
+					"exr":
+					(
+						
+					)
+
+					".rpf":
+					(
+						for _rpfProp in #(#colorDepth, #alpha, #premultAlpha, #description, #author, #zChannel, #mtlIDChannel, #nodeIDChannel, #uvChannel, #normalChannel,
+											#realpixChannel,#coverageChannel,#nodeRenderIDChannel,#colorChannel,#transpChannel,#velocChannel,#weightChannel,#maskChannel) do
+							setProperty backupNode.custAttributes[#overrideOutputTypeInfo] _rpfProp (getProperty rpf.iRPFio _rpfProp)
+					)
+				)
+				if savelogs then lb.log.add ("BACKUP process completed.") sender:("override." + (this.getSubType())) type:#ok level:logLevel
+				true
+			)
+			else
+			(
+				if savelogs then lb.log.add ("BACKUP process error. Backup is not valid.") sender:("override." + (this.getSubType())) type:#error level:logLevel
+				lb.passManager.addErrorMessage ((this.overrideManager.getOverrideTrace this) + "\x0D"+"BACKUP process error. Backup node is not valid.")
+				false
+			)			
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | restoreBackup | Restaura los valores anteriores de este override a partir de su backup. Devuelve TRUE si lo consigue y FALSE si no.
+		--@gets: node | backupNode | Objeto del que restaurar el backup.
+		------------------------------------------------
+		fn restoreBackup backupNode saveLogs:false logLevel:1 =
+		(
+			if saveLogs then lb.log.add ("RESTORE process start.") sender:("override." + (this.getSubType())) type:#info level:logLevel
+			--solo si se ha pasado un nodo de backup y este tiene backup de este tipo de override
+			if isValidNode backupNode then
+			(
+				if backupNode.custAttributes[#overrideOutputTypeInfo] != undefined then
+				(
+					if (getFilenamePath rendOutputFilename) != "" then
+					(
+						rendOutputFilename = (getFilenamePath rendOutputFilename) + "\\" + (lb.io.getFileName rendOutputFilename) + backupNode.custAttributes[#overrideOutputTypeInfo].outputType
+						
+						--print ("type restore: " + rendOutputFilename)
+					)
+					else
+					(
+						rendOutputFilename = (lb.io.getFileName rendOutputFilename) + backupNode.custAttributes[#overrideOutputTypeInfo].outputType
+						
+						--print ("type restore: " + rendOutputFilename)
+					)--if else
+					
+					if saveLogs then lb.log.add ("RESTORE: restoring last fileType: " + backupNode.custAttributes[#overrideOutputTypeInfo].outputType) sender:("override." + (this.getSubType())) type:#info level:(logLevel+1)
+					
+					case backupNode.custAttributes[#overrideOutputTypeInfo].outputType of
+					(
+						".png":
+						(
+							pngio.setType (backupNode.custAttributes[#overrideOutputTypeInfo].pngType as name)
+							pngio.setAlpha backupNode.custAttributes[#overrideOutputTypeInfo].pngAlpha
+							pngio.setInterlaced backupNode.custAttributes[#overrideOutputTypeInfo].pngInterlaced
+						)
+						".exr":
+						(
+							--No funciona--
+						)
+
+						".rpf":
+						(
+							for _rpfProp in #(#colorDepth, #alpha, #premultAlpha, #description, #author, #zChannel, #mtlIDChannel, #nodeIDChannel, #uvChannel, #normalChannel,
+												#realpixChannel,#coverageChannel,#nodeRenderIDChannel,#colorChannel,#transpChannel,#velocChannel,#weightChannel,#maskChannel) do
+								setProperty rpf.iRPFio _rpfProp (getProperty backupNode.custAttributes[#overrideOutputTypeInfo] _rpfProp)
+						)
+					)
+					if saveLogs then lb.log.add ("RESTORE process completed.") sender:("override." + (this.getSubType())) type:#ok level:logLevel
+					true
+				)
+				else
+				(
+					if saveLogs then lb.log.add ("RESTORE process error. CA overrideOutputTypeInfo is undefined.") sender:("override." + (this.getSubType())) type:#error level:logLevel
+					lb.passManager.addErrorMessage ((this.overrideManager.getOverrideTrace this) + "\x0D"+"RESTORE process error. Custom Attribute is undefined.")
+					false
+				)
+			)
+			else
+			(
+				if saveLogs then lb.log.add ("RESTORE process error. Backup Node not valid.") sender:("override." + (this.getSubType())) type:#error level:logLevel
+				lb.passManager.addErrorMessage ((this.overrideManager.getOverrideTrace this) + "\x0D"+"RESTORE process error. Backup Node not valid.")
+				false
+			)
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | apply | Aplica el override a los objetos o parametros correspondientes. Devuelve TRUE si lo consigue y FALSE si no.
+		------------------------------------------------
+		fn apply saveLogs:false logLevel:1 =
+		(
+			if saveLogs then lb.log.add ("APPLY process start.") sender:("override." + (this.getSubType())) type:#info level:logLevel
+			
+			if (getFilenamePath rendOutputFilename) != "" then
+			(
+				rendOutputFilename =  (getFilenamePath rendOutputFilename) + "\\" + (lb.io.getFileName rendOutputFilename) + (this.infoNodeCA.outputType)
+
+				--print ("type apply: " + rendOutputFilename)
+			)
+			else if rendOutputFilename != "" then
+			(
+				rendOutputFilename = (lb.io.getFileName rendOutputFilename) + (this.infoNodeCA.outputType)
+
+				--print ("type apply: " + rendOutputFilename)
+			)--if else
+			
+			if saveLogs then lb.log.add ("APPLY: loading selected filetype: " + (getFilenameType rendOutputFilename)) sender:("override." + (this.getSubType())) type:#info level:(logLevel+1)
+			case (getFilenameType rendOutputFilename) of
+			(
+				".png":
+				(
+					pngio.setType (this.infoNodeCA.pngType as name)
+					pngio.setAlpha this.infoNodeCA.pngAlpha						
+					pngio.setInterlaced this.infoNodeCA.pngInterlaced
+				)
+
+				".exr":
+				(
+					--No funciona--
+				)
+
+				".rpf":
+				(
+					for _rpfProp in #(#colorDepth, #alpha, #premultAlpha, #description, #author, #zChannel, #mtlIDChannel, #nodeIDChannel, #uvChannel, #normalChannel,
+										#realpixChannel,#coverageChannel,#nodeRenderIDChannel,#colorChannel,#transpChannel,#velocChannel,#weightChannel,#maskChannel) do
+						setProperty rpf.iRPFio _rpfProp (getProperty this.infoNodeCA _rpfProp)
+				)
+			)
+
+			if saveLogs then lb.log.add ("APPLY process completed.") sender:("override." + (this.getSubType())) type:#ok level:logLevel
+			true
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | applyEditChanges | Aplica los cambios que se han hecho en el override durante la edicion.
+		------------------------------------------------
+		fn applyEditChanges =
+		(
+			--solo si existe el nodo de backup de override puede hacerlo
+			if this.editBackupNode != undefined then
+			(
+				--le quita el CA del override si lo tuviera
+				if this.editBackupNode.custAttributes[#overrideOutputTypeInfo] != undefined then
+				(
+					undo "Override Changes Applied" on
+					(
+						--copia  todas las propiedades del CA
+						_propNames = getPropNames (this.infoNodeCA)
+						for _prop in _propNames do (setProperty (this.infoNodeCA) _prop (getProperty (this.editBackupNode.custAttributes[#overrideOutputTypeInfo]) _prop))
+					)--undo
+					
+					this.editBackupNode = undefined --hace que el override no tenga backup de edicion almacenado
+					
+					this.updateUIinfo() --actualiza la infirmacion en el UI si ha cambiado
+				)--if
+			)--if
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | edit | Crea el backup de edicion del override para que lo cambios se apliquen solo al aceptar y se pueda hacer undo de ello.		
+		------------------------------------------------
+		fn createEditBackup =
+		(
+			--solo si el override cuelga de un contenedor
+			if (this.getParentContainer()) != undefined then
+			(
+				--obtiene el inicio de la jerarquia del arbol de contenedores
+				_passTree = (this.getParentContainer()).getRootContainer()
+				
+				if _passTree != undefined then --si ha conseguido llegar a la raiz
+				(
+					--obtiene el nodo de backup de edicion de override
+					this.editBackupNode = _passTree.getOverridesEditBackupNode()
+					
+					--solo si existe el nodo de backup de override puede hacerlo
+					if this.editBackupNode != undefined then
+					(
+						--le quita el CA del override si lo tuviera
+						if this.editBackupNode.custAttributes[#overrideOutputTypeInfo] != undefined then
+							custAttributes.delete this.editBackupNode (custAttributes.getDef this.editBackupNode.custAttributes[#overrideOutputTypeInfo]) baseobject:false --elimina el viejo
+						
+						--le aplica el CA del override
+						custAttributes.add this.editBackupNode (this.overrideInfo) #unique baseobject:false --le añade el atributo nuevo
+						
+						--copia todas las propiedades del CA
+						_propNames = getPropNames (this.infoNodeCA)
+						for _prop in _propNames do (setProperty (this.editBackupNode.custAttributes[#overrideOutputTypeInfo]) _prop (getProperty (this.infoNodeCA) _prop))
+					)--if
+				)--if
+			)--if
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | edit | Muestra el dialogo de edicion del override.
+		--@opt: Point2 | pos | [0,0] | Posicion en la que aparecera el rollout de edicion del override.
+		------------------------------------------------
+		fn edit pos:[0,0] =
+		(
+			this.createEditBackup() --crea el backup de edicion del override para que lo cambios se apliquen solo al aceptar y se pueda hacer undo de ello 			
+			
+			lb.passManager.setCurrentEditInstance this
+			
+			_size = [150,80]
+			_pos = pos - (_size/2)
+			
+			createDialog this.rollMain lockwidth:true lockheight:true pos:_pos width:_size.x height:_size.y modal:true style:#(#style_toolwindow, #style_titlebar, #style_sysmenu, #style_resizing)
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | purge | Limpia el override por si se ha cambiado informacion y hay que mantenerla coherente.
+		------------------------------------------------
+		fn purge =
+		(
+			_success = false
+			
+			--TO DO: Aqui hacer el codigo de purga
+			
+			_success = true
+			
+			_success
+		),
+		
+		
+		------------------------------------------------
+		--@fn: undefined | reset | resetea los valores a los que tiene por defecto.
+		------------------------------------------------
+		fn reset =
+		(
+			--TO DO: Aqui restaurar los valores a los que tiene por defecto
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | storeSceneValues | Almacena los valores de la escena en el override.
+		------------------------------------------------
+		fn storeSceneValues =
+		(
+			--almacena los valores actuales de extension de archivo de render de la escena		
+			this.infoNodeCA.outputType = (getFilenameType rendOutputFileName)				
+			
+			case (getFilenameType rendOutputFileName) of
+			(
+				".png":
+				(
+					this.infoNodeCA.pngType = (pngio.getType()) as String
+					this.infoNodeCA.pngAlpha = pngio.getAlpha()
+					this.infoNodeCA.pngInterlaced = pngio.getInterlaced()
+				)
+
+				".exr":
+				(
+					--No funciona, en autodesk tienen sin implementar todo--
+				)
+
+				".rpf":
+				(
+					for _rpfProp in #(#colorDepth, #alpha, #premultAlpha, #description, #author, #zChannel, #mtlIDChannel, #nodeIDChannel, #uvChannel, #normalChannel,
+										#realpixChannel,#coverageChannel,#nodeRenderIDChannel,#colorChannel,#transpChannel,#velocChannel,#weightChannel,#maskChannel) do
+						setProperty this.infoNodeCA _rpfProp (getProperty rpf.iRPFio _rpfProp)
+				)
+			)--case
+		),
+
+		------------------------------------------------
+		--@fn: undefined | storeDefaultValues | Almacena los valores por defecto en el override.
+		------------------------------------------------
+		fn storeDefaultValues =
+		(
+			--almacena los valores actuales de extension de archivo de render de la escena		
+			this.infoNodeCA.outputType = ".png"
+			
+			this.infoNodeCA.pngType = "true48"
+			this.infoNodeCA.pngAlpha = true
+			this.infoNodeCA.pngInterlaced = false
+		),
+
+		------------------------------------------------
+		--@fn: undefined | construct | Rellena la información del override y crea el objeto fisico en la escena que contendrá la información.
+		------------------------------------------------
+		fn construct =
+		(
+			--si existe el nodo de la escena con la información la coge de el.
+			if isValidNode this.infoNode then
+			(	
+				--Si se esta construyendo el objeto no tendra el CA aplicado, con lo cual hay que ponerselo. Si ya lo tiene no.
+				if not (lb.customAttributes.hasAttribute this.infoNode #overrideOutputTypeInfo) then
+				(
+					custAttributes.add this.infoNode (this.overrideInfo) #unique baseobject:false --le añade el atributo
+					this.infoNodeCA = this.infoNode.custAttributes[#overrideOutputTypeInfo]
+
+					--this.storeSceneValues()
+					this.storeDefaultValues()
+				)--if			
+				
+				--Rellenamos la variable de atajo del CA de apply
+				this.infoNodeCA = this.infoNode.custAttributes[#overrideOutputTypeInfo]
+				
+				--primero mira si hay cambios en la escena que afecten al override y lo limpia
+				this.purge()
+			)--if	
+		),
+		
+		------------------------------------------------
+		--@fn: string | toString | Devuelve un string con la representacion del contenido del override.
+		------------------------------------------------
+		fn toString =
+		(	
+			--primero mira si hay cambios en la escena que afecten al override y lo limpia
+			this.purge()
+			
+			_theString = ""
+				
+			--TO DO: Aqui falta todo el codigo del toString
+			
+			_theString
+		),
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+			
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event | create | Ejecución al crearse la instancia del struct.
+		on create do
+		(
+			this.construct() --genera toda la información necesaria y el nodo de la escena donde almacenarla en paralelo, o lee el ya existente en la escena.
+		)
+		
+	)--str_overrideOutputType
+	
+	lb.overrides.add (lb.overrides.getFileOverrideName (getThisScriptFilename() as string)) str_overrideOutputType --añade el override al listado de overrides disponibles
+	
+	ok
+)

@@ -1,0 +1,647 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--Descripcion: libreria de capas de animación
+------------------------------------------------------------------------------------------------------------------------------------------------
+(	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: animLayer| Contiene la libreria de capas de animación..
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct lib_animLayers
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,					--@var: category | Categoria de la libreria.
+		className = lb.getFileLibName (getThisScriptFilename() as string),	--@var: className | Nombre de la libreria.
+		description = "Libreria de capas de animación",	--@var: description | Descripcion de la libreria.
+		
+		animLayersPrefix = "animLayer_",
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		------------------------------------------------
+		--@fn: boolean | sortNodes | Ordenado el array que le pasemos de piezas, comprobando que exista un control de fkIk y poniendolo en primera posición para evitar fallos de conexiones.
+		--@gets: node | nodes | Nodo sque le pasamos para ordenar el array.
+		------------------------------------------------
+-- 		fn sortNodes nodes =
+-- 		(
+-- 			_fkIkNode = undefined
+-- 			_indexFkIk = 0
+-- 			
+-- 			-- Obtenemos sus nodos de animación y capturamos los nodos de fkIk	
+-- 			for i = 1 to nodes.count do
+-- 			(
+-- 				o = nodes[i]
+-- 				
+-- 				if (lb.customAttributes.hasAttribute o.modifiers[1] #fkIkSnaps) then
+-- 				(
+-- 					_fkIkNode = o	
+-- 					_indexFkIk = i 
+-- 				)
+-- 			)-- for	
+-- 			
+-- 			-- Borramos el fkIk de su posición actual y lo insertamos en el número uno.
+-- 			if _fkIkNode != undefined then 
+-- 			(
+-- 				deleteItem nodes _indexFkIk
+-- 				insertItem _fkIkNode nodes 1
+-- 				
+-- 			)-- if
+-- 				
+-- 			nodes
+-- 		),
+		
+		------------------------------------------------
+		--@fn: boolean | isAnimLayerTrack | Indica si el track pasado tiene layers de animación
+		--@gets: node | node | Nodo  que le pasamos para comprobar si tiene layers de animación
+		------------------------------------------------
+		fn getActiveLayerControllerFromTrack track =
+		(
+			_animLayersController = undefined
+			
+			if track.controller != undefined then
+			(
+				if classOf track.controller == float_limit then
+				(
+					if isProperty track.controller[1].controller #count then
+						_animLayersController = track.controller[1].controller[track.controller[1].controller.active].controller
+				)
+				else if isProperty track.controller #count then
+					_animLayersController = track.controller[track.controller.active].controller
+			)
+			
+			_animLayersController
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | hasAnimLayers | Comprueba si ya existe el sistema de animLayer en el rig.
+		--@gets: node | node | Nodo  que le pasamos para comprobar  las capas de anim.
+		------------------------------------------------
+		fn hasAnimLayers node =
+		(
+			_layersFound = false
+			_tracks = lb.animInfo.getAnimTracks node
+			
+			if _tracks != undefined and _tracks != #error then
+			(
+				-- Recorremos los animtracks hasta que encontremos uno con un floatList y una pista animLayer_base
+				for i = 1 to _tracks.count where (not _layersFound) do
+				(			
+					if _tracks[i].type != #separator then
+					(
+						if (classOf _tracks[i].track.controller == Float_Limit) then
+						(
+							if _tracks[i].track.controller[1][1] != undefined then
+								if (findstring _tracks[i].track.controller[1][1].name this.animLayersPrefix != undefined) then	
+									_layersFound = true	
+						)
+						--	nos aseguramos de que el animTrack es de tipo listController
+						else if isProperty _tracks[i].track.controller #count then
+						(
+							if (findstring _tracks[i].track.controller[1].name this.animLayersPrefix != undefined) then	
+								_layersFound = true	
+						)
+					)
+				)
+			)
+			
+			_layersFound
+		),
+		
+		------------------------------------------------
+		--Devuelve el numero de layers de animacion que tiene un objeto
+		--0 significa que no tiene layers de animacion
+		--1 significa que solo tiene la capa base
+		--numeros mayores de 1 significa que tiene varias capas de animacion
+		------------------------------------------------
+		fn count node =
+		(
+			_animLayersNames = #()
+			_layersCount = 0
+			_tracks = lb.animInfo.getAnimTracks node
+			
+			if _tracks != undefined and _tracks != #error then
+			(
+				--print _tracks
+
+				-- Recorremos los animtracks hasta que encontremos todos los animLayers
+				for i = 1 to _tracks.count  do
+				(			
+					if _tracks[i].type != #separator then
+					(
+						if (classOf _tracks[i].track.controller == Float_Limit) then
+						(
+							if _tracks[i].track.controller[1][1] != undefined then
+							(
+								for j=1 to _tracks[i].track.controller[1].numsubs where (findstring _tracks[i].track.controller[1][j].name this.animLayersPrefix != undefined) do
+								(
+									appendIfUnique _animLayersNames _tracks[i].track.controller[1][j].name
+								)--for
+							)
+						)
+						--	nos aseguramos de que el animTrack es de tipo listController
+						else if isProperty _tracks[i].track.controller #count then
+						(
+							for j=1 to _tracks[i].track.controller.numsubs where (findstring _tracks[i].track.controller[j].name this.animLayersPrefix != undefined) do
+							(
+								appendIfUnique _animLayersNames _tracks[i].track.controller[j].name
+							)--for
+						)
+					)--if
+				)--for
+				
+				_layersCount = _animLayersNames.count
+			)--if
+			
+			_layersCount
+		),
+
+		------------------------------------------------
+		--Devuelve el indice de capa de un sufijo determinado
+		--Devuelve el indice si lo encuentra y si no devuelve 0
+		--Necesita el nodo
+		--Necesita el sufijo
+		------------------------------------------------
+		fn findBySuffix node suffix =
+		(
+			_index = 0
+
+			_tracks = lb.animInfo.getAnimTracks node
+			
+			if _tracks != undefined and _tracks != #error then
+			(
+				--print _tracks
+
+				-- Recorremos los animtracks hasta que encontremos todos los animLayers
+				for i = 1 to _tracks.count where _index == 0 do
+				(			
+					if _tracks[i].type != #separator then
+					(
+						if (classOf _tracks[i].track.controller == Float_Limit) then
+						(
+							if _tracks[i].track.controller[1][1] != undefined then
+							(
+								for j=1 to _tracks[i].track.controller[1].numsubs where _index == 0 and (findstring _tracks[i].track.controller[1][j].name this.animLayersPrefix != undefined) do
+								(
+									if (_tracks[i].track.controller[1][j].name) == this.animLayersPrefix + suffix then _index = j
+								)--for
+							)
+						)
+						--	nos aseguramos de que el animTrack es de tipo listController
+						else if isProperty _tracks[i].track.controller #count then
+						(
+							for j=1 to _tracks[i].track.controller.numsubs where _index == 0 and (findstring _tracks[i].track.controller[j].name this.animLayersPrefix != undefined) do
+							(
+								if (_tracks[i].track.controller[j].name) == this.animLayersPrefix + suffix then _index = j
+							)--for
+						)
+					)--if
+				)--for
+			)--if
+			
+			_index
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | createLayer | Inicia el sistema de capas de animación, añadiendo un floatList por cada animtrack.
+		--@gets: node | node | Nodo que le pasamos para activar las capas de anim.
+		------------------------------------------------
+		mapped fn enable node =
+		(
+			_success = false
+			_tracks = lb.animInfo.getAnimTracks node
+			
+			suspendEditing()
+			
+			if not (this.hasAnimLayers node) and (_tracks != undefined) then
+			(
+				-- Recorremos cada pieza para recorrer cada animtrack y añadir un floatList y lo renombramos como baseLayer.	
+				for t in _tracks where t.type != #separator do
+				(
+					_cont = lb.animInfo.getTrackController t.track
+					_newController = undefined
+					
+					case of
+					(
+						(finditem lb.controller.floatControllers (classOf _cont) != 0): _newController = float_list()
+						(finditem lb.controller.positionControllers (classOf _cont) != 0): _newController = position_list()
+						(finditem lb.controller.rotationControllers (classOf _cont) != 0): _newController = rotation_list()
+						(finditem lb.controller.scaleControllers (classOf _cont) != 0): _newController = scale_list()
+					)
+					
+					if classOf t.track.controller == float_limit then
+					(
+						t.track.controller[1].controller = _newController
+						t.track.controller[1].setName 1 (this.this.animLayersPrefix + "base")
+					)
+					else
+					(
+						t.track.controller = _newController
+						t.track.controller.setName 1 (this.animLayersPrefix + "base")
+					)
+				)
+
+				resumeEditing()
+				
+				_success = true
+			)
+			
+			_success
+		),
+				
+		------------------------------------------------
+		--@fn: boolean | disableAnimLayers | Deshabilita el sistema de capas de animación,dejando el controlador animLayer_base como controlador original.
+		--@gets: node | node | Nodo que le pasamos para deshabiltiar las capas de anim.
+		------------------------------------------------
+		mapped fn disable node =
+		(
+			_success = false
+			
+			suspendEditing()
+			
+			if (this.hasAnimLayers node) then
+			(
+				-- Recorremos cada pieza para recorrer cada animtrack y añadir un floatList y lo renombramos como baseLayer.				
+				_tracks = lb.animInfo.getAnimTracks node
+				
+				for t in _tracks where t.type != #separator do
+				(	
+					_cont = undefined
+					_contOrig = undefined 
+					
+					if classOf t.track.controller == float_limit then
+						t.track.controller[1].controller = t.track.controller[1].controller[1].controller
+					--	nos aseguramos de que el animTrack es de tipo listController
+					else if isProperty t.track.controller #count then
+						t.track.controller = t.track.controller[1].controller
+-- 					else
+						--	ver qué hacer para clonar controladores que no sean bezier_float
+				)
+				
+				_success = true
+				
+			) -- if hasAnimLayers
+			
+			resumeEditing()
+			
+			_success
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | collapseAnimLayers | Colapsa las capas de animación revisando cada clave y valor de cada capa.
+		--@gets: node | node | Nodo que le pasamos para colapsar las capas de animación.
+		------------------------------------------------
+		mapped fn collapse node =
+		(		
+			_success = false
+			
+			if (this.hasAnimLayers node) then
+			(
+				_tracks = lb.animInfo.getAnimTracks node
+				 
+				for t in _tracks where t.type != #separator do
+				(	
+					_cont = undefined
+					_collapsedController = (classOf (lb.animInfo.getTrackController t.track))()
+					_keys = _collapsedController.keys
+						
+					if classOf t.track.controller == float_limit then 
+						_cont = t.track.controller[1].controller
+					else
+						_cont = t.track.controller
+
+					--	Proceso de colapsado
+					if _cont != undefined then
+					(
+						--	Primero se recopilan todas las claves en un nuevo controlador
+						for i = 1 to _cont.count do
+							for j = 1 to _cont[i].keys.count do
+							(
+-- 								appendKey _collapsedController.keys _cont[i].keys[j]
+								_keyTime = _cont[i].keys[j].time 
+								_keyVal = at time _keyTime _cont.value
+								if (finditem lb.controller.rotationControllers (classOf t.track.parent) != 0) then _keyVal = degToRad _keyVal
+
+								--Esta linia estaba comentada y cuando collapsabamos las anim layers del base se multiplicaba la escala, la volvemos a dejar funcionando!!!
+								--if (finditem lb.controller.scaleControllers (classOf t.track.parent) != 0) then _keyVal = _keyVal / 100.0
+
+								_scaleNameParts = filterString t.name ":"
+								if (toLower (_scaleNameParts[1] + ":" + _scaleNameParts[2] + ":" +_scaleNameParts[3])) == "transform:scale:zero_scale_xyz" then
+								(
+									if t.defaultVal == 100.0 then 
+									(
+ 										if _keyVal != 1.0 then
+ 										(
+											_keyVal = _keyVal / 100.0
+ 										)
+									)
+								)
+
+								_key = addNewKey _collapsedController _keyTime
+								
+								--	nos aseguramos de copiar todas las propiedades de la clave de origen en la clave de destino (tangentes, etc)
+								-- copiamos todo menos el valor de la clave, que viene convertido según el caso
+								_keyProperties = getPropNames _cont[i].keys[j]
+								for _property in _keyProperties where _property != #value do
+								(
+									_propertyValue = getProperty _cont[i].keys[j] _property
+									setProperty _key _property _propertyValue
+								)
+								
+								_key.value = _keyVal
+							)
+						
+						--	Ponemos el nuevo controlador donde corresponda
+						if classOf t.track.controller == float_limit then
+							t.track.controller[1].controller = _collapsedController
+						--	nos aseguramos de que el animTrack es de tipo listController
+						else
+							t.track.controller = _collapsedController
+					)
+				)
+				
+				_success = true
+			)
+			
+			_success
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | createAnimLayer | Crea una nueva capa de animación.
+		--@gets: node | node | Nodo que le pasamos para crear la nueva capa de anim.
+		------------------------------------------------
+		mapped fn addLayer node index:undefined suffix:undefined =
+		(
+			_success = false
+			
+			suspendEditing()
+			
+			with animate off
+				if (this.hasAnimLayers node) then
+				(	
+					-- Recorremos cada pieza para recorrer cada animtrack y añadir un floatList y lo renombramos como baseLayer.	
+					_tracks = lb.animInfo.getAnimTracks node
+					
+					for t in _tracks where t.type != #separator do
+					(
+						_cont = undefined
+						_contOrigClass = undefined 
+						
+						if classOf t.track.controller == float_limit then
+						(
+							_cont = t.track.controller[1].controller
+							_contOrigClass = classOf t.track.controller[1][1].controller	
+						)
+						--	nos aseguramos de que el animTrack es de tipo listController
+						else if isProperty t.track.controller #count then
+						(
+							_cont = t.track.controller
+							_contOrigClass = classOf t.track.controller[1].controller
+						)
+						
+						--	Si hemos encontrado un controlador con el que trabajar, añadimos el layer
+						if _cont != undefined then
+						(
+							_cont.available.controller = _contOrigClass()
+							
+							if suffix != undefined then _cont.setName _cont.count (this.animLayersPrefix + suffix)
+							else _cont.setName _cont.count (this.animLayersPrefix + (formattedprint _cont.count format:"02d"))
+							
+							_cont.setActive _cont.count 
+						)
+					)
+					
+					_success = true
+				)-- if hasAnimLayerss
+			
+			resumeEditing()	
+			
+			_success
+		),
+
+		------------------------------------------------
+		--@fn: boolean | removeAnimLayer | Borra una capa de animación existente.
+		--@gets: node | node | Nodo que le pasamos para eliminar la nueva capa de anim.
+		--@gets: integer | index | Indice de la capa que queremos borrar.
+		------------------------------------------------
+		mapped fn removeLayer node index =
+		(
+			_success = false
+			
+			if (this.hasAnimLayers node) then
+			(
+				_tracks = lb.animInfo.getAnimTracks node
+				
+				-- For para recorrer tracks y dejar solo la capa original, animLayer_base, como capa principal
+				for t in _tracks where t.type != #separator do
+				(	
+					_cont = undefined							
+					
+					if (classOf t.track.controller == float_limit) then
+					(
+						if t.track.controller[1].count > 1 then
+							_cont = t.track.controller[1]							 
+					)
+					--	nos aseguramos de que el animTrack es de tipo listController
+					else if isProperty t.track.controller #count then
+					(
+						if t.track.controller.count > 1 then
+							_cont = t.track.controller
+					)
+					
+					if _cont != undefined then _cont.delete index
+				)					
+				
+				_success = true
+			)
+			
+			_success
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | removeLayerBySuffix | Borra una capa de animación existente.
+		--@gets: node | node | Nodo que le pasamos para eliminar la nueva capa de anim.
+		--@gets: string | suffix | Sufijo de la capa que queremos borrar.
+		------------------------------------------------
+		mapped fn removeLayerBySuffix node suffix =
+		(
+			_success = false
+			
+			if (this.hasAnimLayers node) then
+			(
+				_index = this.findBySuffix node suffix
+				if _index != 0 then _success = this.removeLayer node _index
+			)
+			
+			_success
+		),
+
+		------------------------------------------------
+		--@fn: boolean | setActiveLayer | Activa una capa de animación indicada.
+		--@gets: node | node | Nodo que le pasamos para activar una capa de animación.
+		--@gets: integer | index | Indice de la capa que queremos activar.
+		------------------------------------------------
+		mapped fn setActiveLayer node index =
+		(
+			_success = false
+			
+			if (this.hasAnimLayers node) then
+			(
+				_tracks = lb.animInfo.getAnimTracks node
+				
+				for t in _tracks where t.type != #separator do
+				(	
+					_cont = undefined
+					
+					if classOf t.track.controller == float_limit then
+						_cont = t.track.controller[1].controller
+					--	nos aseguramos de que el animTrack es de tipo listController
+					else if isProperty t.track.controller #count then
+						_cont = t.track.controller
+					
+					if _cont != undefined and (index != _cont.active) then _cont.setActive index 
+								
+				)
+				
+				_success = true
+			)-- if hasAnimLayerss
+			
+			_success
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | getActiveLayer | captura el controlador de tipo list del que cuelgan los layers de animación. Si no existe devuelve undefined
+		--@gets: node | node | Nodo que le pasamos para capturar sus layers de animación
+		------------------------------------------------
+		fn get node =
+		(
+			_animLayersController = undefined
+			
+			if (this.hasAnimLayers node) then
+			(
+				_tracks = lb.animInfo.getAnimTracks node
+				_layersFound = false
+				
+				for t in _tracks where not _layersFound and (t.type != #separator) do
+				(	
+					if classOf t.track.controller == float_limit then
+					(
+						_animLayersController = t.track.controller[1].controller
+						_layersFound = true
+					)
+					--	nos aseguramos de que el animTrack es de tipo listController
+					else if isProperty t.track.controller #count then
+					(
+						_animLayersController = t.track.controller
+						_layersFound = true
+					)
+				)
+			)
+			
+			_animLayersController
+		),	
+		
+		------------------------------------------------
+		--@fn: boolen | setAnimLayerWeight | Sube o baja el peso de la capa activa
+		--@gets: node | node | Nodo que le pasamos para cambiar el peso de la capa actual
+		--@gets: float | weight | Valor del peso que queremos cambiar.
+		------------------------------------------------
+		mapped fn setLayerWeight node index weight =
+		(
+			_success = false
+			
+			if (this.hasAnimLayers node) then
+			(
+				_tracks = lb.animInfo.getAnimTracks node
+				
+				-- For para recorrer tracks y dejar solo la capa original, animLayer_base, como capa principal
+				for t in _tracks where t.type != #separator do
+				(
+					_cont = undefined							
+					
+					if (classOf t.track.controller == float_limit) then
+					(
+						_cont = t.track.controller[1]							 
+					)
+					--	nos aseguramos de que el animTrack es de tipo listController
+					else if isProperty t.track.controller #count then
+					(
+						_cont = t.track.controller
+					)
+					
+					if _cont != undefined then 
+						_cont.weights[index].value = weight
+				)					
+				
+				_success = true
+			)
+			
+			_success
+		),
+		
+		------------------------------------------------
+		-- COMMON
+		------------------------------------------------
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addLibrary this --añade la libreria a la principal
+		)
+		
+	)--lib_templateLib
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	
+	lib_animLayers() --crea la libreria
+)

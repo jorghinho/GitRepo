@@ -1,0 +1,700 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--Descripcion: libreria de variations
+------------------------------------------------------------------------------------------------------------------------------------------------
+(
+	--@custAttribute: undefined | dynConnect | Custom Attribute que se añadirá a los nodos que necesiten conexión en tiempo de carga en la escena
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	CA_matVariationInfo = attributes matVariationInfo
+	(
+		parameters main
+		(
+			--guarda la descripcion del CA y su version
+			CA_description					type:#string	animatable:false	default:"Datos de carga de variacion de material al abrir la escena"
+			CA_version						type:#float		animatable:false	default:1.0
+			
+			matIndexes						type:#intTab	tabSizeVariable:true	--indice del submaterial donde aplicar la variacion
+			subMatIndexes					type:#intTab	tabSizeVariable:true	--indice del submaterial del submaterial donde aplicar la variacion
+
+			matNames 						type:#stringTab	tabSizeVariable:true 	--Nombre del submaterial donde aplicar la variación
+			subMatNames 					type:#stringTab	tabSizeVariable:true 	--Nombre del submaterial del submaterial donde aplicar la variación
+		)
+
+		--------------------------------------------------
+		fn getSelfNode =
+		(
+			_selfNode = (refs.dependentNodes this)[1]
+			_selfNode
+		)
+
+		--------------------------------------------------
+		fn setStoredMatVariation =
+		(
+			_selfNode = getSelfNode()
+			lb.variations.setStoredMatVariation _selfNode			
+		)
+	)
+
+	------------------------------------------------
+	struct strMorphVariation
+	(
+		type = #morph,
+		name = "",
+		value = -1,
+		numVariations = 100,
+		
+		morpherMod = undefined,
+		channel = -1,
+		
+		fn setValue val =
+		(
+			if val == #random then val = random 1 100
+			WM3_MC_SetValue this.morpherMod this.channel (val as float)
+			this.value = val
+		)
+	)
+
+	------------------------------------------------
+	struct strMatVariation
+	(
+		type = #material, 	
+		name = "",
+		value = -1,
+		numVariations = -1,
+		
+		mat = undefined,
+		matID = -1,
+		matName = "",
+		subMatName = "",
+		
+		--Pasamos un nombre de variación (el de un submaterial) o con random generamos uno
+		fn setValue val =
+		(
+			iValIndex = 0
+			
+			if not (lb.math.isNumeric (val As String)) then
+			(
+				--Si es un random, lo cogeremos de la lista de submateriales (pasa a ser un índice)
+				if val == #random then 
+				(
+					iValIndex = random 1 this.mat.materialList.count
+				)
+				else
+				(
+					--Si nos han pasado un nombre entonces sacaremos su índice
+					if (findItem this.mat.names val) > 0 then
+					(
+						iValIndex = (findItem this.mat.names val)
+					)
+				)
+			)
+			
+			--Llegados a este punto tendremos val como el índice de un submaterial (no un ID)
+			if iValIndex > 0 and iValIndex <= this.mat.materialList.count then
+			(
+				--	renumeramos todos los ID de material excepto el que nos interesa activar
+				for i = 1 to this.mat.materialList.count do
+				(
+					if iValIndex == i then
+					(
+						this.mat.materialIDList[i] = matID
+					)
+					else
+					(
+						this.mat.materialIDList[i] = matID + 1
+						this.value = iValIndex
+						this.subMatName = this.mat.names[iValIndex]
+					)
+					--_index = if i < matID then i else i + 1
+					--this.mat.materialIDList[i] = _index
+				)
+				
+				--	Al submaterial que queremos activar le ponemos el ID de numVariation
+				--this.mat.materialIDList[iValIndex] = matID
+				
+			)
+			
+			this.value
+		)
+	)
+
+	------------------------------------------------
+	struct strAssetVariation
+	(
+		type = #asset, 	
+		name = "",
+		value = -1,
+		numVariations = -1,
+		
+		node = undefined,
+		files = #(),
+				
+		fn setValue val =
+		(
+			_varValue = if val == #random then (random 1 this.files.count) else val
+			
+			if _varValue > 0 and _varValue <= this.files.count then
+			(
+				_asset = (lb.asset.getAssetsFromNodes #(this.node))[1]
+				
+				-- eliminamos todos los nodos del asset al que pertenece la geometría
+				lb.asset.deleteAsset _asset
+				
+				_assetNodes = lb.asset.loadAsset this.files[_varValue] _asset.loadMode --carga el asset nuevo
+				_newAsset = (lb.asset.getAssetsFromNodes _assetNodes)[1]
+				this.node = _newAsset.meshNodesAll[1]			
+				this.value = _varValue
+				
+				-- si hemos elegido una variación aleatoria comrprobamos si 
+				--el nuevo asset tiene, a su vez, variaciones de tipo #material o #morph
+				if val == #random then
+				(
+					_newAssetVariations = #()
+					_nodes = (_newAsset.meshNodesAll as array) + (_newAsset.hairNodesAll as array)
+					for _obj in _newAsset.meshNodesAll do join _newAssetVariations (lb.variations.getVariations _obj)
+					
+					for _var in _newAssetVariations where _var.type != #asset do
+						_var.setValue #random
+				)
+			)
+			
+			this.value
+		)
+	)
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: variations | Contiene la libreria de variations.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct lib_variations
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,					--@var: category | Categoria de la libreria.
+		className = lb.getFileLibName (getThisScriptFilename() as string),	--@var: name | Nombre de la libreria.
+		description = "Librería variations",	--@var: description | Descripcion de la libreria.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		matVariationInfo = CA_matVariationInfo,
+		
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: boolean | hasMatVariationInfo | Indica si el objeto tiene variaciones de material cargadas en el objeto para que se apliquen al abrir la escena
+		--@gets: obj | node | Objeto al que preguntarle si tiene matVariationInfo
+		------------------------------------------------
+		fn hasMatVariationInfo node = 
+		(
+			lb.customAttributes.hasAttribute node #matVariationInfo
+		),
+
+		------------------------------------------------
+		-- @fn: boolean | addMatVariationAttribute | Añade matVariationInfo al nodo pasado por parámetro
+		-- @gets: object | obj | Objeto al que añadir el matVariationInfo
+		------------------------------------------------
+		mapped fn addMatVariationAttribute obj =
+		(
+			if this.hasMatVariationInfo obj then this.removeMatVariationAttribute obj					
+			
+			custAttributes.add obj this.matVariationInfo #unique baseobject:false			
+		),
+		
+		------------------------------------------------
+		-- @fn: boolean | removeMatVariationAttribute | Borra el matVariationInfo al nodo pasado por parámetro
+		-- @gets: object | obj | Objeto al que borrar el matVariationInfo
+		------------------------------------------------
+		mapped fn removeMatVariationAttribute obj =
+		(
+			if this.hasMatVariationInfo obj then
+				custAttributes.delete obj (custattributes.getdef obj.matVariationInfo) baseobject:false
+		),
+
+		------------------------------------------------
+		-- @fn: boolean | addMatVariationAttribute | Añade al matVariationInfo una variacion mas
+		-- @gets: object | obj | Objeto al que añadir la variacion
+		------------------------------------------------
+		mapped fn addMatVariationAttributeValue obj matName:"" subMatName:"" =
+		(
+			if not this.hasMatVariationInfo obj then this.addMatVariationAttribute obj --si no tiene attribute lo añade
+			if appendIfUnique obj.matVariationInfo.matNames matName then
+			(
+				append obj.matVariationInfo.subMatNames subMatName
+			)
+		),
+
+		------------------------------------------------
+		-- @fn: boolean | setStoredMatVariation | Aplica la variacion
+		-- @gets: object | obj | Objeto al aplicar los valores del matVariationInfo
+		------------------------------------------------
+		fn setStoredMatVariation obj =
+		(
+			_material = obj.material
+			if (classof _material) == XRef_Material then
+			(
+				_material = _material.getSourceMaterial true
+
+				-- Antes de aplicar las variaciones miraremos si el objeto tiene el custom attribute para almacenar la variación 
+				-- (que nos dice que hay que aplicársela)
+				if hasProperty obj.matVariationInfo #matNames and hasProperty obj.matVariationInfo #subMatNames \
+				and obj.matVariationInfo.matNames.count > 0 and obj.matVariationInfo.matNames.count > 0 then
+				(
+					for i=1 to obj.matVariationInfo.matNames.count do
+					(
+						_matName = obj.matVariationInfo.matNames[i]
+						_subMatName = obj.matVariationInfo.subMatNames[i]
+
+						if (classof _material) == Multimaterial do
+						(
+							--Si encontramos el nombre del material entre la lista de nombres seguiremos
+							_matIndex = finditem _material.names _matName
+							if _matIndex != 0 do
+							(
+								if (classof _material[_matIndex]) == Multimaterial do
+								(
+									--Lo mismo para el submaterial
+									_subMatIndex = finditem _material[_matIndex].names _subMatName
+									if _subMatIndex != 0 do
+									(
+										-- Creo un array de la longitud de los submateriales y lo relleno primero con el id del material padre para el seleccionado
+										-- y luego con una secuencia numérica para los demás
+										_newMaterialIDlist = for m=1 to _material[_matIndex].materialIDList.count collect undefined
+										
+										_newMaterialIDlist[_subMatIndex] = _matIndex
+
+										--Recorremos todos los submateriales menos el seleccionado (con id del material padre) y metemos una secuencia numérica
+										--en cuanto coincida con su id, saltaremos 1 y continuaremos
+										_index = 1
+										for j=1 to _newMaterialIDlist.count where j!=_subMatIndex do
+										(
+											if _index != _matIndex then
+											(
+												_newMaterialIDList[j] = _index
+												_index += 1
+											)
+											else
+											(
+												_index += 1
+												_newMaterialIDList[j] = _index
+											)
+										)
+										
+										
+										_material[_matIndex].materialIDList = _newMaterialIDlist
+									)--if
+								)
+							)--if
+						)--if
+					)--for
+				)
+				else -- A partir de este punto se mantiene por retrocompatibilidad.
+				(
+
+					for i=1 to obj.matVariationInfo.matIndexes.count do
+					(
+						_matIndex = obj.matVariationInfo.matIndexes[i]
+						_subMatIndex = obj.matVariationInfo.subMatIndexes[i]
+
+						if _matIndex == undefined then _matIndex = 1
+						if _subMatIndex == undefined then _subMatIndex = 1
+
+						if (classof _material) == Multimaterial and _material.count >= _matIndex then
+						(
+							if _matIndex < 0 then _matIndex = _material.count
+
+							if (classof _material[_matIndex]) == Multimaterial and _material[_matIndex].count >= _subMatIndex then
+							(
+								if _subMatIndex < 0 then _subMatIndex = _material[_matIndex].materialIDList.count
+
+								-- Creo un array de la longitud de los submateriales y lo relleno primero con el id del material padre para el seleccionado
+								-- y luego con una secuencia numérica para los demás
+								_newMaterialIDlist = for m=1 to _material[_matIndex].materialIDList.count collect undefined
+								
+								_newMaterialIDlist[_subMatIndex] = _matIndex
+
+								--Recorremos todos los submateriales menos el seleccionado (con id del material padre) y metemos una secuencia numérica
+								--en cuanto coincida con su id, saltaremos 1 y continuaremos
+								_index = 1
+								for j=1 to _newMaterialIDlist.count where j!=_subMatIndex do
+								(
+									if _index != _matIndex then
+									(
+										_newMaterialIDList[j] = _index
+										_index += 1
+									)
+									else
+									(
+										_index += 1
+										_newMaterialIDList[j] = _index
+									)
+								)
+								_material[_matIndex].materialIDList = _newMaterialIDlist
+							)--if
+						)--if
+					)--for
+				)
+			)
+		),
+
+		------------------------------------------------
+		-- @fn: boolean | updateSceneStoredMatVariations | Actualiza las variaciones de material almacenadas en los objetos de la escena
+		------------------------------------------------
+		fn updateSceneStoredMatVariations =
+		(
+			for o in objects where this.hasMatVariationInfo o do o.matVariationInfo.setStoredMatVariation()
+		),
+
+		------------------------------------------------
+		--@fn: boolean | hasVariations | Indica si el fichero especificado tiene variations
+		--@gets: node | obj | Nodo al que se le quiere consultar si tiene variaciones
+		--@opt: name | type | Tipo de variación que se quiere consultar. Puede valer #all, #morpher o #material
+		------------------------------------------------
+		fn hasVariations obj type:#all =
+		(
+			_hasVariations = ((this.getVariations obj).count > 0)
+		),
+		
+		------------------------------------------------
+		--@fn: strVariations array | getVariations | Indica si el fichero especificado tiene variations
+		--@gets: node | obj | Nodo del que se quieren capturar las variaciones
+		--@opt: assets | asset array | Array de assets precalculado donde buscar las variaciones de asset. Se usa solo para optimizar velocidad. Si se buscan variaciones de tipo asset en muchas piezas a la vez tarda demasiado la ejecución porque tiene que hacer un lb.asset.getSceneAssets por cada objeto. Con este array se ahora capturar los assets de escena cada vez.
+		--@opt: name | type | Tipo de variación que se quiere consultar. Puede valer #all, #morpher o #material
+		------------------------------------------------
+		fn getVariations obj assets:undefined type:#all =
+		(
+			_variations = #()
+			_mat = if classOf obj.material != XRef_Material then obj.material else obj.material.getsourcematerial true
+			_morpherMod = lb.modifiers.getNodeModifier obj morpher
+			_sceneAssets = if assets != undefined then assets else (lb.asset.getSceneAssets())
+			
+			--	Capturamos las variaciones de Mesh
+			/*if (type == #all or type == #asset) and (lb.nodeInfo.hasNodeInfo obj) then
+			(
+				_asset = undefined
+				_found = false
+				
+				for _a in _sceneAssets where not _found do
+					if findItem _a.nodes obj != 0 then 
+					(
+						_asset = _a
+						_found = true
+					)
+				
+				if _asset != undefined then
+				(
+					_partName = (filterString (getFilenameFile _asset.filepath) "()")[2]
+					_partPrefix = if _partName != undefined then (filterString _partName "-")[1]
+					_partSufix = if _partName != undefined and (filterString _partName "-").count == 2 then (filterString _partName "-")[2] else ""
+					_filePrefix = if _partPrefix != undefined then (filterString (getFileNameFile _asset.filepath) "()")[1]
+					
+					_variationFilesTMP = if (_filePrefix != undefined) and (_partPrefix != undefined) then (getFiles ((getFilenamePath _asset.filePath) + _filePrefix + "(" + _partPrefix + "-*)_" + _asset.subType + "_*")) else #()
+					
+					-- Nos aseguramos de que no se ha capturado un mismo fichero de versiones distintas como variación
+					_variationFiles = #()
+					_variationFilesPrefix = #()
+					
+					for _file in _variationFilesTMP do
+					(
+						_filenameParts = filterstring (getFilenameFile _file) "_"
+						_filePrefix = if _fileNameParts.count > 3 then (filterstring (getFilenameFile _file) _filenameParts[4])[1] else undefined
+						
+						if _filePrefix != undefined and finditem _variationFilesPrefix _filePrefix == 0 then
+						(
+							append _variationFilesPrefix _filePrefix
+							append _variationFiles _file
+						)
+					)--for
+
+					-- Creamos la variación si se ha detectado más de un fichero
+					if (_variationFiles.count > 1) then
+					(
+						_meshVar = strAssetVariation()
+						_meshVar.name = _partSufix
+						_meshVar.node = obj
+						_meshVar.files = for _f in _variationFiles collect _f
+						_meshVar.numVariations = _variationFiles.count
+						_meshVar.value = findItem _variationFiles _asset.filePath
+						append _variations _meshVar
+					)
+				)
+			)*/
+			
+			--	Capturamos las variaciones de Material
+			if (type == #all or type == #material) and (classOf _mat == multiMaterial) then
+			(
+				for i = 1 to _mat.materialList.count where /* _mat[i] != undefined and */ classOf _mat.materialList[i] == multiMaterial do
+				(
+					--print _mat
+					--print _mat.materialList[i]
+					--print "----------------------"
+					_matVar = strMatVariation()
+					_matVar.mat = _mat.materialList[i]
+					_matVar.matID = _mat.materialIDList[i]
+					_matVar.numVariations = _mat.materialList[i].materialList.count
+					_matVar.value = 1
+					_matVar.name = _mat.names[i]
+					
+					for j = 1 to _mat.materialList[i].materialIDList.count where _mat.materialList[i].materialIDList[j] == _matVar.matID do
+					(
+						_matVar.value = j
+					)
+					_matVar.matName = _mat.names[i]
+					_matVar.subMatName = _mat.materialList[i].names[_matVar.value]
+					append _variations _matVar
+				)
+			)
+			
+			--	Capturamos las variaciones de Morpher
+			if (type == #all or type == #morph) and (_morpherMod != undefined) then
+			(
+				for i = 1 to 100 do
+				(
+					_channelNameParts = filterString (WM3_MC_GetName _morpherMod i) "-"
+					
+					if _channelNameParts.count == 2 then
+					(
+						if _channelNameParts[1] == "var" then
+						(
+							_morphVar = strMorphVariation()
+							_morphVar.name = _channelNameParts[2]
+							_morphVar.channel = i
+							_morphVar.morpherMod = _morpherMod
+							_morphVar.value = WM3_MC_GetValue _morpherMod i							
+							append _variations _morphVar
+						)
+					)
+				)
+			)
+			
+			_variations
+		),
+		
+		---------------------------------------------------------
+		-- Busca las variaciones de las cabezas y las carga en el fichero de mesh. 
+		---------------------------------------------------------
+		fn importMorphVariations targetMesh =
+		(
+			_nodeInfo = lb.nodeInfo.hasNodeInfo targetMesh
+
+			if _nodeInfo then
+			(
+				_fileHistory = targetMesh.nodeInfo.fileHistory
+				
+				for i=1 to _fileHistory.count do
+				(
+					_fileName = getFileNameFile _fileHistory[i]
+					_fileNameParts = filterString _fileName "_"
+					if _fileNameParts[3] == lb.nc.NC_meshFileName then
+					(
+						_orgPath = getFileNamePath _fileHistory[i]
+						_morphFileName = ""
+						_morphFileName = (getFileNamePath _fileHistory[i]) + _fileNameParts[1] + "_" + _fileNameParts[2] + "_" + lb.nc.NC_morphFileName + "_" + _fileNameParts[4] + ".max"
+						
+						if not doesFileExist _morphFileName then
+						(
+							_searchFile = lb.message.show "This object dont have variations, Do you want to select a file ?" type:#query
+							if _searchFile then
+							(
+								_morphFileName = getOpenFileName filename:_orgPath
+							)
+						)
+
+						_targetMorpher = undefined
+						if _morphFileName != undefined then
+						(	
+							for m in targetMesh.modifiers do
+							(
+								if classof m == Morpher then
+								(
+									_targetMorpher = m
+								)
+							)
+						)--for de modificadores
+
+						--Si no tengo morpher me lo creo
+						if _targetMorpher == undefined then
+						(
+							--USAR FUNCION DE JUAN
+							lb.modifiers.insertModifier targetMesh (Morpher()) before:20
+							for m in targetMesh.modifiers do
+							(
+								if classof m == Morpher then
+								(
+									_targetMorpher = m
+								)
+							)
+						)
+
+						--Si hay variacioens le usuario elige si se borran o no
+						_varLoaded = #()
+						_foundVariations = false
+						_deleteVariations = false
+						for n=1 to 100 do
+						(
+							_name = WM3_MC_GetName _targetMorpher n
+							if _name != undefined then
+							(
+								if MatchPattern _name pattern: lb.nc.NC_morphVariationPattern then 
+								(
+									_foundVariations = true 
+									append _varLoaded (WM3_MC_GetName _targetMorpher n)
+								)
+							)
+						)
+
+						if _foundVariations then 
+						(
+							_deleteVariations = lb.message.show "There are morph variations loaded. Do you want to delete them first? If you press NO, only new ones will be added." type:#query
+							if _deleteVariations then
+							(
+								for n=1 to 100 do
+								(
+									_index = findItem _varLoaded (WM3_MC_GetName _targetMorpher n)
+
+									if _index != 0 then
+									(
+										WM3_MC_Delete _targetMorpher n
+										deleteItem _varLoaded _index	
+									)	
+								)
+							)
+						)
+
+						--Mergeamos los objetos del archivo exterior
+						_objsToMerge = getMAXFileObjectNames _morphFileName
+						_merge = #()
+						for j=1 to _objsToMerge.count do
+						(
+							_findVar = findItem _varLoaded (filterString _objsToMerge[j] "_")[5]
+							if _findVar == 0 then 
+							(
+								_objsToMergeParts = filterString _objsToMerge[j] "_"
+								if matchpattern _objsToMergeParts[5] pattern: lb.nc.NC_morphVariationPattern then
+								(
+									append _merge _objsToMerge[j]
+								)
+							)
+						)
+
+						mergeMAXFile _morphFileName _merge #useMergedMtlDups quiet:true	
+
+						--MIRARPORQUENOCONECTAELCANAL100
+
+						--Conectamos al morpher las variaciones
+						_startingIndex = 101
+						while (_startingIndex > 0) and (WM3_MC_HasData _targetMorpher _startingIndex) do _startingIndex -= 1
+						--print "1"
+						--print _startingIndex
+						if _startingIndex > 0 then
+						(
+							--print "2"
+							--print _startingIndex
+							for v=1 to _merge.count do --recorre los nombres de variaciones a añadir
+							(
+								--obtiene el nodo de la variacion y lo intenta añadir en los huecos libres del morpher al final
+								_varNode = getNodeByName _merge[v]
+								if _varNode != undefined then
+								(
+									--print "3"
+									--print _startingIndex
+									--averiguo donde insertar la variacion
+									while (_startingIndex > 0) and (WM3_MC_HasData _targetMorpher _startingIndex) do _startingIndex -= 1
+
+									--print "4"
+									--print _startingIndex
+									if _startingIndex > 0 then
+									(
+										if WM3_MC_BuildFromNode _targetMorpher _startingIndex _varNode then
+										(
+											--print "5"
+											--print _startingIndex
+											_startingIndex -= 1
+										)
+									)--if
+								)--if
+							)--for
+							lb.message.show "Variations loaded!"
+						)
+						else
+						(
+							lb.message.show "All channels are in use. Cannot add new variations."
+						)
+
+						for n=1 to 100 do
+						(
+							--dejar de nombre var-*
+							_nameS = WM3_MC_GetName _targetMorpher n
+							_nameSParts = filterString _nameS "_"
+							if _nameSParts.count == 7 then
+							(
+								if WM3_MC_HasData _targetMorpher n then
+								(
+									WM3_MC_SetName _targetMorpher n _nameSParts[5]
+									--append _newName (WM3_MC_GetName _targetMorpher n)
+								)
+							)
+						)
+
+						for node in _merge do delete (getNodeByName node)
+					)
+				)		
+			)
+			else
+			(
+				lb.message.show "Object picked doesn't have nodeInfo!" type:#message
+			)
+		),
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+			
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addLibrary this --añade la libreria a la principal
+		)
+	)
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	
+	lib_variations() --crea la libreria
+)

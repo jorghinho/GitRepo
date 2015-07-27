@@ -1,0 +1,590 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--@Desc: Herramienta animVertexBaker.
+------------------------------------------------------------------------------------------------------------------------------------------------
+(
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollMainDef | Contiene la interfaz de la herramienta animVertexBaker.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollMainDef "Anim Vertex Baker"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) 	--@var: string | parent | Herramienta o rolllout del que depende y/o contiene el rollout actual
+
+		local minRollWidth = 220															--@var: integer | minRollWidth | Ancho mínimo de la herramienta.
+		local minRollHeight = 320															--@var: integer | minRollHeight | Alto mínimo de la herramienta.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+
+		local objsToBake = #()																--@var: array{nodes} | objsToBake | objetos a los que hacer bake
+		
+		local DeleteOriginalValue = false 													--@var: boolean | DeleteOriginalValue | Si vale TRUE indica que se deben de borrar los objetos originales.
+		local FlipNormalsValue = false 														--@var: boolean | FlipNormalsValue | Si vale TRUE indica que se deben invertir las normales del objeto a cachear.
+		local FlippedCopyValue = false 														--@var: boolean | FlippedCopyValue | Si vale TRUE indica que se debe crear una copia del objeto cacheado con las normales invertidas.
+
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		
+		button btnAddObjectsToList "Add Selected Objects" pos:[5,5] width:130 height:20 toolTip:"Adds Current Selection To The List"
+		button btnClearList "Clear" pos:[135,5] width:60 height:20 toolTip:"Clear The List"
+		button btnDelObjFromList "-" pos:[195,5] width:20 height:20 toolTip:"Delete Choosen Object From Objects List"
+		listbox lbxObjsToBake "" pos:[5,30] width:210 height:8
+		
+		groupbox grpFrameRange "Frame Range" pos:[5,145] width:210 height:45
+		spinner spnFrameRangeStart "" pos:[10,165] width:55 height:16 type:#integer range:[animationrange.start,animationrange.end,animationrange.start]
+		label lblTo "to" pos:[105,165] width:18 height:16
+		spinner spnFrameRangeEnd "" pos:[155,165] width:55 height:16 type:#integer range:[animationrange.start,animationrange.end,animationrange.end]
+		
+		groupbox grpOptions "Options" pos:[5,195] width:210 height:85
+		checkbox chkDeleteOriginalObjects "Delete original objects" pos:[10,215]
+		checkbox chkFlipNormals "Flip baked objects normals" pos:[10,235]
+		checkbox chkFlippedCopy "Additional copy with flipped normals" pos:[10,255]
+		
+		button btnBakeAnimation "Bake Animation" toolTip:"Bake listo objects animation." pos:[5,290] width:210 height:25
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+
+		------------------------------------------------
+		--@fn: undefined | updateUI | actualiza el estado de los elementos del UI
+		------------------------------------------------
+		fn updateUI =
+		(
+			btnBakeAnimation.enabled = btnClearList.enabled = btnDelObjFromList.enabled = lbxObjsToBake.items.count != 0
+		)--updateUI
+
+		------------------------------------------------
+		--@fn: undefined | flipEditpolyNormals | Invierte las normales de un objeto
+		--@gets: node | theNode | El objeto con el que operar.
+		------------------------------------------------		
+		fn flipEditpolyNormals theNode =
+		(
+			select theNode
+			max modify mode
+			subObjectLevel = 4
+			polyop.flipnormals theNode #all
+			subObjectLevel = 0
+			clearSelection()
+		)
+
+		------------------------------------------------
+		--@fn: undefined | bakeNode | bakea la animación de un objeto
+		--@gets: node | targetNode | El nodo copia sobre el que bakear la animación.
+		--@gets: node | originalNode | El nodo que tiene la animación
+		--@gets: frame | rangeStart | El frame donde se inicia el bakeo de la animación.
+		--@gets: frame | rangeEnd | El frame donde finaliza el bakeo de la animación.
+		------------------------------------------------		
+		fn bakeNode targetNode originalNode rangeStart rangeEnd =
+		(
+			with animate on --es necesario habilitar la animación
+			(
+				--duplica el original y lo convierte en editpoly
+				_copy = copy originalNode
+				convertToPoly _copy
+				
+				_vertexCount = polyop.getNumVerts targetNode --Contar vertices existentes en el poly final
+				polyop.attach targetNode _copy --juntar la geometria del objeto al editpoly final
+								
+				sliderTime = rangeStart --se coloca al inicio del rango marcado
+				
+				for i = rangeStart to rangeEnd do
+				(
+					--crear un snapshot del originalNode como editpoly
+					_refSnapshot = snapshot originalNode
+					convertToPoly _refSnapshot
+					_refSnapshotVertexCount = polyop.getNumVerts _refSnapshot
+					
+					--recolecta un array con las posiciones de los vertices del originalNode
+					_originalNodeVertArray = #()
+					for j = 1 to _refSnapshotVertexCount do
+					(
+						_currentVertPos = polyop.getVert _refSnapshot j
+						append _originalNodeVertArray _currentVertPos
+					)--for
+					
+					--mueve los vertices a la posicion del originalNode
+					_initVertex = _vertexCount + 1
+					_finalVertex = _vertexCount + _refSnapshotVertexCount
+					in coordsys world polyop.setVert targetNode #{_initVertex.._finalVertex} _originalNodeVertArray
+					
+					delete _refSnapshot --elimina la malla de referencia
+					sliderTime += 1
+				)--for
+				
+				--ESTO SE PUEDE OPTIMIZAR PARA QUE LO HAGA EN EL BUCLE ANTERIOR
+				--correction of the automatic frame 0 key, if necessary
+				if rangeStart != animationrange.start then 
+				(
+					sliderTime = rangeStart --se coloca de nuevo al inicio del rango marcado
+					
+					--crear un snapshot del originalNode como editpoly
+					_refSnapshot = snapshot originalNode
+					convertToPoly _refSnapshot
+					_refSnapshotVertexCount = polyop.getNumVerts _refSnapshot
+					
+					--recolecta un array con las posiciones de los vertices del originalNode
+					_originalNodeVertArray = #()
+					for j = 1 to _refSnapshotVertexCount do
+					(
+						_currentVertPos = polyop.getVert _refSnapshot j
+						append _originalNodeVertArray _currentVertPos
+					)--for
+					
+					sliderTime = animationrange.start --se coloca en el inicio del rango de animación
+					
+					--mueve los vertices a la posicion del originalNode
+					_initVertex = _vertexCount + 1
+					_finalVertex = _vertexCount + _refSnapshotVertexCount
+					in coordsys world polyop.setVert targetNode #{_initVertex.._finalVertex} _originalNodeVertArray
+					
+					delete _refSnapshot --elimina la malla de referencia
+				)--if 				
+			)
+		)
+
+		------------------------------------------------
+		--@fn: undefined | bakeNodes | hace el bake de la animacion de los objetos
+		--@gets: array{nodes} | nodes | Selección de nodos a los que bakear la animación.
+		--@gets: boolean | deleteOriginal | Si vale **TRUE** se borrarán las mallas originales con las llaves de animación y permanecerán una copia de la malla con el bakeo de la animación.
+		--@gets: boolean | flipNormals |Si vale **TRUE** se flipearan las normales de los objetos con las animaciones bakeadas
+		--@gets: boolean | additionalFlippedNormalsCopy | Si vale **TRUE** se realizará una copia de la malla original, que llevará la animación bakeada y a su vez tendrá las normales flipeadas.
+		--@gets: frame | rangeStart | El frame donde se inicia el bakeo de la animación.
+		--@gets: frame | rangeEnd | El frame donde finaliza el bakeo de la animación.				
+		------------------------------------------------		
+		fn bakeNodes nodes deleteOriginal flipNormals additionalFlippedNormalsCopy rangeStart rangeEnd =
+		(
+			undo "animVertexMaker" on
+			(
+				try
+				(				
+					--poner el panel en Crear y deshabilitar viewports para optimizar velocidad
+					max create mode
+					disableSceneRedraw()
+					
+					--crear editpoly nuevo vacio
+					_bakedNode = box length:1 width:1 height:1
+					convertToPoly _bakedNode
+					_bakedNode.name = uniquename "animVertexBakedNode"
+					_bakedNode.EditablePoly.SetSelection #Face #{1}
+					_bakedNode.selectElement()
+					facesToDelete = polyop.getFaceSelection _bakedNode
+					polyop.deleteFaces _bakedNode facesToDelete
+					
+					-- Progress Bar Setup variables
+					progressStart "animVertexBaker"
+					escapeEnable = true
+						
+					--bucle por objeto seleccionado a mergear
+					_nodesToDelete = #()
+					for i = 1 to nodes.count do
+					(
+						--hace el bake
+						_currNode = nodes[i] --getNodeByName nodes[i] 
+						bakeNode _bakedNode _currNode rangeStart rangeEnd
+						append _nodesToDelete _currNode
+						
+						--rellena el porcentaje
+						if not (progressUpdate ((100.0/nodes.count)*i)) then exit
+					)--for
+						
+					progressEnd()
+					
+					if deleteOriginal then delete _nodesToDelete --elimina los nodos originales si procede
+					
+					if flipNormals then
+					(
+						flipEditpolyNormals _bakedNode
+						_bakedNode.name = uniquename "animVertexBakedNodeFlippedNormals"
+					)
+					
+					if additionalFlippedNormalsCopy then
+					(
+						_bakedCopy = copy _bakedNode
+						if not flipNormals then flipEditpolyNormals BakedCopy
+						
+						_bakedCopy.name = uniquename "animVertexBakedNodeFlippedNormalsCopy"
+					)
+					
+					select _bakedNode
+				)
+				catch()
+				
+				enableSceneRedraw()
+				completeRedraw()
+			)--undo
+			
+			gc()
+		)	
+
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollMainDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollMainDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--almacena posicion
+			lb.xml.setAttribute parent.cfgFile ("rollMain/pos") "x" (((getDialogPos rollMainDef).x) as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/pos") "y" (((getDialogPos rollMainDef).y) as string)
+			
+			--almacena tamaño
+			lb.xml.setAttribute parent.cfgFile ("rollMain/size") "width" (rollMainDef.width as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/size") "height" (rollMainDef.height as string)
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			_width = (lb.xml.getAttribute parent.cfgFile ("rollMain/size") "width") as integer
+			_height = (lb.xml.getAttribute parent.cfgFile ("rollMain/size") "height") as integer
+				
+			--posicion
+			_posX = (lb.xml.getAttribute parent.cfgFile ("rollMain/pos") "x") as integer
+			_posY = (lb.xml.getAttribute parent.cfgFile ("rollMain/pos") "y") as integer
+				
+			--establece minimos
+			if _width < minRollWidth then _width = minRollWidth
+			if _height < minRollHeight then _height = minRollHeight
+			if _posX < 0 then _posX = 0
+			if _posY < 0 then _posY = 0
+				
+			--aplica los valores
+			rollMainDef.width = _width
+			rollMainDef.height = _height
+			setDialogPos rollMainDef [_posX,_posY]
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el botón.
+		--@control: button | btnAddObjectsToList | Recoge las geometrias de la selección para añadirslas al listado.
+		------------------------------------------------			
+		on btnAddObjectsToList pressed do 
+		(
+			--vacía los arrays-------------
+			objsToBake = #()
+			_objsToBakeNames = #()
+			_nonGeometryObjects = false
+			
+			--recoge las geometrias de la seleccion para añadirlas al listado
+			for obj in selection do
+			(
+				if superclassof obj != GeometryClass then _nonGeometryObjects = true
+				else
+				(
+					append _objsToBakeNames obj.name
+					append objsToBake obj
+				)
+			)--for
+			
+			if _nonGeometryObjects then
+				messageBox "All selected objects must be geometry. Non geometry objects will be skipped" title:"AnimVertexBaker"
+			
+			lbxObjsToBake.items = _objsToBakeNames
+			
+			updateUI() --refresaca el estado del interface
+		)--on btnAddObjectsToList
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el botón.
+		--@control: button | btnClearList | limpia el listado de objetos a hacer bake	
+		------------------------------------------------		
+		on btnClearList pressed do
+		(
+			--vacia la lista
+			lbxObjsToBake.items = #()
+			objsToBake = #()
+			
+			updateUI() --refresaca el estado del interface
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el botón.
+		--@control: button | btnAddObjectsToList | elimina el objeto seleccionado del listado
+		------------------------------------------------		
+		on btnDelObjFromList pressed do 
+		(
+			--elimina el seleccionado
+			if lbxObjsToBake.items.count != 0 then
+			(
+				_items = deepCopy lbxObjsToBake.items 
+				deleteItem _items lbxObjsToBake.selection
+				deleteItem objsToBake lbxObjsToBake.selection
+				lbxObjsToBake.items = _items
+			)
+			
+			updateUI() --refresaca el estado del interface
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el botón.
+		--@control: button | btnBakeAnimation | realiza el bake
+		------------------------------------------------		
+		on btnBakeAnimation pressed do
+		(
+			_frameStart = spnFrameRangeStart.value
+			_frameEnd = spnFrameRangeEnd.value
+			_deleteOriginal = chkDeleteOriginalObjects.checked
+			_flipNormals = chkFlipNormals.checked
+			_flipCopy = chkFlippedCopy.checked
+			
+			bakeNodes objsToBake _deleteOriginal _flipNormals _flipCopy _frameStart _frameEnd
+		)	
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollMainDef | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		--@gets: point2 | size | tamaño al que se ha redimensionado el rollout
+		------------------------------------------------
+		on rollMainDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollMainDef | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollMainDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+			updateToolbarButtons()		
+			updateUI() --refresaca el estado del interface
+			if parent.rollMain != undefined then resize [parent.rollMain.width, parent.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollMainDef | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollMainDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+			
+			parent.opened = false --indica que la herramienta está cerrada.
+			updateToolbarButtons()
+		)
+	)--rollMainDef
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: animVertexBaker | Contiene la herramienta anim vertex baker.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct tl_animVertexBaker
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),												--@var: string | def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),									--@var: string | defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,													--@var: name | category | Categoria de la tool.
+		className = lb.getFileToolName (getThisScriptFilename() as string),	--@var: string | className | Nombre de la tool.
+		description = "Anim Vertex Baker",									--@var: string | description | Descripcion de la tool.
+		
+		cfgFile = (lb.config.getToolsIniPath()) + (lb.getFileToolName (getThisScriptFilename() as string)) + ".cfg",	--@var: string | cfgFile | Archivo de configuracion de la tool.
+			
+		opened = false,														--@var: boolean | opened | Indica si la herramienta está abierta.
+			
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--ROLLOUTS
+		------------------------------------------------------------------------------------------------
+		
+		rollMain = rollMainDef,												--@var: rollout | rollMain | Almacena el rollout principal de la herramienta.
+			
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: boolean | isOpen | Devuelve información true o false, si la herramienta está abierta o cerrada.
+		------------------------------------------------
+		fn isOpen =
+		(
+			this.opened
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | refreshInterface | Refresca el interface inicial de la herramienta
+		------------------------------------------------
+		fn refreshInterface =
+		(
+			--refresca el interface de la herramienta
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | createInterface | Crea el interface inicial de la herramienta
+		------------------------------------------------
+		fn createInterface =
+		(
+			--crea el interface, lo redimensiona y lo reposiciona
+			createDialog this.rollMain lockwidth:true lockheight:true pos:[-10000,0] style:#(#style_toolwindow, #style_titlebar, #style_sysmenu, #style_resizing)
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | destroyInterface | Destruye el interface de la herramienta.
+		------------------------------------------------
+		fn destroyInterface =
+		(
+			destroyDialog this.rollMain --cierra la herramienta.			
+		),--destroyInterface
+		
+		------------------------------------------------
+		--@fn: undefined | run | Lanza la herramienta.
+		------------------------------------------------
+		fn run =
+		(
+			this.createInterface() --crea el interface.
+			this.opened = true --indica que la herramienta está abierta
+		),--execute
+		
+		------------------------------------------------
+		--@fn: undefined | close | Cierra la herramienta.
+		------------------------------------------------
+		fn close =
+		(
+			this.destroyInterface() --destruye el interface.
+			this.opened = false --indica que la herramienta está cerrada.
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addTool this --añade la tool a la libreria principal	
+		)		
+		
+	)--tl_animVertexBaker
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------	
+	
+	tl_animVertexBaker() --crea la herramienta
+)

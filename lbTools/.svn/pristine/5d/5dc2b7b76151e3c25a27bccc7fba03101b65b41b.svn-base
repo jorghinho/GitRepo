@@ -1,0 +1,690 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--Descripcion: Herramienta Preanim composer.
+------------------------------------------------------------------------------------------------------------------------------------------------
+(
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollMain | Contiene la herramienta Preanim Composer.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollMainDef "Pre-anim Scene Composer"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) --@var : parent | Herramienta o rolllout del que depende y/o contiene el rollout actual
+		
+		local minRollWidth = 810		--@var: minRollWidth | Ancho mínimo de la herramienta.
+		local minRollHeight = 727		--@var: minRollHeight | Alto mínimo de la herramienta.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		local cameraToExportColor = (dotNetClass "System.Drawing.Color").fromargb 255 255 255
+		local cameraToIgnoreColor = (dotNetClass "System.Drawing.Color").fromargb 150 150 150
+		local cameraFailedColor = (dotNetClass "System.Drawing.Color").fromargb 255 0 0
+		local cameraExportedColor = (dotNetClass "System.Drawing.Color").fromargb 0 255 0
+
+		local _linkedList = #()
+		local _charList = #()
+		local _charsFolder = "y:\\asset\\chr\\"
+		local nonListableFolders = #("auxiliary","doc","lib")
+
+		-- Parejas de union entre un personaje de layout y animacion
+		struct charLink ( layout = "", animation = "")
+		
+		struct camLinkageInfo ( 
+
+			cam = "",
+			linkList = #() ,
+			fn addOrEditLink layChar animChar =
+			(
+				linkIndex = 0
+
+				for counter = 1 to linkList.count do 
+				(
+					if linkList[counter].layout == layChar do 
+						linkIndex = counter
+				)
+				
+				if linkIndex > 0 then
+					linkList[counter].animation = animChar
+				else 
+					append linkList (charLink layChar animChar)
+			)
+		)
+
+		local _camLinkageList = #() -- contains a list camLinkageInfos
+
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+
+		GroupBox grp1 "Scene Cameras" pos:[13,16] width:114 height:707
+		GroupBox grp3 "Layout to Animation Character Linker" pos:[136,16] width:350 height:707
+		GroupBox grp4 "Export Process" pos:[496,18] width:303 height:705
+
+		dotNetControl _cameraListView "System.Windows.Forms.ListView" pos:[25,35] width:89 height:678 across:3
+		dotNetControl _charListView "System.Windows.Forms.ListView" pos:[149,57] width:324 height:146 
+ 		dotNetControl _charCompleteTreeView "System.Windows.Forms.TreeView" pos:[149,231] width:326 height:272 
+ 		dotNetControl _linkedListView "System.Windows.Forms.ListView" pos:[149,549] width:326 height:165
+
+		label lbl1 "Current Scene Characters" pos:[249,39] width:134 height:16
+		label lbl2 "Available Characters" pos:[256,215] width:104 height:16
+		label lbl3 "Process Log" pos:[615,122] width:64 height:17
+
+		button _exportBtn "START EXPORT" pos:[508,67] width:277 height:44
+		button _addBtn "Add/Edit Link" pos:[200,514] width:217 height:27
+
+		dotNetControl _log "System.Windows.Forms.TextBox" pos:[506,145] width:284 height:570 
+
+		radiobuttons overwriteOption "" pos:[526,40] width:245 height:16 enabled:true labels:#("skip existing", "overwrite existing") default:1 columns:2
+
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+
+		------------------------------------------------------------------------------
+		--@fn: array{string} | getFolderDirectories | devuelve todas las carpetas encontradas en la ruta FOLDER exceptuando las ".svn" de SubVersion
+		------------------------------------------------------------------------------
+		fn getFolderDirectories folder dirs:#() =
+		(
+			_dirs = getDirectories folder
+			
+			--	Eliminamos todos los directorios que no hay que listar
+			for i = _dirs.count to 1 by -1 do 
+			(
+				_folderParts = filterstring _dirs[i] "\\"
+				_lastFolderPart = _folderParts[_folderParts.count]
+				
+				if findItem nonListableFolders _lastFolderPart != 0 then 
+					deleteItem _dirs i
+			)
+			
+			_dirs	
+		)		
+
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------------------------------------
+		--@fn: undefined | fillTreeView | explica
+		------------------------------------------------------------------------------		
+		fn addToLog textToAdd =
+		(
+			_log.text += (textToAdd + "\r\n")
+		)
+
+		------------------------------------------------------------------------------
+		--@fn: undefined | fillTreeView | explica
+		------------------------------------------------------------------------------
+		fn addLogSeparator =
+		(
+			addToLog "\n---------------------------\n"	
+		)
+
+		------------------------------------------------------------------------------
+		--@fn: undefined | fillTreeView | explica
+		------------------------------------------------------------------------------
+		fn deleteLightsAndActivateSound = 
+		(
+			-- variables y arrays
+			lightsInScene = #()
+			
+			-- selecciona los objetos de la escena y si son luces lo mete en el array
+			for o in objects do if (superclassof o) == light do 
+			(
+				append lightsInScene o
+				print o.name
+			)
+			-- eliminamos las luces de la escena
+			delete lightsInScene
+		)
+
+		------------------------------------------------------------------------------
+		--@fn:  undefined | createTreeViewNodes | Crea todos los nodos del treeView a partir de la ruta inicial indicada en FOLDERS. Cada nodo equivale a una carpeta. 
+		------------------------------------------------------------------------------	
+		fn createTreeViewNodes treeNodeCollection paths = 
+		(
+			for _path in paths do
+			(
+				--Saco en un array las partes del directorio
+				_pathParts = filterstring _path "\\"
+				
+				--Cogemos el nombre de la carpeta actual y le quitamos el sufijo de versión de asset (si es que lo tiene)
+				_pathName =  _pathParts[_pathParts.count]
+				--_pathName = substituteString _pathName "chr_*{" "{"
+
+				_newNode = dotnetObject "System.Windows.Forms.TreeNode" _pathName
+				_newNode.name = _path
+				
+				treeNodeCollection.add _newNode
+
+				-- Si estamos dentro de una carpeta de personaje, nos metemos en Version -> Preset ->				
+				if (doesFileExist (_path + "\\" + lb.nc.NC_versionFolderName)) then
+				(
+					_presetFilesPath = _path + "\\" + lb.nc.NC_versionFolderName + "\\" + lb.nc.NC_presetFolderName + "\\*_anim_*.prt"
+					files = getFiles (_presetFilesPath)
+					createTreeViewNodes _newNode.nodes files
+				)
+				else
+				(
+					_subDirs = getFolderDirectories (_path + "*")
+					createTreeViewNodes _newNode.nodes _subDirs
+				)
+			
+			)
+		)
+
+		------------------------------------------------------------------------------
+		--@fn: undefined | fillTreeView | explica
+		------------------------------------------------------------------------------
+		fn initList list multiselection =
+		(
+			lv = list
+			lv.columns.clear()
+			lv.multiSelect = multiselection
+			lv.gridLines = true
+			lv.View = (dotNetClass "System.Windows.Forms.View").details
+			lv.borderstyle = (dotnetclass "System.Windows.Forms.BorderStyle").fixedSingle
+			lv.fullRowSelect = true
+			lv.HideSelection = off
+			lv.BackColor = (dotnetclass "System.Drawing.SystemColors").Menu
+			lv.scrollable = true
+			lv.labelWrap = True
+			lv.labelEdit = false
+			lv.columns.add "lista" lv.width
+			lv.HeaderStyle = (dotNetClass "System.Windows.Forms.ColumnHeaderStyle").None
+		)
+
+		------------------------------------------------------------------------------
+		--@fn: undefined | fillTreeView | explica
+		------------------------------------------------------------------------------
+		fn initTree tree =
+		(
+			tr = tree
+			tr.HideSelection = off
+			tr.BackColor = (dotnetclass "System.Drawing.SystemColors").Menu
+		)
+
+		
+		------------------------------------------------------------------------------
+		--@fn: undefined | fillTreeView | Rellena el treeView buscando las carpetas del modo en que estemos trabajando: #asset o #sequence
+		------------------------------------------------------------------------------
+		fn updateFullCharacterList =
+		(
+			--Limpiamos los nodos del árbol para poder volver a rellenarlos
+			_charCompleteTreeView.nodes.clear()
+			
+			--Cogemos los directorios del path inicial salvo el de .svn
+			_dirs = getFolderDirectories (_charsFolder + "*")
+			
+			--Rellenamos los nodos del arbol con los directorios que hemos cogido antes
+			createTreeViewNodes _charCompleteTreeView.nodes _dirs
+		)
+		
+
+		------------------------------------------------------------------------------
+		--@fn: undefined | fillTreeView | explica
+		------------------------------------------------------------------------------
+		fn updateCameraList =
+		(
+			_cameraListView.items.clear()
+
+			for item in cameras do 	
+			(	
+				if (classof item != Targetobject) do
+					_cameraListView.items.add item.name
+			)
+
+			_cameraListView.Sorting = (dotNetClass "System.Windows.Forms.SortOrder").Ascending
+		)
+
+		------------------------------------------------------------------------------
+		--@fn: undefined | fillTreeView | explica
+		------------------------------------------------------------------------------
+		fn updateCharacterList = 
+		(
+			_charList = lb.asset.getSceneAssets type:lb.nc.NC_chrPrefix
+
+			_charListView.items.clear()
+
+			for item in _charList do 
+				_charListView.items.add item.name
+
+		)
+
+		------------------------------------------------------------------------------
+		--@fn: undefined | fillTreeView | explica
+		------------------------------------------------------------------------------
+		fn updateLinkedList =
+		(
+			_linkedListView.items.clear()
+
+			for item in _linkedList do
+				_linkedListView.items.add item
+		)
+
+
+		/*
+		-- Activa la compresion del archivo a la hora de guardarlo.
+		fn activateCompress = 
+		(
+			-- activamos el Compress on  Save
+			setINISetting (getMAXIniFile()) "Performance" "WriteCompressed" "1"
+		)
+		
+
+		-- elimina capas vacias
+		fn deleteEmptyLayers = 
+		(
+			-- Id de la capa base
+			DeletedLayerCount = 0 
+			
+			-- Activamos la capa base para poder trabajar con el resto sin problemas
+			local deflayer = layermanager.getlayer 0 
+			deflayer.current = true
+			
+			-- recorremos las capas y si esta vacia la eliminamos.
+			for i = Layermanager.count-1 to 1 by-1 do
+			(  
+				layer = layermanager.getLayer i  
+				local thislayername = layer.name 
+				layer.nodes &theNodes  
+				if thenodes.count== 0 then (LayerManager.deleteLayerbyname thislayername;DeletedLayerCount +=1)
+			) 
+			if not DeletedLayerCount == 0 do 
+				print ("Number of layers removed - " + DeletedLayerCount as string)
+		)
+
+		-- Bloquea las transformaciones de las cámaras
+		fn fnlock =
+		(
+			-- localizamos la capa que contiene las cámaras y accedemos a ellas
+			camLayer = LayerManager.getLayerFromName "_cam_"
+			camLayer.nodes &theNodes
+			for o in theNodes do 
+			(
+				-- checkeamos que es de la clase camara
+				if (superclassof o) == Camera do
+				(
+					-- conjelamos, ocultamos y blockeamos sus transformaciones
+					setTransformLockFlags o #all
+					o.isFrozen = true
+					o.isHidden = true
+				)
+			)
+			messagebox "- Revisar que no tenga keys de más \n- Coprobar previos con skins\n- Release lock"
+		)
+		*/
+
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollMainDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollMainDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--almacena posicion
+			lb.xml.setAttribute parent.cfgFile ("rollMain/pos") "x" (((getDialogPos rollMainDef).x) as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/pos") "y" (((getDialogPos rollMainDef).y) as string)
+			
+			--almacena tamaño
+			lb.xml.setAttribute parent.cfgFile ("rollMain/size") "width" (rollMainDef.width as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/size") "height" (rollMainDef.height as string)
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			_width = (lb.xml.getAttribute parent.cfgFile ("rollMain/size") "width") as integer
+			_height = (lb.xml.getAttribute parent.cfgFile ("rollMain/size") "height") as integer
+				
+			--posicion
+			_posX = (lb.xml.getAttribute parent.cfgFile ("rollMain/pos") "x") as integer
+			_posY = (lb.xml.getAttribute parent.cfgFile ("rollMain/pos") "y") as integer
+				
+			--establece minimos
+			if _width < minRollWidth then _width = minRollWidth
+			if _height < minRollHeight then _height = minRollHeight
+			if _posX < 0 then _posX = 0
+			if _posY < 0 then _posY = 0
+				
+			--aplica los valores
+			rollMainDef.width = _width
+			rollMainDef.height = _height
+			setDialogPos rollMainDef [_posX,_posY]
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		/* UNA SOLUCION MUCHÍSIMO MAS RAPIDA PARA MOSTRAR MUCHA INFORMACION	
+		fn format_output header in_array = 
+		(
+		   out_str = stringStream ""
+		   format "%\r\n" header to:out_str
+
+		   for ln in in_array do (
+		      format "\t%\r\n" ln to:out_str
+		   )
+
+		   out_str = out_str as string
+		   trimRight out_str
+
+		   return out_str
+		)*/
+
+
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollMain | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollMain | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollMain | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		--@gets: point2 | size | tamaño al que se ha redimensionado el rollout
+		------------------------------------------------
+
+
+		on rollMainDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+		
+			initList _cameraListView True
+			initList _charListView False
+			initTree _charCompleteTreeView
+			initList _linkedListView False
+		
+			_log.Clear()
+			_log.Multiline = True
+			_log.ScrollBars = (dotNetClass "System.Windows.Forms.ScrollBars").Vertical
+			_log.ReadOnly = True
+			_log.WordWrap = True
+		
+			if parent.rollMain != undefined then resize [parent.rollMain.width, parent.rollMain.height]
+		
+			updateCameraList()
+			updateCharacterList()
+			updateFullCharacterList()
+		)
+		on rollMainDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+			
+			parent.opened = false --indica que la herramienta está cerrada.
+			updateToolbarButtons()
+		)
+		on rollMainDef resized size do
+		(
+			resize size
+		)
+		on _charCompleteTreeView afterSelect events do
+		(
+			--addToLog _charCompleteTreeView.selectedNode.name
+		)
+		on _exportBtn pressed do
+		(
+			addToLog "Export process started..."
+		
+			addLogSeparator()
+		
+		
+			addLogSeparator()
+		
+			addToLog "Export process finished..."
+		)
+		on _addBtn pressed do
+		(
+			_errorText = "Error: Please select one item from the characters from the current scene, and one from the available characters to make a link."
+		
+			if _charCompleteTreeView.selectedNode != undefined and _charListView.selectedItems.count > 0 then  
+			(
+				_animChar = _charCompleteTreeView.selectedNode.text
+				
+				if ( MatchPattern _animChar pattern:"*_anim_*.prt") then
+				(
+					_animCharPath = _charCompleteTreeView.selectedNode.name
+					--selIndexBackup = (lvLinks.selectedItems.item[0].index + 1) --obtiene el indice del seleccionado
+					_layoutChar = _charListView.selectedItems.item[0].text
+					_animChar = (filterstring _animChar "_")[2]
+					_newLink = _layoutChar + "<-->" + _animChar
+				
+					append _linkedList _newLink
+					
+					--append _camLinkageList
+					--info = camLinkageInfo 
+
+					--info.addOrEditLink _layoutChar _animChar
+
+					updateLinkedList()
+				)
+				else 
+					addToLog _errorText
+			)
+			else 
+				addToLog _errorText	
+		)
+	)
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: templateTool | Contiene la herramienta plantilla.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct tl_preanimComposer
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,					--@var: category | Categoria de la tool.
+		className = lb.getFileToolName (getThisScriptFilename() as string),	--@var: className | Nombre de la tool.
+		description = "Herramienta para exportar camaras y montar una escena de pre-anim",		--@var: description | Descripcion de la tool.
+		
+		cfgFile = (lb.config.getToolsIniPath()) + (lb.getFileToolName (getThisScriptFilename() as string)) + ".cfg",	--@var: cfgFile | Archivo de configuracion de la tool.
+			
+		opened = false,			--@var: opened | Indica si la herramienta está abierta.
+			
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--ROLLOUTS
+		------------------------------------------------------------------------------------------------
+		
+		rollMain = rollMainDef,	--@var: rollMain | Almacena el rollout principal de la herramienta.
+			
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: boolean | isOpen | Devuelve información true o false, si la herramienta está abierta o cerrada.
+		------------------------------------------------
+		fn isOpen =
+		(
+			this.opened
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | refreshInterface | Refresca el interface inicial de la herramienta
+		------------------------------------------------
+		fn refreshInterface =
+		(
+			--refresca el interface de la herramienta
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | createInterface | Crea el interface inicial de la herramienta
+		------------------------------------------------
+		fn createInterface =
+		(
+			--crea el interface, lo redimensiona y lo reposiciona
+			createDialog this.rollMain lockwidth:false lockheight:false pos:[-10000,0] style:#(#style_toolwindow, #style_titlebar, #style_sysmenu, #style_resizing)
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | destroyInterface | Destruye el interface de la herramienta.
+		------------------------------------------------
+		fn destroyInterface =
+		(
+			destroyDialog this.rollMain --cierra la herramienta.			
+		),--destroyInterface
+		
+		------------------------------------------------
+		--@fn: undefined | run | Lanza la herramienta.
+		------------------------------------------------
+		fn run =
+		(
+			this.createInterface() --crea el interface.
+			this.opened = true --indica que la herramienta está abierta
+		),--execute
+		
+		------------------------------------------------
+		--@fn: undefined | close | Cierra la herramienta.
+		------------------------------------------------
+		fn close =
+		(
+			this.destroyInterface() --destruye el interface.
+			this.opened = false --indica que la herramienta está cerrada.
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addTool this --añade la tool a la libreria principal	
+		)		
+
+
+		
+	)--tl_templateTool
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------	
+	
+	tl_preanimComposer() --crea la herramienta
+)

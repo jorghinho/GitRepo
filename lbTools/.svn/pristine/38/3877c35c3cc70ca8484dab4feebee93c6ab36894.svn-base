@@ -1,0 +1,581 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--Descripcion: Herramienta Plantilla.
+------------------------------------------------------------------------------------------------------------------------------------------------
+(
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollMain | Contiene la herramienta plantilla.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollMainDef "RigFBXExporter"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) --@var : parent | Herramienta o rolllout del que depende y/o contiene el rollout actual
+		
+		local minRollWidth = 225		--@var: minRollWidth | Ancho mínimo de la herramienta.
+		local minRollHeight = 200		--@var: minRollHeight | Alto mínimo de la herramienta.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		
+		--@control | controlName | Plantilla de comentario para controles
+		groupbox gbxExportSetup "Export Setup" width:205 height:150
+		groupBox gpbxLbl "" pos:[20,20] width:190
+		label lblTimeRange "Time range:" pos:[30,30]
+		label lblTimeStart "0" pos:[110,30]
+		label lblTimeSeparator "-" pos:[140,30]
+		label lblTimeEnd "100" pos:[160,30]
+		groupBox gbxOverrideTimeGroup "Override time range" pos:[20,55] width:190 height:65
+		checkbox chbxEnable "Enable override" pos:[30,75]
+		spinner spnOverTimeStart "Start" range:[-99999,99999,0] type:#integer enabled:false width:75 pos:[35,95]
+		spinner spnOverTimeEnd "End" range:[-99999,99999,100] type:#integer enabled:false width:75 pos:[125,95]
+		button btnPreOperation "Pre Export Process" pos:[20,125] width:190
+		button btnExport "Export Rig to FBX" pos:[10,165] width:210
+
+
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+
+		fn updateSceneAnimRange = 
+		(
+			lblTimeStart.text = animationRange.start as string
+			lblTimeEnd.text = animationRange.end as string
+		)
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+			 callbacks.addScript #animationRangeChange "lb.RigFBXExporter.rollmain.updateSceneAnimRange()" id:#animRangeChange
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+			 callbacks.removeScripts id:#animRangeChange
+		)
+
+		------------------------------------------------
+		--@fn: undefined | assumeSkinPoseAndFreezeTR | Realiza un FreezeTransform de los controladores de los nodos proporcionados Haciendo un SetSkinPose.
+		--@gets: array | _nodeSelection | Asset al que aplicar la función
+		------------------------------------------------
+		fn assumeSkinPoseAndFreezeTR _asset =
+		(
+			for _node in _asset.skinNodesAll where isValidNode _node do 
+			(
+				_node.setSkinPose()
+				lb.controller.freezeTransform _node #all keepPos:true keepRot:true
+				_node.assumeSkinPose()
+				lb.controller.freezeTransform _node #all keepPos:true keepRot:true
+			)
+		)
+
+		------------------------------------------------
+		--@fn: undefined | BakeAnimToSkin | Bakea la animación del esqueleto de Animación de un asset 
+		--@gets: array | _asset | Asset al que aplicar la función
+		------------------------------------------------		
+		fn BakeAnimToSkin _asset _startFrame:animationRange.start _endFrame:animationRange.end =
+		(
+			with animate on 
+			(
+				for i = _startFrame to _endFrame do 
+				(
+					sliderTime = i
+					
+					for _node in _asset.skinNodesAll where isvalidNode _node do 
+					(
+						_nodeSkinTmpName = FilterString _node.name "_"
+						_nodeSkinTmpName = _nodeSkinTmpName[4]+"_"+_nodeSkinTmpName[5]
+						for _nodeAnim in _asset.animNodesAll where isvalidNode _nodeAnim do 
+						(
+							_nodeAnimTmpName = FilterString _nodeAnim.name "_"
+							_nodeAnimTmpName = _nodeAnimTmpName[4]+"_"+_nodeAnimTmpName[5]
+
+							if _nodeSkinTmpName == _nodeAnimTmpName do 
+							(
+								_node.transform = _nodeAnim.transform
+							)
+						)
+					)
+				)
+			)
+		)
+
+		------------------------------------------------
+		--@fn: undefined | relinkNodes | Relinka los objetos que se han quedado colgados en los assets.
+		--@gets: array | _asset | Asset al que aplicar la función
+		------------------------------------------------		
+		fn relinkNodes _asset =
+		(
+			for _node in _asset.skinNodesAll where isValidNode _node do 
+			(
+				_nodeNameParts = FilterString _node.name "_" 
+				if _nodeNameParts[5] == "spine00" do 
+				(
+					for _nodeParent in _asset.skinNodesAll where isValidNode _nodeParent do 
+					(
+						_nodeParentParts = FilterString _nodeParent.name "_" 
+						if _nodeParentParts[5] == "root" do 
+						(
+							_node.parent = _nodeParent
+						)
+					)
+				)
+				if( _nodeNameParts[5] == "clavicle") or ( _nodeNameParts[5] == "neck") do 
+				(
+					for _nodeParent in _asset.skinNodesAll where isValidNode _nodeParent do 
+					(
+						_nodeParentParts = FilterString _nodeParent.name "_" 
+						if _nodeParentParts[5] == "spine03" do 
+						(
+							_node.parent = _nodeParent
+						)
+					)
+				)
+				if _nodeNameParts[5] == "thigh" do 
+				(
+					for _nodeParent in _asset.skinNodesAll where isValidNode _nodeParent do 
+					(
+						_nodeParentParts = FilterString _nodeParent.name "_" 
+						if _nodeParentParts[5] == "pelvis" do 
+						(
+							_node.parent = _nodeParent
+						)
+					)
+				)
+			)
+		)
+
+		------------------------------------------------
+		--@fn: undefined | simplifySkinRig | Borra Todos los nodos no utiles del esqueleto de rig.
+		------------------------------------------------		
+		fn simplifySkinRig  = 
+		(
+			_sel = getCurrentSelection()
+			if _sel.count > 0 then 
+			(
+				_assetsToUse = lb.asset.getAssetsFromNodes _sel
+				process = lb.message.show "This process cannot be undone, do you want to proceed?" type:#query
+				if process do 
+				(
+					--Borrado de los elementos innecesarios en la migración del rig
+					for _assetToUse in _assetsToUse do 
+					(
+						--Primero se borraran los elementos que llevan controladores de escala. (pieza final de los dedos en hidden de skin)
+						for i = _assetToUse.skinNodesAll.count to 1 by -1 do 
+						(
+							if isValidNode _assetToUse.skinNodesAll[i] do
+							(
+								_nodeNameParts = FilterString _assetToUse.skinNodesAll[i].name "_"
+								if matchpattern _nodeNameParts[5] pattern: "finger??End" do 
+								(
+									delete _assetToUse.skinNodesAll[i]
+								)
+							)
+						)
+						--Borrado de las falanges de skin, porque cuelgan controladores y hay que ir con cuidado.
+						_nodesToDelete = #()
+						for i = _assetToUse.skinNodesAll.count to 1 by -1 do 
+						(
+							if isValidNode  _assetToUse.skinNodesAll[i] do 
+							(
+								_nodeNameParts = FilterString _assetToUse.skinNodesAll[i].name "_"
+								_lastPart = _nodeNameParts[_nodeNameParts.count]
+								if  matchpattern _lastPart pattern:("*h*") then 
+								(
+									if not matchpattern _nodeNameParts[5] pattern:("*-expose*") then 
+									(
+										append _nodesToDelete _assetToUse.skinNodesAll[i]
+									)
+								)
+							)
+						)
+						delete _nodesToDelete
+						--Borrado de las piezas sobrantes del esqueleto de skin
+						for i = _assetToUse.skinNodesAll.count to 1 by -1 do 
+						(
+							if isValidNode  _assetToUse.skinNodesAll[i] do 
+							(
+								_nodeNameParts = FilterString _assetToUse.skinNodesAll[i].name "_"
+								_lastPart = _nodeNameParts[_nodeNameParts.count]
+								--Piezas ocultas
+								if  matchpattern _lastPart pattern:("*h*") then 
+								(
+									delete _assetToUse.skinNodesAll[i]
+								)
+								--Piezas visibles que no conforman el esqueleto principal
+								if (not matchpattern _nodeNameParts[5] pattern: "root") and (not matchpattern _nodeNameParts[5] pattern: "pelvis") and (not matchpattern _nodeNameParts[5] pattern: "thigh") and (not matchpattern _nodeNameParts[5] pattern: "calf") and (not matchpattern _nodeNameParts[5] pattern: "instep") and (not matchpattern _nodeNameParts[5] pattern: "toeCap")  and (not matchpattern _nodeNameParts[5] pattern: "neck")  and (not matchpattern _nodeNameParts[5] pattern: "spine*")  and (not matchpattern _nodeNameParts[5] pattern: "clavicle")  and (not matchpattern _nodeNameParts[5] pattern: "upperarm")  and (not matchpattern _nodeNameParts[5] pattern: "forearm") and (not matchpattern _nodeNameParts[5] pattern: "hand")  and (not matchpattern _nodeNameParts[5] pattern: "head") and (not matchpattern _nodeNameParts[5] pattern: "finger??") do
+								(
+									if isValidNode _assetToUse.skinNodesAll[i] do delete _assetToUse.skinNodesAll[i]
+								)     
+							)
+						)
+						--Se rehace la jerarquia para los huesos de skin de los que se han borrado partes.
+						relinkNodes _assetToUse
+						--nos colocamos en el fotograma 0 para hacer el freezeo de las transformaciones de los huesos. Realizando una copia del valor original.
+						firstFrame = animationRange.start
+						animationRange = interval 0 animationRange.end
+						--Freezeamos las transformaciones de los huesos de skin
+						assumeSkinPoseAndFreezeTR _assetToUse
+						--recuperamos el frame inicial que habia antes del proceso de freezeo.
+						
+						_headRefNode = undefined
+						--Obtenemos la refencia de la cabeza para linkar los ojos, mandibula y lengua.
+						for _skinNode in _assetToUse.skinNodesAll where isValidNode _skinNode do 
+						(
+							_skinNodeParts = FilterString _skinNode.name "_"
+							if _skinNodeParts[5] == "head" do _headRefNode = _skinNode
+						)
+
+						--Linkamos los ojos, mandibula y lengua al esqueleto de skin.
+						for _meshNode in _assetToUse.meshNodesAll where isValidNode _meshNode do 
+						(
+							_meshNodeParts = FilterString _meshNode.name "_"
+							if ( MatchPattern _meshNodeParts[5] pattern: "eye" ) or ( MatchPattern _meshNodeParts[5] pattern: "teethLower" ) or ( MatchPattern _meshNodeParts[5] pattern: "teethUpper" ) or ( MatchPattern _meshNodeParts[5] pattern: "tongue" ) do
+							(
+								_meshNode.parent = _headRefNode
+							)
+						)
+						
+						--Bakeamos la animacion.
+						if chbxEnable.state == true then 
+						(
+							animationRange = interval (spnOverTimeStart.value as time) (spnOverTimeEnd.value as time)
+							--Si esta marcado el checkbox se realiza el bakeo de los frames seleccionados.
+							BakeAnimToSkin _assetToUse _startFrame:(spnOverTimeStart.value as time) _endFrame:(spnOverTimeEnd.value as time)
+						)
+						else 
+						(
+							animationRange = interval firstFrame animationRange.end
+							BakeAnimToSkin _assetToUse
+						)
+						--Borramos todos los elementos del asset que no se necesitan.
+						delete  _assetToUse.facialNodesAll
+						delete _assetToUse.animNodesAll
+
+						for i=1 to _assetToUse.meshNodesAll.count do 
+						(
+							_crowdEditPoly = Edit_Poly()
+							_crowdEditPoly.name = "Crowd_Edit_Poly"
+							addModifier _assetToUse.meshNodesAll[i] (_crowdEditPoly) before:20
+						)
+					)
+				)
+			)
+			else 
+			(
+				lb.message.show "Select at least one asset"
+			)
+		)
+
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollMainDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollMainDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--almacena posicion
+			lb.xml.setAttribute parent.cfgFile ("rollMain/pos") "x" (((getDialogPos rollMainDef).x) as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/pos") "y" (((getDialogPos rollMainDef).y) as string)
+			
+			--almacena tamaño
+			lb.xml.setAttribute parent.cfgFile ("rollMain/size") "width" (rollMainDef.width as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/size") "height" (rollMainDef.height as string)
+		)
+	
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			_width = (lb.xml.getAttribute parent.cfgFile ("rollMain/size") "width") as integer
+			_height = (lb.xml.getAttribute parent.cfgFile ("rollMain/size") "height") as integer
+				
+			--posicion
+			_posX = (lb.xml.getAttribute parent.cfgFile ("rollMain/pos") "x") as integer
+			_posY = (lb.xml.getAttribute parent.cfgFile ("rollMain/pos") "y") as integer
+				
+			--establece minimos
+			if _width < minRollWidth then _width = minRollWidth
+			if _height < minRollHeight then _height = minRollHeight
+			if _posX < 0 then _posX = 0
+			if _posY < 0 then _posY = 0
+				
+			--aplica los valores
+			rollMainDef.width = _width
+			rollMainDef.height = _height
+			setDialogPos rollMainDef [_posX,_posY]
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al cambiar el estado del boton
+		--@control: checkbutton | chbxEnable | El elemento que dispara el evento.
+		------------------------------------------------
+		on chbxEnable changed state do 
+		(
+			if state == true then
+			(
+				spnOverTimeStart.enabled = true
+				spnOverTimeEnd.enabled = true
+			)
+			else 
+			(
+				spnOverTimeStart.enabled = false
+				spnOverTimeEnd.enabled = false
+			)
+		)
+
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al pulsar
+		--@control: button | btnPreOperation | El elemento que dispara el evento.
+		------------------------------------------------
+		on btnPreOperation pressed do 
+		(
+			simplifySkinRig()
+		)
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollMain | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		--@gets: point2 | size | tamaño al que se ha redimensionado el rollout
+		------------------------------------------------
+		on rollMainDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollMain | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollMainDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+			if parent.rollMain != undefined then resize [parent.rollMain.width, parent.rollMain.height]
+			updateSceneAnimRange()
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollMain | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollMainDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+			
+			parent.opened = false --indica que la herramienta está cerrada.
+			updateToolbarButtons()
+		)
+	)--rollMainDef
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: templateTool | Contiene la herramienta plantilla.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct tl_rigFBXExporter
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,					--@var: category | Categoria de la tool.
+		className = lb.getFileToolName (getThisScriptFilename() as string),	--@var: className | Nombre de la tool.
+		description = "Tool plantilla",		--@var: description | Descripcion de la tool.
+		
+		cfgFile = (lb.config.getToolsIniPath()) + (lb.getFileToolName (getThisScriptFilename() as string)) + ".cfg",	--@var: cfgFile | Archivo de configuracion de la tool.
+			
+		opened = false,			--@var: opened | Indica si la herramienta está abierta.
+			
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--ROLLOUTS
+		------------------------------------------------------------------------------------------------
+		
+		rollMain = rollMainDef,	--@var: rollMain | Almacena el rollout principal de la herramienta.
+			
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: boolean | isOpen | Devuelve información true o false, si la herramienta está abierta o cerrada.
+		------------------------------------------------
+		fn isOpen =
+		(
+			this.opened
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | refreshInterface | Refresca el interface inicial de la herramienta
+		------------------------------------------------
+		fn refreshInterface =
+		(
+			--refresca el interface de la herramienta
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | createInterface | Crea el interface inicial de la herramienta
+		------------------------------------------------
+		fn createInterface =
+		(
+			--crea el interface, lo redimensiona y lo reposiciona
+			createDialog this.rollMain lockwidth:true lockheight:true pos:[-10000,0] style:#(#style_toolwindow, #style_titlebar, #style_sysmenu, #style_resizing)
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | destroyInterface | Destruye el interface de la herramienta.
+		------------------------------------------------
+		fn destroyInterface =
+		(
+			destroyDialog this.rollMain --cierra la herramienta.			
+		),--destroyInterface
+		
+		------------------------------------------------
+		--@fn: undefined | run | Lanza la herramienta.
+		------------------------------------------------
+		fn run =
+		(
+			this.createInterface() --crea el interface.
+			this.opened = true --indica que la herramienta está abierta
+		),--execute
+		
+		------------------------------------------------
+		--@fn: undefined | close | Cierra la herramienta.
+		------------------------------------------------
+		fn close =
+		(
+			this.destroyInterface() --destruye el interface.
+			this.opened = false --indica que la herramienta está cerrada.
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addTool this --añade la tool a la libreria principal	
+		)		
+		
+	)--tl_rigFBXExporter
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------	
+	
+	tl_rigFBXExporter() --crea la herramienta
+)

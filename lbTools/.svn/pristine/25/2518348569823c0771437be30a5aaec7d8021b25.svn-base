@@ -1,0 +1,745 @@
+(
+	----------------------------------------------------------------------------------------------------------------------------------------------
+	--------------------------------- SCRIPT DE ELEMENTOS GLOBALES DEL ASSET CHECKER ---------------------------------------
+	----------------------------------------------------------------------------------------------------------------------------------------------
+	----------------------------------------
+	--------------- CHECKS --------------
+	----------------------------------------
+	-- Checker Requirements
+	global CHK_assetsVisMode										= 0001	--	Modo de visualiacionde los assets OK
+	global CHK_fileInVersionFolder									= 0002	--	El archivo debe estar guardado en la carpeta version de asset
+	
+	-- Naming Convention checkings
+	global CHK_NCfileNameTask										= 1001	--	Nombre del fichero OK
+	global CHK_NCseqFileNameAsSeqPath								= 1002	--	El archivo debe estar guardado en la carpeta de la secuencia
+	global CHK_NClayersNameTask										= 1003	--	Naming Convention de Layers
+	global CHK_NClayersNameMatchFileName							= 1004	--	Nombre de los layers es coherente con el del fichero
+	global CHK_NCobjectsNameTask									= 1005	--	Naming Convention de Objetos
+	global CHK_NCobjectsAsTheirLayer								= 1006	--	El prefijo de los objetos debe coincidor con el de su capa
+	global CHK_NClibObjectsNameTask									= 1007	--	Naming Convention de Objetos de libreria
+	global CHK_NCmatsNameTask										= 1008	--	Naming Convention de Materiales
+	global CHK_NCuniqueNamesTask									= 1009	--	No hay nombres duplicados
+	global CHK_NCbitmapsNameTask									= 1010	--	Nombres de los bitmaps cumplen el naming convention
+	global CHK_flagsCorrectTask										= 1011	--	Los flags de cada pieza son correctos
+	global CHK_NClpmPass											= 1012	--	Comprueba que los passes de LPM cumplen el NC para los frames
+	global CHK_NCrenderElements										= 1013	--	Comprueba que los render elements cumplen el NC para los frames
+	global CHK_NCAtmospherics										= 1014	--	Comprueba que los Atmosféricos tienen una nomenclatura de 4 partes.
+	global CHK_noCarriageReturnInNames								= 1015	--	Los objetos no pueden tener \\n en el nombre
+	global CHK_LPMNoDuplicatedNames									= 1016	--	Elementos de los pases con nombres únicos.
+	global CHK_NCCorrectObjectTypes									= 1017	--	Assets con tipos de objectos correctos.
+	global CHK_NCObjectSets											= 1018	--	Naming convention de object sets correcto.
+	global CHK_differentAssetNodeName								= 1019	-- 	Un asset y sus piezas no pueden tener el mismo nombre.
+	global CHK_correlativeCopyNames									= 1020	-- 	Las copias de asset deben estar nombradas correlativamente
+	
+	-- Node Info / Anim Info checkings
+	global CHK_animInfoTask								 			= 2004	--	Anim Info en piezas animables (excepto biped)
+	global CHK_animTracksNotCorrupt									= 2005	--	Los animtracks de los assets no deben estar corruptos.
+	--Tarea pendiente de como saber hacerla
+	global CHK_nonAnimTracksNonKeyableTask							= 2006	--	Las pistas animables que no estén en los animtracks no deberian serlo
+	global CHK_nonAnimTracksTransformsLockedTask					= 2007	--	Todas las transformaciones de las piezas que no son animTracks están bloqueadas
+	global CHK_animInfoDefaults										= 2008	--	Todas las pistas animables que tienen animTrack deben tener su valor por defecto aplicado
+	global CHK_lockOverrideDeactivated								= 2009	--	Override locks desactivado
+	global CHK_animTracksDifName									= 2010	--	No puede haber dos animTracks en una misma pieza con el mismo nombre.
+	
+	-- Mesh checkings
+	global CHK_meshFrozenTransformsStateTask						= 3001	--	Transformaciones descongeladas en meshes de archivos de tipo mesh y facial, en el resto congeladas
+	global CHK_meshLockedTransformsStateTask						= 3002	--	Transformaciones desbloqueadas en meshes de archivos de tipo mesh y facial, en el resto bloqueadas
+	global CHK_meshHierarchyTask									= 3003	--	Jerarquía de mallas correcta por asset (En ficheros de tipo mesh, sin padre. En ficheros de tipo anim los objetos de mesh deben estar jerarquizados a un objeto de rig)
+	global CHK_meshPositionInZeroTask								= 3004	--	mesh de point cache con la posicion en 0,0,0
+	global CHK_meshRotationZeroTask									= 3005	--	mesh de point cache con la rotacion a 0,0,0
+	global CHK_meshScaleNotResetTask								= 3006	--	En Props y Characters no puede haber mesh de point cache con escalas negativas ni diferentes de 1,1,1
+	global CHK_meshEffectsIDcorrectTask								= 3008	--	El ID de efectos corresponde al del tipo de asset
+	global CHK_meshRenderableTask									= 3009	--	Solo los meshes son renderable
+	global CHK_meshWithMaterialsTask								= 3010	--	Todos los meshes tienen material asignado
+	global CHK_meshNoInstances										= 3011	--	No hay instancias de geometría (solo para CHRs y PRPs)		
+	global CHK_meshNotFrozenTransformsTask							= 3012	--	Objetos de tipo mesh con las transformaciones sin congelar
+	global CHK_meshFreezePoseTask									= 3013	--	Objetos de tipo mesh con la pose almacenada
+	global CHK_meshFreezePoseCorrect								= 3014	--	Objetos de tipo mesh con freeze pose, deben ternelo correcto
+	global CHK_meshPCmodifier										= 3015	--	Algunos objetos de tipo mesh fallan cuando les intentas añadir un modificador PC debajo de algunos tipos de modificador (turbosmooth, meshSmooth, tessellate, optimize, proOptimizer, shell)
+	global CHK_meshNotHiddenVertsOrPolys							= 3016	--	Compruab que las geometrias no tengan vertices ni poligonos ocultos
+	global CHK_meshVertexColorsNormalized							= 3017	--	Los vertex colors de los objetos tienen que estar normalizados
+	global CHK_meshXrefInAnimFiles									= 3018	--	Los mesh en ficheros de anim deben estar todos por Xref
+	global CHK_chrMeshesWithTurbosmooth								= 3019	--	Los mesh en los archivos de personajes deben llevar turbosmooth
+	global CHK_meshesPCdeformable									= 3020	--	Los mesh que lleven flag PC deben tener un modificador de deformacion, si no, deberian ser de TC
+	global CHK_allUnwrapsCollapsed									= 3021	--	Los assets han de tener todos sus modificadores de unwrap colapsados
+	global CHK_icCacheHasTcAncestor									= 3022	--	Los objetos con cachés heredados han de tener ancestros con transform caché.
+	global CHK_tcMeshesWithSkinParent								= 3023	--	Nodos con transform cachés son hijos de huesos de skin.
+	global CHK_pcMeshesWithDeformableModifier						= 3024	--	Nodos con point caché con modificadores de skin.
+	global CHK_ffdsLinkedToFacialParent								= 3025	--	FFDs de tipo facial emparentados al facial parent.
+	global CHK_facialAndRigHaveParent								= 3026	--	Piezas de facial y rig tienen padre en archivos de facial.
+	global CHK_correctWirecolor										= 3027	--	Mallas de colores válidos.
+	global CHK_skinWithCorrectBones									= 3028	--	Modificadores de skin con huesos correctos.
+	global CHK_meshWithoutModifiers									= 3029	--	Comprueba que los asset de archivos mesh no tengan modificadores de tipo edit poly, patch mes.
+	global CHK_ffdsWithCorrectAlign									= 3030	--	Los ffds debeten de estar alineados al mundo.
+	global CHK_meshModoBoxOff										= 3031	--	Las piezas de mesh deben tener desactivado el modo box.
+	global CHK_nodeInfoNameCoherence								= 3032	--	Nombres de piezas coherentes con modelado tras cambio en rig
+	global CHK_correctSubObjectLevel								= 3033	--	En el baseObject el modoSubobjecto debe de estar a 0
+	global CHK_shellOnlyInOuterAmount								= 3034	--	Si existe un shell en la pieza, que solo sea del tipo outer amount
+	global CHK_backFaceCullingDisabled								= 3035	--	Todos los nodos de mesh con material Arch&Design deben llevar la propiedad backFaceCulling a disabled
+
+	
+	-- Materials checkings
+	global CHK_notSceneStatesInAssetFile							= 4001	--	No debe haber estados de escena en los ficheros de asset
+	global CHK_matMatEditorCleanTask								= 4002	--	El editor de materiales está limpio
+	global CHK_bitmapsExistAndCollectedTask							= 4003	--	Todos los bitmaps del asset existen
+	global CHK_matBitmapsUnusedInAssetFolder						= 4005	--	Comprueba que no haya bitmaps sin usar en el folder de cada asset
+	global CHK_matProceduralExplicitMapChannel						= 4006	--	Comprueba que los mapas procedurales estan en coordenadas "Explicit Map Channel"
+	global CHK_matNotDuplicates										= 4007	--	No debe haber materiales duplicados (con el mismo nombre)
+	global CHK_matXrefInAnimFiles									= 4008	--	Los materiales en ficheros de anim deben estar todos por Xref
+	global CHK_matNotXrefAssetLayoutFiles							= 4009	--	Los assets de layout no pueden tener materiales por Xref
+	global CHK_matVisibleInViewports								= 4010	--	Los materiales han de estar visibles en el viewport
+	global CHK_mrArchNDesignFastInterpolateDisabled					= 4011	--	La propiedad Fast Interpolate ha de estar desactivada en el apartado Reflection de los materiales Arch and Design de Mental Ray
+	global CHK_bitmapsInCorrectFolder								= 4012	--	Todos los bitmaps han de estar en la carpeta textures en las escenas de render.
+	global CHK_matDisplaceMapsCorrect								= 4013	--	Los mapas de desplazamiento están en el lugar correcto
+	global CHK_sssScatterGroupsDiffer								= 4014	--	Materiales de SSS con distinto scatter group.
+	global CHK_clothNodesWithoutMaterial							= 4015	--	Nodos de cloth sin material. 
+	global CHK_rigNodesWithoutMaterial								= 4016	--	Nodos de rig no tienen que tener ningun material asignado. 
+	global CHK_matArchDesignTranspaON								= 4017	--	Los materiales arch&design tienen que tener activo transparency propagates.
+	global CHK_matWithNames											= 4018	--	Todos los materiales de un multimaterial deben de tener nombre, sin espacios. 
+	global CHK_variationsMaterialsParentID							= 4019	--	Las variaciones de los multimateriales tienen que tener el id correcto. 	
+	global CHK_variationsMaterialsIDCorrectionLighting				= 4020	--	Las variaciones de los multimateriales tienen que tener el id correcto. 
+	global CHK_variationsMaterialsIDCorrectionModeling				= 4021	--	Las variaciones de los multimateriales tienen que tener el id correcto. 
+	global CHK_archAndDesignOpaque									= 4022	--	Los materiales de mental con connection tienen que tener el opaque a false. 
+	global CHK_archAndDesignGlossinessSamples						= 4023	--	Los materiales de arch and design tienen que tener el glossiness samples a 16
+	global CHK_noNestedSubMaterials									= 4024	--	En escenas de render no puede haber multimateriales anidados en multimateriales.
+	global CHK_noDisplaceInSSS										= 4025	--	No puede haber un mapa de displace en SSS.
+
+	
+	-- Miscellaneous
+	global CHK_showFrozenGrayTask									= 5001	--	Show frozen in gray desactivado en todas las piezas
+	global CHK_duplicatedModifiersTask								= 5002	--	Como maximo un turbosmooth por objeto
+	global CHK_turboSmoothDisabledTask								= 5003	--	Modificadores Turbosmooth y Meshsmooth desactivados en viewport
+	global CHK_turboSmooth1iterTask									= 5004	--	Modificadores Turbosmooth y Meshsmooth a 1 iteración en viewport
+	global CHK_noObjectsAnimatedTask								= 5005	--	Ninguna pieza tiene animación
+	global CHK_noCamerasTask										= 5006	--	No puede haber cámaras en la escena
+	global CHK_noLightsTask											= 5007	--	No puede haber luces en la escena
+	global CHK_layer0EmptyTask										= 5008	--	Ninguna pieza en la capa 0
+	global CHK_sceneUnitsTask										= 5009 	--	Unidades de la escena en centímetros
+	global CHK_timeUnitsTask										= 5010	--	Unidades de tiempo en fotogramas y 24 por segundo
+	global CHK_timeLineRange										= 5011	--	Timeline de 100 frames, empezando en 0
+	global CHK_morpherARTdisabledTask								= 5012	--	Los objetos con modificadores morpher tienen desactivado el Automatically Reload Targets (ralentiza mucho el rendimiento en viewport)
+	global CHK_morpherUseLimitsDisabled								= 5013	--	El parametro useLimits de los modifciadores Morpher debe ir desactivado
+	global CHK_noEnviromentMap										= 5014	--	No debeb haber mapa de enviroment en archivos de asset de tipo mesh, facial ni anim
+	global CHK_displayModeMaterial									= 5015	--	La propiedad de las escenas display color, debe estar en material, no en object.
+	global CHK_noGroups												= 5016	--	No debe haber objetos agrupados en la escena
+	global CHK_hideByCategoryDisabled								= 5017	--	Hide by category no debe estar activado para ninguna categoria
+	global CHK_noFrozenActive										= 5018	--	No debe haber activo ningun controlador frozen
+	global CHK_noXRay              									= 5019	--	No debe haber ninguna pieza con la propiedad see-through activada.						
+	global CHK_hairModifiersOffInViewport							= 5020	--	Modificadores de Hair off in viewport.
+	global CHK_noEmptySelectionSets									= 5021	--	No debe haber selection sets vacíos.
+	global CHK_timeOutputOnRange									= 5022	--	El time output ha de estar en modo rango en el render.
+	global CHK_mrSamplesPerPixelValidRange							= 5023	--	El valor de los samples por pixel ha de estar como mínimo en 1/4 en minimum y a como minimo a 4 en maximum
+	global CHK_sceneGammaValues										= 5024	--	Los valores de Gamma de la escena han de ser los que definimos.
+	global CHK_assetTrackingDependenciesExist						= 5025	--	Las dependencias externas del asset checker han de existir.
+	global CHK_batchRenderNoReadOnlyFiles							= 5026	--	Los archivos de la carpeta donde vamos cada tarea del batch render han de estar bloqueados por el usuario.
+	global CHK_maxFileIsCompressed									= 5027	--	Comprueba si el fichero de max tiene la compresión activada.
+	global CHK_correctRenderResolution								= 5028	--	Comprueba que la resolución de render es de 2048x1108
+	global CHK_noFGGICalculationEnabled								= 5029	--	Comprueba que el flag "Calculate FG/GI and Skip Final Rendering" en render/indirect illumination está desactivado
+	global CHK_noXrefsOnScene										= 5030	--	Comprueba que no haya ningún xref en las escenas de render.
+	global CHK_noBitmapProxies										= 5031	--	Comprueba que no haya bitmap proxies en la escena.
+	global CHK_mrNoRenderRegionOptionsEnabled						= 5032	--	Comprueba que no haya un render por región activado, ni por selección, ni el lock to viewport.
+	global CHK_finalGatherDiskCache									= 5033	--	Comprueba que el archivo de final gather en caso de existir, esté ne la carpeta correcta.
+	global CHK_noPhysXClasses										= 5034	--	Comprueba que no hay ningún modificador ni ningún objeto de physx
+	global CHK_noMissingClasses										= 5035	--	Comprueba que no hay objetos ni modificadores de otros plugins.
+	global CHK_noInfoOverlayEffect									= 5036	--	Las escenas de render sin el efecto infoOverlay.
+	global CHK_noFxEventsInCacheFx									= 5037	--	Escenas de cacheFx sin eventos de plugins externos de fx
+	global CHK_noFxObjectsInCacheFx									= 5038	--	Escenas de cacheFx sin objetos de plugins externos de fx
+	global CHK_noFxModifiersInCacheFx								= 5039	--	Escenas de cacheFx sin modificadores de plugins externos de fx
+	global CHK_noFxAtmosphericsInCacheFx							= 5040	--	Escenas de cacheFx sin atmosféricos de plugins externos de fx
+	global CHK_resetXFormTask										= 5041	--	Reset XForm hecho a las piezas (offsets de objeto = 0)
+	global CHK_deleteFGRenderOutput									= 5042	--	Eliminar el parámetro de render output y fg maps.
+	global CHK_deleteSceneRootCAs									= 5043	--	Eliminar custom attributes de la raíz de la escena.
+	global CHK_noHairFarmClasses									= 5044	--	Comprueba que no hay ningún modificador ni ningún objeto de HairFarm.
+	global CHK_noIsolateActivated									= 5045	--	Comprueba que no hay objetos aislados en la escena.
+	global CHK_noHairCorruptPCNodes									= 5047	--	Piezas de Point Caché de Hair no corruptas.
+	global CHK_hairRenderableTask									= 5048	--	Piezas de Hair renderables.
+	global CHK_hairNoSkinConnectionInfo								= 5049	--	Piezas de Hair sin skinConnectionInfo
+	global CHK_noHairMeshMirror										= 5050	--	Piezas de Hair sin modificador Hair Mesh Mirror.
+	global CHK_clothColorsOk										= 5051	--	Piezas de Cloth con drv en verde y col en amarillo.
+	global CHK_skinWrapWithTarget									= 5052	--	Modificadores de Skin Wrap con target.
+	global CHK_displaySelectedWithEdgedFacesOn						= 5053	--	Display Selected with edged faces activado.
+	global CHK_noRenderElementsInScene								= 5054	--	Esta escena o asset no debe tener render elements.
+	global CHK_dynConnectCorrectNames								= 5055	--	Nombres de dynConnect concuerdan con el asset.
+	global CHK_displayModeObject									= 5056	--	La propiedad de las escenas display color, debe estar en object, no en material.
+	global CHK_noEmptyLayers										= 5057	--	Se asegura de que no haya capas vacias en la escena.
+	global CHK_morpherWithoutEmptyChannels							= 5058	--	El modificador morpher no tiene que tener canales vacios y los targets tienen que tener control de animacion
+	global CHK_morpherWithAnimController							= 5059	--	El modificador morpher no tiene que tener canales vacios y los targets tienen que tener control de animacion
+	global CHK_turboSmoothSurfaceParametersOff						= 5060	--	Turbosmooth tiene que tener todos los parámetros de surface parameters desactivados
+	global CHK_hairNiceProperties									= 5061	--	Piezas de hair con las propiedades correctas.
+	global CHK_hairRendererEnvironment								= 5062	--	Si esta el hair farm render hay que forzar unos parametros.
+	global CHK_hairColorScalp										= 5063	--	El color del scalp debe de ser el mismo que el del material del pelo.
+	global CHK_hairNamingConventionOK								= 5064	--	El naming convention de las piezas de hair, deben seguir el naming convention.
+	global CHK_connectNodesAllProperties							= 5065	--	Los objetos connectNodesAll deben de ir ocultos y descongelados.
+	global CHK_hairShadowNoMatHairFarm								= 5066	--	La pieza shadow de hair no puede tener material de hairFarm.
+	global CHK_sameMatInGenerateAndMulti							= 5067	--	Los mat del generate deben de ser alguno de los multis del scalp.
+	global CHK_puppetsOFF											= 5068	--	Check para revisar que los puppets estan en ON en los archivos base y part.
+	global CHK_morphNoLimits										= 5069	--	Los archivos de morph tienen que tener la opcion limits desactivada.
+	global CHK_camCorrectScale										= 5070	--	La escala de la camara deber se [100,100,100].
+	global CHK_exposeWithTargets									= 5071	--	Los exposete tienen que tener targets agregados.
+	global CHK_connectCorrectProperitesAnim							= 5072	--	Los objetos de tipo connect deben de estar freezeados, ejes bloqueados y emparentados.
+	global CHK_hairTextureRoutedCorrectly							= 5073	--	Las texturas de las piezas de hair deben estar enrutadas a la carpeta textura del asset
+	global CHK_hairNoWhispModifierOverCluster						= 5074	--	No puede haber un modificador whisp por encima de un cluster en archivos de hair
+	global CHK_hairNoPushOutModifier								= 5075	--	No puede haber un modificador HairStyle PushOut 
+	
+	-- Non asset specific tasks
+	global CHK_camsInCorrectLayer									= 6001	--	Las camaras estan en la capa correcta _cam_
+	global CHK_camsNumberCorrect									= 6002	--	Solo debe haber una camara en archivos de anim y cache, en layout puede haber varias.
+	global CHK_camsRangeAfter100									= 6003	--	El rango de las camaras no puede ser anterior al 100
+	global CHK_noVertexChannel										= 6004	--	Los objetos no pueden tener el vertex channel activado.
+	global CHK_camsLockedTransforms									= 6005	--	Las camaras tienen todas las transformaciones bloqueads
+	global CHK_lightsInCorrectLayer									= 6006	--	Las luces estan en la capa correcta _light_
+	global CHK_auxObjsInCorrectLayer								= 6007	--	Objetos auxiliares en la capa correcta _auxObj_
+	global CHK_noAuxObjs											= 6008	--	No debe haber objetos auxiliares en escenas de cache
+	global CHK_auxObjsNoRenderable									= 6009	--	Objetos auxiliares no renderizables
+	global CHK_firstCamFrameKeyToAll								= 6010	--	Clave creada para todo en el fotograma de inicio de animacion de la camara.
+	global CHK_firstCamFrameKeyToLinkConstraint						= 6011	--	Clave creada para todos los link times en el fotograma de inicio de animación de la camara.
+	global CHK_noClippingPlaneOnCams								= 6012	--	El clipping plane ha de estar desactivado para todas las cámaras.
+	global CHK_camAndAnimWithSameRange								= 6013	--	El rango de animacion y el de la cámara ha de ser el mismo.
+	global CHK_camLensWithoutDecimals								= 6014	--	El valor lens no ha de tener parte decimal.
+	global CHK_camAndRenderWithSameRange							= 6015	--	El valor lens no ha de tener parte decimal.
+	global CHK_LPMdirCorrect										= 6016	--	Comprueba que la ruta DIR, del LPM es correcta .
+	global CHK_LPMpassesActive										= 6017	--	Comprueba que todos los passes del LPM esten activos
+	global CHK_LPMcamView											= 6018	--	Comprueba que el area de render sea VIEW y la camara sea la correspondiente con el nombre del archivo.
+	global CHK_allLightsAreOn										= 6019	--	Todas las luces han de estar encendidas.
+	global CHK_allLightsAreRenderable								= 6020	--	Todas las luces tienen que ser renderizables.
+	global CHK_LPMActiveNodes										= 6021	--	Obliga a que según que nodos estén activos.
+	global CHK_noXRefScenes											= 6022	--	No puede haber nada por XRefScene.
+	global CHK_noCamMultipass										= 6023	--	No puede haber cámaras con multipases effect activado
+	global CHK_LPMhasCommonProperties								= 6024	--	Todos los pases con common properties override.
+	global CHK_LPMOverrideTimeAndSizeOutput							= 6025	--	Los pases de LPM tienen el override de time y size activado.
+	global CHK_LPMResolution2K										= 6026	--	En common properties override de LPM resolución a 2048 x 1108.
+	global CHK_LPMhasMrRenderProperties								= 6027	--	Todos los pases con mental ray render properties.
+	global CHK_LPMFinalGatherOff									= 6028	--	Final Gather desactivado en LPM (salvo GI).
+	global CHK_noFGMapFile											= 6029	--	Mapa de final gather desactivado.
+	global CHK_LPMCamRangesOk										= 6030	--	Rangos de cámara en nodos de common properties son correctos.
+	global CHK_newLPMCamRangesOk									= 6031	--	Rangos de cámara de nodos de LPM version 2 o superior.
+	global CHK_renderSmoothingOff									= 6032 	--	Propiedad Smoothing de render desactivada.
+	global CHK_LPMRenderSmoothingOff								= 6033	-- 	Propiedad Smoothing de render desactivada en LPM.
+	global CHK_heightmapObjectsNoSmoothing							= 6034	--	Objetos con heightMaps tienen smoothing desactivado.
+	global CHK_LPMsetsBaked											= 6035	--	Hace un bake de los objectsets y los lightset de LPM.
+	global CHK_LPMallObjectsAndLightsOff							= 6036	--	Todos los nodos de allObjects y allLights con sus objetos individuales..
+	global CHK_LPMsetsWithIndependentObjects						= 6037	--	ObjectSets, lightSets y LODSet de LPM con objetos individuales.
+	global CHK_LPManimatedBgCamRange								= 6038 	--	Rango de render de pases de bg = rango de animación de cámara.
+	global CHK_fgNonSourceFileGIPassesOk							= 6039 	--	Los archivos de iluminacion no de source con layers de GI correctas
+	global CHK_fgSourceFileGIPassesOk								= 6040 	--	Los archivos de source de iluminacion con parametros adecuados
+	global CHK_fgSourceFileRangesOk									= 6041 	--	Los archivos de source de iluminación con los rangos correctos
+	global CHK_lockViewportDisabled								 	= 6042	--	Lock to viewport desactivado de la ventana de render.
+	global CHK_LPMCorrectInstances									= 6043	-- 	No puede haber instancias en common properties de LPM.
+	global CHK_LPMNoAlternateRootDir								= 6044	--	Propiedad de los pases de LPM alternate root dir desactivada.
+	global CHK_LPMLayerFrozenHidden									= 6045	--	Comprueba que la capa de objetos de LPM esta freezeada y oculta.
+	global CHK_renderSourceVersioned								= 6046	--	Render/source y su contenido ha de estar versionado.
+	global CHK_fgmPathCorrect										= 6047	--	Rutas de los precálculos en la carpeta render/source
+	global CHK_LPMNoRenderInstances									= 6048	--	No puede haber instancias en render properties de LPM.
+	global CHK_LPMRootDuplicated									= 6049	--	No puede haber dos roots de LPM.
+	global CHK_LPMRootPathCamAndSeqCorrect							= 6050	--	Numero de cámara y secuencia correcto en path de frames de LPM.
+	global CHK_LPMEnvMapsSphericalOrCylindrical						= 6051	--	Los mapas de Environment de LPM han de estar en spherical o cylindrical.
+	global CHK_skipRenderedFramesDisabled							= 6052	--	Se asegura de que no se queda puesta la propiedad skipRenderedFrames
+	global CHK_areaToRender											= 6053	--	En el render setup en el area de render tiene que estar en view, y sin el auto region selected.
+	global CHK_settingsOutputPM										= 6054	--	Settings de time output como el rango de camara
+	global CHK_existCameraSettingPM									= 6055	--	Existe el setting de camara, la camara y coincide con el nombre.
+	global CHK_projectOutputSizePM									= 6056	--	El outputSize del proyecto debe de ser 2048x872.
+	global CHK_projectOutputTypePM									= 6057	--	El outputType del proyecto debe .png RGB 48bits con el alpha channel activo.
+	global CHK_projectOutputPathPM									= 6058	--	El outputPath del proyecto debe seguir el patron NC_PMoutputPathPattern.
+	global CHK_projectOutputFilePM									= 6059	--	El outputFile del proyecto debe seguir el patron NC_PMoutputFilePattern.
+	global CHK_overrideRenderSettingsPM								= 6060	--	El renderer settings tiene que tener todos los overrides activos.
+	global CHK_passNamingConventionPM								= 6061	--	El naming convention de los pases tiene que ser correcto.
+	global CHK_minimumSamplesPM										= 6062	--	Los minimos valores para el antialias.
+	global CHK_passGIoverRenderSettingsPM							= 6063	--	Si el nombre del pase lleva GI este tiene que tener override de renderSettings y final Gather.
+	global CHK_passMaskoutPutTypePM									= 6064	--	El pase de mask tiene que tener override de tipo outPutType con los settings establecidos.
+	global CHK_passElementObjectIDPM								= 6065	--	El pase de element-objectID tiene que tener overrides noOutput, customMaterial, renderElement, outPutSize.
+	global CHK_passVelOutputTypePM									= 6066	--	El pase de vel tiene que tener override de tipo outPutType con los settings establecidos.
+	global CHK_renderSettingsNoSubsetPixelPM						= 6067	--	El pase de vel tiene que tener override de tipo outPutType con los settings establecidos.
+	global CHK_objHiddenLightSetsPM									= 6068	--	ObjectSets, HiddenObjectSets y lightSets no pueden estar desactivados.
+	global CHK_timeOutPutPM											= 6069	--	Overrides de timeOutput esten puestos en "range" a excepcion de los que esten en el grupo "source".
+	global CHK_outPutRangePMOnStaticCams							= 6070	--	En pases de BG, para camaras estaticas debe de existir un timeOutput
+	global CHK_outPutRangePM										= 6071	--	Segun el passGroup el rango del timeOutput debe de ser uno o otro.
+	global CHK_enabledStatePM										= 6072	--	Comprobar que no hay NADA apagado en el passTree a excepcion del grupo SOURCE.
+	--global /*CHK_passVelWithHairIncludeHairVelocityPM*/					= 6073	--	Si hay un pass "(pass-vel- )" con un override de environmentAndeffets donde este activado el hairFarm, que obligue a incluir un render element "hair Farm velocity" 
+	global CHK_sourcePreCalculationsPM								= 6074	--	Los passes de precalculos apuntan a la carpeta correcta y que los que usen estos precalculos
+	global CHK_FGwithGImidQualityPM									= 6075	--	Los passes FG con GI tienen que tener calidad medium
+	global CHK_samplingQualityGroupsPM								= 6076	--	Tienes que tener activado el override sampling quality en los grupos
+	global CHK_deleteHairRefsLighting								= 6077	--	Hay que eliminar las piezas de ref de hair para lighting
+	global CHK_photometricLightsNoShadowMap							= 6078	--	Las luces del tipo photometric no pueden tener el tipo de sombra shadow map
+	global CHK_deleteHairWrapsLighting								= 6079	--	Hay que eliminar las piezas de ref de hair para lighting
+	global CHK_maskXYZFrameBuffer32BitsPM							= 6080	--	En los pases de tipo mask XYZ hay que dejar el frame buffer type a 32 Bits
+	global CHK_Force2SidedCommonParametersPM						= 6081	--	En el override commonParameters de los settings del pass tree debe estar marcado force2sided
+
+	--	CHR, PRP, SPR and SET specific tasks
+	global CHK_hasBasePieceTask										= 7001	--	Comprueba que por cada asset chr, prp o spr exista una pieza (base) que lo controle
+	global CHK_rootNodesCorrect										= 7002	--	Comprueba que en los SPRs los inicios de jerarquias sean root y el resto no
+	global CHK_objectSetsTask										= 7003	--	Todas las piezas animables de rig y faciales deben pertenecer a un selection set
+	global CHK_hasIconTask											= 7004	--	Los assets de tipo chr y prp deben tener creado un icono de miniatura
+	global CHK_rigAndSkinPiecesHasParent							= 7005	--	Todas las piezas de Rig y Skin de un asset deben tener un padre escepto la raiz
+	global CHK_isHeadSystem											= 7006	--	Piezas que necesitan headSystem
+	global CHK_hasKeepConnected										= 7007	--	Piezas que necesitan keepConnected
+	global CHK_animPiecesFrozen										= 7008	--	Piezas animables de rig tienen que estar freezeadas en posicion y rotacion
+	global CHK_hasLinkPointConstraint								= 7009	--	Piezas que deben llevar link constraint o pointConstraint
+	global CHK_hasLinkConstraintVirtualWorld						= 7010	--	Link constraint debe llevar un virtual world para algunas piezas
+	global CHK_hasLinkPointConstraintKey							= 7011	--	Link constraint o point constraint debe llevar una clave para algunas piezas, es decir, debe llevar un lincaje
+	global CHK_hasSkinConnectionInfo								= 7012	--	Los huesos de skin que lleven el flag d tienen que llevar skinConnectionInfo
+	global CHK_skinBonesConnected									= 7013	--	Los huesos de skin que lleven skinConnectionInfo deben estar conectados a los huesos de rig correnspondientes
+	global CHK_skinRigNodesParentSameClass							= 7014	--	Las piezas de rig y de skin tienen que tener su padre de su misma clase
+	global CHK_splinesRigSkin2IterationsNoOptimize					= 7015	--	Las splines de rig y de skin no deben tener mas de 2 iteraciones y deben tener el tick optimize desactivado
+	global CHK_animNodesVirtualParent								= 7016	--	Las piezas animables de los personajes tienen que ser hijas de otra pieza animable y si no tener un viertual parent a una pieza animable
+	global CHK_prpAndSprXrefMeshObjects								= 7017	--	Los assets de tipo PRP y SPR tienen que estar en la escena por XrefObjects
+	global CHK_setXrefScene											= 7018	--	Los assets de tipo SET deben ir por XrefScene
+	global CHK_proxyObjectsWithoutMats								= 7019	--	Los assets de tipo proxy de los chr, prp y spr han de tener sus objetos sin materiales.
+	global CHK_correctAnimationMaskName								= 7020	--	Las máscaras de animación de los personajes tienen que tener el mismo nombre que éstos.
+	global CHK_proxyModifiersActivated								= 7021	--	Los modificadores de proxies han de estar activados
+	global CHK_selectionSetsCorrectNames							= 7022	--	Los selection sets tiene el mismo nombre que los objetos que contienen
+	global CHK_rigPartsOnZero										= 7023	--	Las piezas de rig en las escenas de render han de estar en su zero para saber que no se han movido desde que han sido animadas.
+	global CHK_setsOnXrefObject										= 7024	--	Los sets han de estar en modo XrefObject y no XrefScene
+	global CHK_rigAndSkinTransformsFrozen							= 7025	--	Las transformaciones de chrs, sprs y props han de estar freezeadas.
+	global CHK_skinConnectionInfoIsCorrect							= 7026	--	El custom attribute skinConnectionInfo está correcto (existe sólo si tiene headSystem a true y sino no ha de estar en piezas de rig)
+	global CHK_noMeshProxies										= 7027	--	Los props no pueden tener proxies en las secuencias de cache y render.
+	global CHK_noSkinWrapOnCloth									= 7028	--	Las piezas de cloth no han de tener modificadores skinwrap sin convertir a skin.
+	global CHK_noInheritanceFlagsOff								= 7029	--	Verifica que no haya ningún objeto de ningún asset de animación con las herencias desactivadas.
+	global CHK_animSkinFacialFrozen									= 7030	--	Las piezas de anim, skin y facial tienen que estar freezeadas.
+	global CHK_noXrefControllers									= 7031	--	Comprueba que ningún objeto tenga controladores por xref.
+	global CHK_allOutOfRangeCurvesAreConstant						= 7032	--	Las curvas de los objetos de rig no tienen que tener loop.
+	global CHK_afterBurnDisplayInCorrectLayer						= 7033	--	Meshes de previsualización de Afterburn en la capa del asset.
+	global CHK_fxPFObjsInCorrectLayer								= 7034	--	Objetos de particle flow en la capa de su asset de fx.
+	global CHK_notNumberedSubassets									= 7035 	--	No puede haber subassets numerados con #
+	global CHK_fxSubassetsNameCorrect								= 7036 	--	Los subassets de fx tienen nombres correctos.
+	global CHK_fxAtmosphericsAssetName								= 7037 	--	Los atmosféricos de fx tienen que concordar en nombre con un asset
+	global CHK_fxAtmosphericsNoIndex								= 7038	--	Atmosféricos de fx sin índice numérico.
+	global CHK_edgeLengthCorrectInProperties						= 7039	--	Edge length mayor o igual a 2,0 en las propiedades de los objetos. 
+	global CHK_edgeLengthCorrectInGlobalProperties					= 7040	--	Edge length mayor o igual a 2,0 en Displacement (Global Settings). 
+	global CHK_noPCTCInScene										= 7041	--	Escenas sin modificadores de Point y Transform Caché.
+	global CHK_noMorphsInScene										= 7042	--	No puede haber piezas de morph en la escena.
+	global CHK_sFlagInSkinBones										= 7043	--	Los flags de los huesos de los modificadores de skin tienen que llevar el flag s
+	global CHK_objSetInFacialAnimFlagC								= 7044	--	Solo pueden tener objectSets las piezas de anim y facial, y de estas solamente las que tengan flag c.
+	global CHK_PCinRootAndBase										= 7045	--	Los archivos de anim de props, en su root y en la base tienen que tener pointConstraint.
+	global CHK_noPCinAnimNodes										= 7046	--	Los archivos de anim de props no tienen que tener pointConstraint.
+	global CHK_PCInRightPlace										= 7047	--	Point constraint sólo en primer modificador como attribute holder
+	global CHK_PCwithLinkToWorld									= 7048	--	Todos los controladores que tienen pointConstraint deben de tener un link to world en el frame 0.
+	global CHK_boneBoxPropertyOff									= 7049	--	Las piezas de skin no pueden estar en modo box
+	global CHK_NCBoneCorrectFlags									= 7050	-- 	Los huesos solo pueden llevar flags de tipo s, i, f, h
+	global CHK_skinAndSkinMorphCorrectPath							= 7051	-- 	Las piezas con skin/skin Morph deben tener el archivo .skn/.smd en la carpeta correspondiente
+	global CHK_tcPieceDynConnectCorrectPath							= 7052	-- 	Las piezas de tc deben tener el archivo .dyc guardado en la carpeta correspondiente
+
+	--	Cache Tasks
+	global CHK_PCspecifiedTask										= 8001	--	Meshes de PRPs y CHRs tienen Point Cache definido
+	global CHK_TCObjectsControllersRightTask						= 8002	--	Meshes con Transform Point Cache
+	global CHK_PCrightTask											= 8003	--	El modificador de Cache coincide con lo descrito en el nombre de la pieza
+	global CHK_cacheFilesRightPath									= 8004	--	Los archivos de datos de cache de los modificadores debene star en la carpeta correcta
+	global CHK_noPausedCaches										= 8005	--	No hay cachés pausados en la escena.
+	global CHK_tcAndPcEnabled										= 8006	--	Modificadores de point y transform cachés activados en render y viewport.
+	global CHK_forceUndefinedCacheInRigObjs							= 8007	--	Los objetos de rig (anim,skin,facial) con flag de caches no definido.
+	global CHK_assetsAnimFrozenHidden								= 8008	--	Las piezas de anim tienen que estar en frozen y hidden.
+	global CHK_assetsMeshUnfrozenUnhidden							= 8009	--	Las piezas de mesh tienen que estar en unfrozen y unhidden.
+	global CHK_assetsMeshMotionBlurNone								= 8010	--	Las piezas de mesh tienen que tener el motion blur en none.
+	global CHK_assetsAnimationInCameraRange							= 8011	--	Las piezas de anim deben tener la animación limitada a los rangos de camara
+	global CHK_renderCorrectAssetConfig								= 8999	--	Comprobación de visibilidad y frozenibilidad de los assets de una escena de render
+	
+	----------------------------------------
+	--------------- ARRAYS  -------------
+	----------------------------------------
+	------------------------------ ASSET TASKS ----------------------------------
+	function _sortAndAddTitles checksArray = 
+	(
+		sort checksArray
+		intervalCount = 1000
+		counter = 1
+		titles = #("Checker Requirements","Naming Convention","Node Info / Anim Info checkings","Meshes","Materials","Miscellaneous","Non Asset Specific Tasks (_auxObj_ , _cam_ , _light_, ...)","Asset Specific Tasks (chr, prp, fx, spr, set)","Cache")
+		title_count = 1
+		check_count = 1
+		while check_count <= checksArray.count do
+		(
+			if counter <= checksArray[check_count] then
+			(
+-- 				print checksArray[check_count]
+-- 				print titles[title_count]
+				insertItem titles[title_count] checksArray check_count
+				counter += intervalCount
+-- 				print counter
+				title_count += 1
+			)
+-- 			else
+-- 			(
+-- 			print checksArray[check_count]
+-- 			print checksArray.count
+			check_count += 1
+-- 			)
+		)
+	)
+	
+		--Asset Mesh Tasks
+		global CHK_assetMeshTasks = #(CHK_assetsVisMode, CHK_fileInVersionFolder, CHK_NCfileNameTask, CHK_NClayersNameTask, CHK_NClayersNameMatchFileName, CHK_NCobjectsNameTask, CHK_NCobjectsAsTheirLayer, \
+								CHK_NCmatsNameTask, CHK_NCuniqueNamesTask, CHK_NCbitmapsNameTask, CHK_flagsCorrectTask, CHK_noCarriageReturnInNames, \
+ 								CHK_meshFrozenTransformsStateTask, CHK_meshLockedTransformsStateTask, CHK_meshHierarchyTask, CHK_meshPositionInZeroTask, CHK_meshRotationZeroTask, CHK_meshScaleNotResetTask,  /*CHK_meshEffectsIDcorrectTask,*/ CHK_meshRenderableTask, CHK_meshWithMaterialsTask, CHK_meshNoInstances, CHK_meshNotFrozenTransformsTask, CHK_meshFreezePoseTask, CHK_meshFreezePoseCorrect, CHK_meshPCmodifier, CHK_meshNotHiddenVertsOrPolys, CHK_chrMeshesWithTurbosmooth, CHK_allUnwrapsCollapsed, CHK_icCacheHasTcAncestor, CHK_correctWirecolor, \
+ 								CHK_notSceneStatesInAssetFile, CHK_matMatEditorCleanTask, CHK_bitmapsExistAndCollectedTask, CHK_matBitmapsUnusedInAssetFolder, CHK_matProceduralExplicitMapChannel, CHK_matNotDuplicates, CHK_matVisibleInViewports, CHK_mrArchNDesignFastInterpolateDisabled, CHK_matDisplaceMapsCorrect, \
+ 								CHK_resetXFormTask, CHK_showFrozenGrayTask, CHK_duplicatedModifiersTask, CHK_turboSmoothDisabledTask, CHK_turboSmooth1iterTask, CHK_noObjectsAnimatedTask, CHK_noCamerasTask, CHK_noLightsTask, CHK_layer0EmptyTask, CHK_noEmptyLayers, CHK_sceneUnitsTask, CHK_timeUnitsTask, CHK_timeLineRange, CHK_morpherARTdisabledTask, CHK_morpherUseLimitsDisabled, CHK_noEnviromentMap, CHK_displayModeMaterial, CHK_noGroups, CHK_hideByCategoryDisabled, CHK_noFrozenActive, CHK_noXRay, CHK_noEmptySelectionSets, CHK_sceneGammaValues, CHK_maxFileIsCompressed, CHK_noMissingClasses, CHK_deleteFGRenderOutput, CHK_deleteSceneRootCAs, CHK_noIsolateActivated,  \
+								CHK_noVertexChannel, CHK_hasIconTask, CHK_isHeadSystem, CHK_hasSkinConnectionInfo, CHK_skinBonesConnected, CHK_skinRigNodesParentSameClass, CHK_splinesRigSkin2IterationsNoOptimize, CHK_animNodesVirtualParent, CHK_skinConnectionInfoIsCorrect, CHK_noSkinWrapOnCloth, CHK_noInheritanceFlagsOff, CHK_edgeLengthCorrectInProperties, CHK_edgeLengthCorrectInGlobalProperties, CHK_noPCTCInScene, \
+  								CHK_PCspecifiedTask, CHK_differentAssetNodeName, CHK_noRenderElementsInScene, CHK_displayModeObject, CHK_ffdsWithCorrectAlign, CHK_meshWithoutModifiers, CHK_objSetInFacialAnimFlagC, CHK_meshModoBoxOff, CHK_turboSmoothSurfaceParametersOff, CHK_matArchDesignTranspaON, CHK_matWithNames, CHK_correctSubObjectLevel, CHK_variationsMaterialsParentID, CHK_variationsMaterialsIDCorrectionModeling, CHK_archAndDesignOpaque, CHK_archAndDesignGlossinessSamples, CHK_shellOnlyInOuterAmount, CHK_backFaceCullingDisabled, CHK_correlativeCopyNames, CHK_noDisplaceInSSS)
+		
+		_sortAndAddTitles CHK_assetMeshTasks
+								
+		--Asset Mesh Tasks
+		global CHK_assetProxyTasks = #( CHK_assetsVisMode, CHK_fileInVersionFolder,  \
+								 CHK_NCfileNameTask, CHK_NClayersNameTask, CHK_NClayersNameMatchFileName, CHK_NCobjectsNameTask, CHK_NCobjectsAsTheirLayer, CHK_NCmatsNameTask, CHK_NCuniqueNamesTask, CHK_flagsCorrectTask, CHK_noCarriageReturnInNames, CHK_NCCorrectObjectTypes, \
+ 								 CHK_meshScaleNotResetTask,  CHK_meshNoInstances, CHK_meshNotFrozenTransformsTask, CHK_meshFreezePoseTask, CHK_meshFreezePoseCorrect, CHK_meshNotHiddenVertsOrPolys, CHK_allUnwrapsCollapsed, CHK_correctWirecolor, \
+ 								 CHK_notSceneStatesInAssetFile, CHK_matMatEditorCleanTask, CHK_bitmapsExistAndCollectedTask, CHK_matNotDuplicates, CHK_matVisibleInViewports, \
+ 								 CHK_resetXFormTask, CHK_showFrozenGrayTask, CHK_duplicatedModifiersTask, CHK_turboSmoothDisabledTask, CHK_turboSmooth1iterTask, CHK_noObjectsAnimatedTask, CHK_noCamerasTask, CHK_noLightsTask, CHK_layer0EmptyTask, CHK_noEmptyLayers, CHK_sceneUnitsTask, CHK_timeUnitsTask, CHK_timeLineRange, CHK_morpherARTdisabledTask, CHK_morpherUseLimitsDisabled, CHK_noEnviromentMap, CHK_displayModeMaterial, CHK_noGroups, CHK_hideByCategoryDisabled, CHK_noFrozenActive, CHK_noXRay,  CHK_noEmptySelectionSets,  CHK_maxFileIsCompressed, CHK_deleteFGRenderOutput, CHK_deleteSceneRootCAs, CHK_noIsolateActivated,  \
+  								 CHK_noVertexChannel, CHK_hasSkinConnectionInfo, CHK_skinBonesConnected, CHK_skinRigNodesParentSameClass, CHK_splinesRigSkin2IterationsNoOptimize, CHK_animNodesVirtualParent, CHK_proxyObjectsWithoutMats, CHK_skinConnectionInfoIsCorrect, CHK_noSkinWrapOnCloth, CHK_noInheritanceFlagsOff, CHK_edgeLengthCorrectInProperties, CHK_edgeLengthCorrectInGlobalProperties, CHK_noPCTCInScene)
+		
+		_sortAndAddTitles CHK_assetProxyTasks
+								
+		--Asset Mesh Tasks
+		global CHK_assetDraftTasks = #( CHK_assetsVisMode, CHK_fileInVersionFolder,  \
+								 CHK_NCfileNameTask, CHK_NClayersNameTask, CHK_NClayersNameMatchFileName, CHK_NCobjectsNameTask, CHK_NCobjectsAsTheirLayer, CHK_NCmatsNameTask, CHK_NCuniqueNamesTask, CHK_NCbitmapsNameTask, CHK_flagsCorrectTask, CHK_noCarriageReturnInNames, \
+ 								 CHK_meshFrozenTransformsStateTask, CHK_meshLockedTransformsStateTask, CHK_meshScaleNotResetTask, CHK_meshRenderableTask, CHK_meshNoInstances, CHK_meshNotFrozenTransformsTask, CHK_meshFreezePoseTask, CHK_meshFreezePoseCorrect, CHK_meshNotHiddenVertsOrPolys, CHK_allUnwrapsCollapsed, CHK_correctWirecolor, \
+ 								 CHK_notSceneStatesInAssetFile, CHK_matMatEditorCleanTask, CHK_bitmapsExistAndCollectedTask, CHK_matNotDuplicates, CHK_mrArchNDesignFastInterpolateDisabled, \
+ 								 CHK_resetXFormTask, CHK_showFrozenGrayTask, CHK_duplicatedModifiersTask, CHK_turboSmoothDisabledTask, CHK_turboSmooth1iterTask, CHK_noObjectsAnimatedTask, CHK_noCamerasTask, CHK_noLightsTask, CHK_layer0EmptyTask, CHK_noEmptyLayers, CHK_sceneUnitsTask, CHK_timeUnitsTask, CHK_timeLineRange, CHK_morpherARTdisabledTask, CHK_morpherUseLimitsDisabled, CHK_noEnviromentMap, CHK_displayModeMaterial, CHK_noGroups, CHK_hideByCategoryDisabled, CHK_noFrozenActive, CHK_noXRay,  CHK_noEmptySelectionSets,  CHK_maxFileIsCompressed, CHK_deleteFGRenderOutput, CHK_deleteSceneRootCAs, CHK_noIsolateActivated,  \
+  								 CHK_noVertexChannel, CHK_chrMeshesWithTurbosmooth, CHK_noHairFarmClasses, CHK_noRenderElementsInScene, \
+								 CHK_hasSkinConnectionInfo, CHK_skinBonesConnected, CHK_skinRigNodesParentSameClass, CHK_splinesRigSkin2IterationsNoOptimize, CHK_animNodesVirtualParent, CHK_skinConnectionInfoIsCorrect, CHK_noSkinWrapOnCloth, CHK_noInheritanceFlagsOff, CHK_edgeLengthCorrectInProperties, CHK_edgeLengthCorrectInGlobalProperties, CHK_noPCTCInScene, CHK_meshRotationZeroTask, CHK_meshPositionInZeroTask, CHK_PCspecifiedTask, CHK_correctSubObjectLevel, CHK_matWithNames, CHK_isHeadSystem, CHK_hairTextureRoutedCorrectly, CHK_matVisibleInViewports )
+		
+		_sortAndAddTitles CHK_assetDraftTasks
+								 
+		--Asset Morph Tasks
+		global CHK_assetMorphTasks =  #( CHK_assetsVisMode, CHK_fileInVersionFolder,  \
+								 CHK_NCfileNameTask, CHK_NClayersNameTask, CHK_NClayersNameMatchFileName, CHK_NCobjectsNameTask, CHK_NCobjectsAsTheirLayer, CHK_NCmatsNameTask, CHK_NCuniqueNamesTask, CHK_NCbitmapsNameTask, CHK_flagsCorrectTask, CHK_noCarriageReturnInNames, \
+ 								 CHK_animInfoTask, CHK_animTracksNotCorrupt, CHK_nonAnimTracksTransformsLockedTask, CHK_animInfoDefaults, \
+ 								 CHK_meshFrozenTransformsStateTask, CHK_meshLockedTransformsStateTask, CHK_meshHierarchyTask, CHK_meshPositionInZeroTask, CHK_meshRotationZeroTask, CHK_meshScaleNotResetTask,  /*CHK_meshEffectsIDcorrectTask,*/ CHK_meshRenderableTask, CHK_meshWithMaterialsTask, CHK_meshNoInstances, CHK_meshNotFrozenTransformsTask, CHK_meshFreezePoseTask, CHK_meshFreezePoseCorrect, CHK_meshPCmodifier, CHK_meshNotHiddenVertsOrPolys, CHK_meshVertexColorsNormalized, CHK_chrMeshesWithTurbosmooth, CHK_allUnwrapsCollapsed, CHK_icCacheHasTcAncestor, CHK_correctWirecolor, \
+ 								 CHK_notSceneStatesInAssetFile, CHK_matMatEditorCleanTask, CHK_bitmapsExistAndCollectedTask, CHK_matProceduralExplicitMapChannel, CHK_matNotDuplicates, CHK_matVisibleInViewports, CHK_mrArchNDesignFastInterpolateDisabled, CHK_matDisplaceMapsCorrect, \
+ 								 CHK_resetXFormTask, CHK_showFrozenGrayTask, CHK_duplicatedModifiersTask, CHK_turboSmoothDisabledTask, CHK_turboSmooth1iterTask, CHK_noObjectsAnimatedTask, CHK_noCamerasTask, CHK_noLightsTask, CHK_layer0EmptyTask, CHK_noEmptyLayers, CHK_sceneUnitsTask, CHK_timeUnitsTask, CHK_timeLineRange, CHK_morpherARTdisabledTask, CHK_morpherUseLimitsDisabled, CHK_noEnviromentMap, CHK_displayModeMaterial, CHK_noGroups, CHK_hideByCategoryDisabled, CHK_noFrozenActive, CHK_noXRay,  CHK_noEmptySelectionSets, CHK_sceneGammaValues, CHK_maxFileIsCompressed, CHK_deleteFGRenderOutput, CHK_deleteSceneRootCAs, CHK_noIsolateActivated,  \
+  								 CHK_noVertexChannel, \
+								 CHK_hasIconTask, CHK_rigAndSkinPiecesHasParent, CHK_isHeadSystem, CHK_hasKeepConnected, CHK_hasSkinConnectionInfo, CHK_skinBonesConnected, CHK_skinRigNodesParentSameClass, CHK_splinesRigSkin2IterationsNoOptimize, CHK_animNodesVirtualParent, CHK_correctAnimationMaskName, CHK_skinConnectionInfoIsCorrect, CHK_noSkinWrapOnCloth, CHK_noInheritanceFlagsOff, CHK_allOutOfRangeCurvesAreConstant, CHK_edgeLengthCorrectInProperties, CHK_edgeLengthCorrectInGlobalProperties, CHK_noPCTCInScene, \
+  								 CHK_PCspecifiedTask, CHK_morphNoLimits, CHK_correctSubObjectLevel)
+								 
+		_sortAndAddTitles CHK_assetMorphTasks
+		
+		--Asset Layout Tasks
+		global CHK_assetLayoutTasks =  #( CHK_assetsVisMode, CHK_fileInVersionFolder,  \
+								 CHK_NCfileNameTask, CHK_NClayersNameTask, CHK_NClayersNameMatchFileName, CHK_NCobjectsNameTask, CHK_NCobjectsAsTheirLayer, CHK_NCmatsNameTask, CHK_NCuniqueNamesTask, CHK_NCbitmapsNameTask, CHK_flagsCorrectTask, CHK_noCarriageReturnInNames, \
+ 								 CHK_animInfoTask, CHK_animTracksNotCorrupt, CHK_nonAnimTracksTransformsLockedTask, CHK_animInfoDefaults, \
+ 								 CHK_meshPositionInZeroTask, CHK_meshRotationZeroTask, CHK_meshScaleNotResetTask,  /* CHK_meshEffectsIDcorrectTask, */ CHK_meshRenderableTask, CHK_meshWithMaterialsTask, CHK_meshNoInstances, CHK_meshNotFrozenTransformsTask, CHK_meshFreezePoseTask, CHK_meshFreezePoseCorrect, CHK_meshPCmodifier, CHK_meshNotHiddenVertsOrPolys, CHK_allUnwrapsCollapsed, CHK_correctWirecolor, \
+ 								 CHK_notSceneStatesInAssetFile, CHK_matMatEditorCleanTask, CHK_bitmapsExistAndCollectedTask, CHK_matProceduralExplicitMapChannel, CHK_matNotDuplicates, CHK_matNotXrefAssetLayoutFiles, CHK_matVisibleInViewports, CHK_mrArchNDesignFastInterpolateDisabled, \
+ 								 CHK_resetXFormTask, CHK_showFrozenGrayTask, CHK_duplicatedModifiersTask, CHK_turboSmoothDisabledTask, CHK_turboSmooth1iterTask, CHK_noObjectsAnimatedTask, CHK_noCamerasTask, CHK_noLightsTask, CHK_layer0EmptyTask, CHK_noEmptyLayers, CHK_sceneUnitsTask, CHK_timeUnitsTask, CHK_timeLineRange, CHK_morpherARTdisabledTask, CHK_morpherUseLimitsDisabled, CHK_noEnviromentMap, CHK_displayModeMaterial, CHK_noGroups, CHK_hideByCategoryDisabled, CHK_noFrozenActive, CHK_noXRay,  CHK_noEmptySelectionSets, CHK_sceneGammaValues, CHK_maxFileIsCompressed, CHK_deleteFGRenderOutput, CHK_deleteSceneRootCAs, CHK_noIsolateActivated,  \
+  								 CHK_noVertexChannel, CHK_dynConnectCorrectNames, \
+								 CHK_hasBasePieceTask, CHK_rootNodesCorrect, CHK_objectSetsTask, CHK_hasIconTask, CHK_rigAndSkinPiecesHasParent, CHK_hasKeepConnected, CHK_hasSkinConnectionInfo, CHK_skinBonesConnected, CHK_skinRigNodesParentSameClass, CHK_splinesRigSkin2IterationsNoOptimize, CHK_animNodesVirtualParent, CHK_selectionSetsCorrectNames, CHK_skinConnectionInfoIsCorrect, CHK_noSkinWrapOnCloth, CHK_noInheritanceFlagsOff, CHK_allOutOfRangeCurvesAreConstant, CHK_edgeLengthCorrectInProperties, CHK_edgeLengthCorrectInGlobalProperties, CHK_noPCTCInScene, CHK_NCObjectSets, CHK_objSetInFacialAnimFlagC)
+		
+		_sortAndAddTitles CHK_assetLayoutTasks
+		
+								 
+		--Asset Connect Tasks
+		global CHK_assetConnectTasks =  #( CHK_fileInVersionFolder,  \
+								 CHK_NCfileNameTask, CHK_NClayersNameTask, CHK_NClayersNameMatchFileName, CHK_NCobjectsNameTask, CHK_NCobjectsAsTheirLayer, CHK_NCmatsNameTask, CHK_NCuniqueNamesTask, CHK_NCbitmapsNameTask, CHK_flagsCorrectTask, CHK_noCarriageReturnInNames, CHK_NCObjectSets, \
+ 								 CHK_animInfoTask, CHK_animTracksNotCorrupt, CHK_nonAnimTracksTransformsLockedTask, CHK_animInfoDefaults, CHK_lockOverrideDeactivated, \
+ 								 CHK_notSceneStatesInAssetFile, CHK_matMatEditorCleanTask, CHK_bitmapsExistAndCollectedTask, CHK_matBitmapsUnusedInAssetFolder, CHK_matNotDuplicates, CHK_matXrefInAnimFiles, CHK_matVisibleInViewports, CHK_mrArchNDesignFastInterpolateDisabled,  \
+ 								  CHK_resetXFormTask, CHK_showFrozenGrayTask, CHK_duplicatedModifiersTask, CHK_turboSmoothDisabledTask, CHK_turboSmooth1iterTask, CHK_noObjectsAnimatedTask, CHK_noCamerasTask, CHK_noLightsTask, CHK_layer0EmptyTask, CHK_sceneUnitsTask, CHK_timeUnitsTask, CHK_timeLineRange, CHK_morpherARTdisabledTask, CHK_morpherUseLimitsDisabled, CHK_noEnviromentMap, CHK_displayModeMaterial, CHK_noGroups, CHK_hideByCategoryDisabled, CHK_noFrozenActive, CHK_noXRay, CHK_hairModifiersOffInViewport, CHK_noEmptySelectionSets, CHK_sceneGammaValues, CHK_maxFileIsCompressed, CHK_noMissingClasses, CHK_deleteFGRenderOutput, CHK_deleteSceneRootCAs, CHK_noHairFarmClasses, CHK_noIsolateActivated, \
+  								CHK_noVertexChannel, CHK_skinWithCorrectBones, \
+								  CHK_rootNodesCorrect, CHK_objectSetsTask, CHK_hasIconTask, CHK_rigAndSkinPiecesHasParent, CHK_isHeadSystem, CHK_hasKeepConnected, /*CHK_hasLinkPointConstraint,*/ CHK_hasLinkConstraintVirtualWorld, CHK_hasLinkPointConstraintKey, CHK_hasSkinConnectionInfo, CHK_skinBonesConnected, CHK_skinRigNodesParentSameClass, CHK_splinesRigSkin2IterationsNoOptimize, CHK_animNodesVirtualParent, CHK_correctAnimationMaskName, CHK_proxyModifiersActivated, CHK_selectionSetsCorrectNames, CHK_rigAndSkinTransformsFrozen, CHK_skinConnectionInfoIsCorrect, CHK_noSkinWrapOnCloth, CHK_noInheritanceFlagsOff, CHK_animSkinFacialFrozen, CHK_noXrefControllers, CHK_allOutOfRangeCurvesAreConstant, CHK_afterBurnDisplayInCorrectLayer, CHK_fxPFObjsInCorrectLayer, CHK_notNumberedSubassets, CHK_edgeLengthCorrectInProperties, CHK_edgeLengthCorrectInGlobalProperties, CHK_noPCTCInScene, CHK_noMorphsInScene, \
+  								 CHK_PCspecifiedTask, CHK_matVisibleInViewports )
+		
+		_sortAndAddTitles CHK_assetConnectTasks
+						 
+		--Asset Facial Tasks
+		global CHK_assetFacialTasks =  #( CHK_assetsVisMode, CHK_fileInVersionFolder,  \
+								 CHK_NCfileNameTask, CHK_NClayersNameTask, CHK_NClayersNameMatchFileName, CHK_NCobjectsNameTask, CHK_NCobjectsAsTheirLayer, CHK_NCmatsNameTask, CHK_NCuniqueNamesTask, CHK_NCbitmapsNameTask, CHK_flagsCorrectTask, CHK_noCarriageReturnInNames, CHK_NCObjectSets, \
+ 								 CHK_animInfoTask, CHK_animTracksNotCorrupt, CHK_nonAnimTracksTransformsLockedTask, CHK_animInfoDefaults, CHK_lockOverrideDeactivated, \
+ 								 CHK_meshFrozenTransformsStateTask, CHK_meshLockedTransformsStateTask, CHK_meshHierarchyTask, CHK_meshPositionInZeroTask, CHK_meshRotationZeroTask, CHK_meshScaleNotResetTask,  /* CHK_meshEffectsIDcorrectTask, */ CHK_meshRenderableTask, CHK_meshWithMaterialsTask, CHK_meshNoInstances, CHK_meshNotFrozenTransformsTask, CHK_meshFreezePoseTask, CHK_meshFreezePoseCorrect, CHK_meshPCmodifier, CHK_meshNotHiddenVertsOrPolys, CHK_meshXrefInAnimFiles, CHK_chrMeshesWithTurbosmooth, CHK_meshesPCdeformable, CHK_allUnwrapsCollapsed, CHK_icCacheHasTcAncestor, CHK_tcMeshesWithSkinParent, CHK_pcMeshesWithDeformableModifier	, CHK_ffdsLinkedToFacialParent, CHK_correctWirecolor, \
+ 								 CHK_notSceneStatesInAssetFile, CHK_matMatEditorCleanTask, CHK_bitmapsExistAndCollectedTask, CHK_matBitmapsUnusedInAssetFolder, CHK_matNotDuplicates, CHK_matXrefInAnimFiles, CHK_matVisibleInViewports, CHK_mrArchNDesignFastInterpolateDisabled,  \
+ 								  CHK_resetXFormTask, CHK_showFrozenGrayTask, CHK_turboSmoothDisabledTask, CHK_turboSmooth1iterTask, CHK_noObjectsAnimatedTask, CHK_noCamerasTask, CHK_noLightsTask, CHK_layer0EmptyTask, CHK_noEmptyLayers, CHK_sceneUnitsTask, CHK_timeUnitsTask, CHK_timeLineRange, CHK_morpherARTdisabledTask, CHK_morpherUseLimitsDisabled, CHK_noEnviromentMap, CHK_displayModeMaterial, CHK_noGroups, CHK_hideByCategoryDisabled, CHK_noFrozenActive, CHK_noXRay, CHK_hairModifiersOffInViewport, CHK_noEmptySelectionSets, CHK_sceneGammaValues, CHK_maxFileIsCompressed, CHK_noMissingClasses, CHK_deleteFGRenderOutput, CHK_deleteSceneRootCAs, CHK_noHairFarmClasses, CHK_noIsolateActivated, \
+  								CHK_noVertexChannel, CHK_skinWithCorrectBones, CHK_PCInRightPlace, CHK_PCwithLinkToWorld, \
+								 CHK_rootNodesCorrect, CHK_objectSetsTask, CHK_hasIconTask, CHK_rigAndSkinPiecesHasParent, CHK_isHeadSystem, CHK_hasKeepConnected, /*CHK_hasLinkPointConstraint,*/ CHK_hasLinkConstraintVirtualWorld, CHK_hasLinkPointConstraintKey, CHK_hasSkinConnectionInfo, CHK_skinBonesConnected, CHK_skinRigNodesParentSameClass, CHK_splinesRigSkin2IterationsNoOptimize, CHK_animNodesVirtualParent, CHK_proxyModifiersActivated, CHK_selectionSetsCorrectNames, CHK_rigAndSkinTransformsFrozen, CHK_skinConnectionInfoIsCorrect, CHK_noSkinWrapOnCloth, CHK_noInheritanceFlagsOff, CHK_animSkinFacialFrozen, CHK_noXrefControllers, CHK_allOutOfRangeCurvesAreConstant, CHK_afterBurnDisplayInCorrectLayer, CHK_fxPFObjsInCorrectLayer, CHK_notNumberedSubassets, CHK_edgeLengthCorrectInProperties, CHK_edgeLengthCorrectInGlobalProperties, CHK_noPCTCInScene, CHK_noMorphsInScene, \
+  								 CHK_PCspecifiedTask, CHK_rigNodesWithoutMaterial, CHK_objSetInFacialAnimFlagC, CHK_animTracksDifName, CHK_nodeInfoNameCoherence, CHK_correctSubObjectLevel, CHK_nonAnimTracksNonKeyableTask, CHK_archAndDesignOpaque, CHK_exposeWithTargets, CHK_connectCorrectProperitesAnim, CHK_morpherWithoutEmptyChannels, CHK_morpherWithAnimController)
+		
+		_sortAndAddTitles CHK_assetFacialTasks
+
+								 
+		--Asset Anim Tasks
+		global CHK_assetAnimTasks =  #( CHK_assetsVisMode, CHK_fileInVersionFolder,  \
+								 CHK_NCfileNameTask, CHK_NClayersNameTask, CHK_NClayersNameMatchFileName, CHK_NCobjectsNameTask, CHK_NCobjectsAsTheirLayer, CHK_NCmatsNameTask, CHK_NCuniqueNamesTask, CHK_NCbitmapsNameTask, CHK_flagsCorrectTask, CHK_noCarriageReturnInNames, CHK_NCObjectSets, \
+ 								 CHK_animInfoTask, CHK_animTracksNotCorrupt, CHK_nonAnimTracksTransformsLockedTask, CHK_animInfoDefaults, CHK_lockOverrideDeactivated, \
+ 								 CHK_meshFrozenTransformsStateTask, CHK_meshLockedTransformsStateTask, CHK_meshHierarchyTask, CHK_meshPositionInZeroTask, CHK_meshRotationZeroTask, CHK_meshScaleNotResetTask,  /* CHK_meshEffectsIDcorrectTask, */ CHK_meshRenderableTask, CHK_meshWithMaterialsTask, CHK_meshNoInstances, CHK_meshNotFrozenTransformsTask, CHK_meshFreezePoseTask, CHK_meshFreezePoseCorrect, CHK_meshPCmodifier, CHK_meshNotHiddenVertsOrPolys, CHK_meshXrefInAnimFiles, CHK_chrMeshesWithTurbosmooth, CHK_meshesPCdeformable, CHK_allUnwrapsCollapsed, CHK_icCacheHasTcAncestor, CHK_tcMeshesWithSkinParent, CHK_pcMeshesWithDeformableModifier	, CHK_ffdsLinkedToFacialParent, CHK_ffdsWithCorrectAlign, CHK_correctWirecolor, \
+ 								 CHK_notSceneStatesInAssetFile, CHK_matMatEditorCleanTask, CHK_bitmapsExistAndCollectedTask, CHK_matBitmapsUnusedInAssetFolder, CHK_matNotDuplicates, CHK_matXrefInAnimFiles, CHK_matVisibleInViewports, CHK_mrArchNDesignFastInterpolateDisabled, CHK_PCInRightPlace, CHK_PCwithLinkToWorld,  \
+ 								  CHK_resetXFormTask, CHK_showFrozenGrayTask, CHK_duplicatedModifiersTask, CHK_turboSmoothDisabledTask, CHK_turboSmooth1iterTask, CHK_noObjectsAnimatedTask, CHK_noCamerasTask, CHK_noLightsTask, CHK_layer0EmptyTask, CHK_noEmptyLayers, CHK_sceneUnitsTask, CHK_timeUnitsTask, CHK_timeLineRange, CHK_morpherARTdisabledTask, CHK_morpherUseLimitsDisabled, CHK_noEnviromentMap, CHK_displayModeMaterial, CHK_noGroups, CHK_hideByCategoryDisabled, CHK_noFrozenActive, CHK_noXRay, CHK_hairModifiersOffInViewport, CHK_noEmptySelectionSets, CHK_sceneGammaValues, CHK_maxFileIsCompressed, CHK_noMissingClasses, CHK_deleteFGRenderOutput, CHK_deleteSceneRootCAs, CHK_noHairFarmClasses, CHK_noIsolateActivated, \
+  								CHK_noVertexChannel, CHK_skinWithCorrectBones, CHK_dynConnectCorrectNames, \
+								 CHK_hasBasePieceTask, CHK_rootNodesCorrect, CHK_objectSetsTask, CHK_hasIconTask, CHK_rigAndSkinPiecesHasParent, CHK_isHeadSystem, CHK_hasKeepConnected, /*CHK_hasLinkPointConstraint,*/ CHK_hasLinkConstraintVirtualWorld, CHK_hasLinkPointConstraintKey, CHK_hasSkinConnectionInfo, CHK_skinBonesConnected, CHK_skinRigNodesParentSameClass, CHK_splinesRigSkin2IterationsNoOptimize, CHK_animNodesVirtualParent, CHK_correctAnimationMaskName, CHK_proxyModifiersActivated, CHK_selectionSetsCorrectNames, CHK_rigAndSkinTransformsFrozen, CHK_skinConnectionInfoIsCorrect, CHK_noSkinWrapOnCloth, CHK_noInheritanceFlagsOff, CHK_animSkinFacialFrozen, CHK_noXrefControllers, CHK_allOutOfRangeCurvesAreConstant, CHK_afterBurnDisplayInCorrectLayer, CHK_fxPFObjsInCorrectLayer, CHK_notNumberedSubassets, CHK_edgeLengthCorrectInProperties, CHK_edgeLengthCorrectInGlobalProperties, CHK_noPCTCInScene, CHK_noMorphsInScene, \
+  								 CHK_PCspecifiedTask, CHK_sFlagInSkinBones, CHK_morpherWithoutEmptyChannels,CHK_morpherWithAnimController, CHK_objSetInFacialAnimFlagC, CHK_displaySelectedWithEdgedFacesOn, CHK_forceUndefinedCacheInRigObjs, CHK_rigNodesWithoutMaterial, CHK_animTracksDifName, CHK_turboSmoothSurfaceParametersOff, CHK_PCinRootAndBase, CHK_noPCinAnimNodes, CHK_nodeInfoNameCoherence, CHK_puppetsOFF, CHK_correctSubObjectLevel, CHK_nonAnimTracksNonKeyableTask, CHK_exposeWithTargets, CHK_connectCorrectProperitesAnim, CHK_NCBoneCorrectFlags, CHK_boneBoxPropertyOff, CHK_skinAndSkinMorphCorrectPath, CHK_tcPieceDynConnectCorrectPath)
+		
+		_sortAndAddTitles CHK_assetAnimTasks
+		
+		--Asset Preset Anim Tasks
+		global CHK_assetPrtAnimTasks =  #( CHK_assetsVisMode, CHK_fileInVersionFolder, \
+								 CHK_NCfileNameTask, CHK_NClayersNameTask, CHK_NClayersNameMatchFileName, CHK_NCobjectsNameTask, CHK_NCobjectsAsTheirLayer, CHK_NCuniqueNamesTask, CHK_NCbitmapsNameTask, CHK_flagsCorrectTask, CHK_noCarriageReturnInNames, CHK_NCObjectSets, \
+ 								 CHK_animInfoTask, CHK_animTracksNotCorrupt, CHK_nonAnimTracksTransformsLockedTask, CHK_animInfoDefaults, CHK_lockOverrideDeactivated, \
+ 								 CHK_meshFrozenTransformsStateTask, CHK_meshLockedTransformsStateTask, CHK_meshHierarchyTask, CHK_meshPositionInZeroTask, CHK_meshRotationZeroTask, CHK_meshScaleNotResetTask,  /* CHK_meshEffectsIDcorrectTask, */ CHK_meshRenderableTask, CHK_meshWithMaterialsTask, CHK_meshNoInstances, CHK_meshNotFrozenTransformsTask, CHK_meshFreezePoseTask, CHK_meshPCmodifier, CHK_meshNotHiddenVertsOrPolys, CHK_meshXrefInAnimFiles, CHK_chrMeshesWithTurbosmooth, CHK_meshesPCdeformable, CHK_allUnwrapsCollapsed, CHK_icCacheHasTcAncestor, CHK_tcMeshesWithSkinParent, CHK_pcMeshesWithDeformableModifier , CHK_ffdsLinkedToFacialParent, CHK_ffdsWithCorrectAlign, CHK_correctWirecolor, \
+ 								 CHK_notSceneStatesInAssetFile, CHK_matMatEditorCleanTask, CHK_bitmapsExistAndCollectedTask, CHK_matBitmapsUnusedInAssetFolder, CHK_matNotDuplicates, CHK_matXrefInAnimFiles, CHK_matVisibleInViewports, CHK_mrArchNDesignFastInterpolateDisabled, CHK_PCInRightPlace, CHK_PCwithLinkToWorld,  \
+ 								 CHK_showFrozenGrayTask, CHK_duplicatedModifiersTask, CHK_turboSmoothDisabledTask, CHK_turboSmooth1iterTask, CHK_noObjectsAnimatedTask, CHK_layer0EmptyTask, CHK_noEmptyLayers, CHK_morpherARTdisabledTask, CHK_morpherUseLimitsDisabled, CHK_displayModeMaterial, CHK_noGroups, CHK_noXRay, CHK_noMissingClasses, CHK_noHairFarmClasses, CHK_noIsolateActivated, \
+  								 CHK_noVertexChannel, CHK_skinWithCorrectBones, CHK_dynConnectCorrectNames, \
+								 CHK_hasBasePieceTask, CHK_rootNodesCorrect, CHK_objectSetsTask, CHK_hasIconTask, CHK_rigAndSkinPiecesHasParent, CHK_isHeadSystem, CHK_hasKeepConnected, /*CHK_hasLinkPointConstraint,*/ CHK_hasLinkConstraintVirtualWorld, CHK_hasLinkPointConstraintKey, CHK_hasSkinConnectionInfo, CHK_skinBonesConnected, CHK_skinRigNodesParentSameClass, CHK_splinesRigSkin2IterationsNoOptimize, CHK_rigAndSkinTransformsFrozen, CHK_skinConnectionInfoIsCorrect, CHK_noInheritanceFlagsOff, CHK_noXrefControllers, CHK_notNumberedSubassets, \
+  								 CHK_PCspecifiedTask, CHK_sFlagInSkinBones, CHK_objSetInFacialAnimFlagC, CHK_forceUndefinedCacheInRigObjs, CHK_rigNodesWithoutMaterial, CHK_animTracksDifName, CHK_nodeInfoNameCoherence, CHK_puppetsOFF, CHK_correctSubObjectLevel, CHK_nonAnimTracksNonKeyableTask, CHK_exposeWithTargets, CHK_connectCorrectProperitesAnim, CHK_NCBoneCorrectFlags, CHK_boneBoxPropertyOff, CHK_skinAndSkinMorphCorrectPath, CHK_tcPieceDynConnectCorrectPath)
+		
+		_sortAndAddTitles CHK_assetPrtAnimTasks
+
+
+
+		--Asset Cloth Tasks
+		global CHK_assetClothTasks =  #( CHK_assetsVisMode, CHK_fileInVersionFolder, \
+								 CHK_NCfileNameTask, CHK_NClayersNameTask, CHK_NClayersNameMatchFileName, CHK_NCobjectsNameTask, CHK_NCobjectsAsTheirLayer, CHK_NCmatsNameTask, CHK_NCuniqueNamesTask, CHK_NCbitmapsNameTask, CHK_flagsCorrectTask, CHK_noCarriageReturnInNames, \
+ 								 CHK_animInfoTask, CHK_animTracksNotCorrupt, CHK_nonAnimTracksTransformsLockedTask, CHK_animInfoDefaults, \
+ 								 CHK_meshFrozenTransformsStateTask, CHK_meshLockedTransformsStateTask, CHK_meshHierarchyTask, CHK_meshPositionInZeroTask, CHK_meshRotationZeroTask, CHK_meshScaleNotResetTask,  /* CHK_meshEffectsIDcorrectTask, */ CHK_meshRenderableTask, CHK_meshWithMaterialsTask, CHK_meshNoInstances, CHK_meshNotFrozenTransformsTask, CHK_meshFreezePoseTask, CHK_meshFreezePoseCorrect, CHK_meshPCmodifier, CHK_meshNotHiddenVertsOrPolys, CHK_chrMeshesWithTurbosmooth, CHK_meshesPCdeformable, CHK_allUnwrapsCollapsed, CHK_icCacheHasTcAncestor, CHK_tcMeshesWithSkinParent, CHK_pcMeshesWithDeformableModifier	, CHK_correctWirecolor, \
+ 								 CHK_notSceneStatesInAssetFile, CHK_matMatEditorCleanTask, CHK_bitmapsExistAndCollectedTask, CHK_matBitmapsUnusedInAssetFolder, CHK_matNotDuplicates, CHK_matVisibleInViewports, CHK_mrArchNDesignFastInterpolateDisabled, CHK_clothNodesWithoutMaterial, \
+ 								 CHK_resetXFormTask, CHK_showFrozenGrayTask, CHK_duplicatedModifiersTask, CHK_turboSmoothDisabledTask, CHK_turboSmooth1iterTask, CHK_noObjectsAnimatedTask, CHK_noCamerasTask, CHK_noLightsTask, CHK_layer0EmptyTask, CHK_noEmptyLayers, CHK_sceneUnitsTask, CHK_timeUnitsTask, CHK_timeLineRange, CHK_morpherARTdisabledTask, CHK_morpherUseLimitsDisabled, CHK_noEnviromentMap, CHK_displayModeMaterial, CHK_noGroups, CHK_hideByCategoryDisabled, CHK_noFrozenActive, CHK_noXRay,  CHK_noEmptySelectionSets,  CHK_maxFileIsCompressed, CHK_deleteFGRenderOutput, CHK_deleteSceneRootCAs, CHK_noIsolateActivated,  \
+  								 CHK_noVertexChannel, CHK_clothColorsOk, \
+								 CHK_rigAndSkinPiecesHasParent, CHK_isHeadSystem, CHK_hasKeepConnected, CHK_hasSkinConnectionInfo, CHK_skinBonesConnected, CHK_skinRigNodesParentSameClass, CHK_splinesRigSkin2IterationsNoOptimize, CHK_animNodesVirtualParent, CHK_skinConnectionInfoIsCorrect, CHK_noSkinWrapOnCloth, CHK_noInheritanceFlagsOff, CHK_noXrefControllers, CHK_allOutOfRangeCurvesAreConstant, CHK_edgeLengthCorrectInProperties, CHK_edgeLengthCorrectInGlobalProperties, CHK_noPCTCInScene)
+		
+		_sortAndAddTitles CHK_assetClothTasks
+		
+		--Asset Hair Tasks
+		global CHK_assetHairTasks =  #( CHK_assetsVisMode, CHK_fileInVersionFolder, CHK_noHairMeshMirror, CHK_skinWrapWithTarget, \
+								 CHK_NCfileNameTask, CHK_NClayersNameTask, CHK_NClayersNameMatchFileName, CHK_NCobjectsNameTask, CHK_NCobjectsAsTheirLayer, CHK_NCmatsNameTask, CHK_NCuniqueNamesTask, CHK_NCbitmapsNameTask, CHK_flagsCorrectTask, CHK_noCarriageReturnInNames, \
+ 								 CHK_meshFrozenTransformsStateTask, CHK_meshLockedTransformsStateTask, CHK_meshHierarchyTask, CHK_meshPositionInZeroTask, CHK_meshRotationZeroTask, CHK_meshScaleNotResetTask, /* CHK_meshEffectsIDcorrectTask, */ CHK_meshNoInstances, CHK_meshNotFrozenTransformsTask, CHK_meshFreezePoseTask, CHK_meshFreezePoseCorrect, CHK_meshPCmodifier, CHK_meshNotHiddenVertsOrPolys, CHK_chrMeshesWithTurbosmooth, CHK_allUnwrapsCollapsed, CHK_icCacheHasTcAncestor, CHK_correctWirecolor, \
+ 								 CHK_notSceneStatesInAssetFile, CHK_matMatEditorCleanTask, \
+ 								 CHK_resetXFormTask, CHK_showFrozenGrayTask, CHK_turboSmoothDisabledTask, CHK_turboSmooth1iterTask, CHK_noObjectsAnimatedTask, CHK_noCamerasTask, CHK_noLightsTask, CHK_layer0EmptyTask, CHK_noEmptyLayers, CHK_sceneUnitsTask, CHK_timeUnitsTask, CHK_timeLineRange, CHK_morpherARTdisabledTask, CHK_morpherUseLimitsDisabled, CHK_noEnviromentMap, CHK_displayModeMaterial, CHK_noGroups, CHK_hideByCategoryDisabled, CHK_noFrozenActive, CHK_noXRay, CHK_hairModifiersOffInViewport, CHK_noEmptySelectionSets, CHK_sceneGammaValues, CHK_maxFileIsCompressed, CHK_deleteFGRenderOutput, CHK_deleteSceneRootCAs, CHK_noIsolateActivated,  \
+  								 CHK_noVertexChannel, CHK_hairRenderableTask, CHK_hairNoSkinConnectionInfo, \
+								  CHK_noInheritanceFlagsOff, CHK_noXrefControllers, CHK_edgeLengthCorrectInProperties, CHK_edgeLengthCorrectInGlobalProperties, CHK_noPCTCInScene, \
+  								 CHK_PCspecifiedTask, CHK_duplicatedModifiersTask, CHK_noHairCorruptPCNodes, CHK_hairColorScalp, CHK_hairNamingConventionOK, CHK_sameMatInGenerateAndMulti, CHK_matWithNames, CHK_correctSubObjectLevel, CHK_variationsMaterialsParentID, CHK_variationsMaterialsIDCorrectionModeling, CHK_archAndDesignOpaque, CHK_hairTextureRoutedCorrectly, CHK_hairNoWhispModifierOverCluster,CHK_hairNoPushOutModifier)
+		
+		_sortAndAddTitles CHK_assetHairTasks
+		
+		--Asset Misc Tasks
+		global CHK_assetMiscTasks =  #(  CHK_NCfileNameTask, CHK_NClayersNameTask, CHK_NClayersNameMatchFileName, CHK_NCobjectsNameTask, CHK_NCobjectsAsTheirLayer, CHK_NCmatsNameTask, CHK_NCuniqueNamesTask, CHK_noCarriageReturnInNames, \
+ 								 CHK_meshNotHiddenVertsOrPolys, CHK_chrMeshesWithTurbosmooth, CHK_allUnwrapsCollapsed, CHK_correctWirecolor, \
+ 								 CHK_notSceneStatesInAssetFile, CHK_matMatEditorCleanTask, CHK_bitmapsExistAndCollectedTask, CHK_matProceduralExplicitMapChannel, CHK_matNotDuplicates, CHK_matVisibleInViewports, CHK_mrArchNDesignFastInterpolateDisabled, CHK_matDisplaceMapsCorrect, \
+ 								 CHK_showFrozenGrayTask, CHK_duplicatedModifiersTask, CHK_turboSmoothDisabledTask, CHK_turboSmooth1iterTask, CHK_noObjectsAnimatedTask, CHK_noCamerasTask, CHK_noLightsTask, CHK_layer0EmptyTask, CHK_sceneUnitsTask, CHK_timeUnitsTask, CHK_timeLineRange, CHK_morpherARTdisabledTask, CHK_morpherUseLimitsDisabled, CHK_noEnviromentMap, CHK_displayModeMaterial, CHK_noGroups, CHK_hideByCategoryDisabled, CHK_noFrozenActive, CHK_noXRay,  CHK_noEmptySelectionSets,  CHK_maxFileIsCompressed, CHK_deleteFGRenderOutput, CHK_deleteSceneRootCAs, CHK_noIsolateActivated,  \
+  								 CHK_noVertexChannel, \ 
+								 CHK_hasSkinConnectionInfo, CHK_skinBonesConnected, CHK_skinRigNodesParentSameClass, CHK_splinesRigSkin2IterationsNoOptimize, CHK_animNodesVirtualParent, CHK_rigAndSkinTransformsFrozen, CHK_skinConnectionInfoIsCorrect, CHK_noSkinWrapOnCloth, CHK_noInheritanceFlagsOff, CHK_edgeLengthCorrectInProperties, CHK_edgeLengthCorrectInGlobalProperties, CHK_noPCTCInScene, \
+  								 CHK_PCspecifiedTask )
+		
+		_sortAndAddTitles CHK_assetMiscTasks
+								 
+		--Asset Sequence Set Tasks
+		global CHK_assetSequenceSetTasks =  #( CHK_assetsVisMode,  \
+								 CHK_NCfileNameTask, CHK_NClayersNameTask, CHK_NClayersNameMatchFileName, CHK_NCobjectsNameTask, CHK_NCobjectsAsTheirLayer, CHK_NCmatsNameTask, CHK_NCuniqueNamesTask, CHK_NCbitmapsNameTask, CHK_flagsCorrectTask, CHK_noCarriageReturnInNames, \
+ 								 CHK_meshFrozenTransformsStateTask, CHK_meshLockedTransformsStateTask, CHK_meshRenderableTask, CHK_meshWithMaterialsTask, CHK_meshNotFrozenTransformsTask, CHK_meshFreezePoseTask, CHK_meshFreezePoseCorrect, CHK_meshPCmodifier, CHK_meshNotHiddenVertsOrPolys, CHK_allUnwrapsCollapsed, CHK_correctWirecolor, \
+ 								 CHK_notSceneStatesInAssetFile, CHK_matMatEditorCleanTask, CHK_bitmapsExistAndCollectedTask, CHK_matProceduralExplicitMapChannel, CHK_matNotDuplicates, CHK_matVisibleInViewports, CHK_mrArchNDesignFastInterpolateDisabled, \
+ 								 CHK_showFrozenGrayTask, CHK_duplicatedModifiersTask, CHK_turboSmoothDisabledTask, CHK_turboSmooth1iterTask, CHK_noObjectsAnimatedTask, CHK_noCamerasTask, CHK_noLightsTask, CHK_layer0EmptyTask, CHK_sceneUnitsTask, CHK_timeUnitsTask, CHK_morpherARTdisabledTask, CHK_morpherUseLimitsDisabled, CHK_displayModeMaterial, CHK_noGroups, CHK_hideByCategoryDisabled, CHK_noFrozenActive, CHK_noXRay,  CHK_noEmptySelectionSets, CHK_sceneGammaValues, CHK_maxFileIsCompressed, CHK_deleteFGRenderOutput, CHK_deleteSceneRootCAs, CHK_noIsolateActivated,  \
+  								 CHK_noVertexChannel, \
+								 CHK_hasSkinConnectionInfo, CHK_skinBonesConnected, CHK_skinRigNodesParentSameClass, CHK_splinesRigSkin2IterationsNoOptimize, CHK_animNodesVirtualParent, CHK_skinConnectionInfoIsCorrect, CHK_noSkinWrapOnCloth, CHK_noInheritanceFlagsOff, CHK_edgeLengthCorrectInProperties, CHK_edgeLengthCorrectInGlobalProperties, CHK_noPCTCInScene)
+								 
+		_sortAndAddTitles CHK_assetSequenceSetTasks
+								
+		
+								 
+		--Asset Fx Tasks
+		global CHK_assetFxTasks =  #(  CHK_assetsVisMode, CHK_fileInVersionFolder, \
+								 CHK_NCfileNameTask, CHK_NClayersNameTask, CHK_NClayersNameMatchFileName, CHK_NCobjectsNameTask, CHK_NCobjectsAsTheirLayer, CHK_NCmatsNameTask, CHK_NCuniqueNamesTask, CHK_NCbitmapsNameTask, CHK_flagsCorrectTask, CHK_NCAtmospherics, CHK_noCarriageReturnInNames, \
+ 								 CHK_animInfoTask, CHK_animTracksNotCorrupt, CHK_nonAnimTracksTransformsLockedTask, CHK_animInfoDefaults, \
+ 								 CHK_meshFrozenTransformsStateTask, CHK_meshLockedTransformsStateTask, CHK_meshHierarchyTask, CHK_meshPositionInZeroTask, CHK_meshRotationZeroTask, CHK_meshScaleNotResetTask,  /* CHK_meshEffectsIDcorrectTask, */ CHK_meshRenderableTask, CHK_meshNoInstances, CHK_meshNotFrozenTransformsTask, CHK_meshFreezePoseTask, CHK_meshFreezePoseCorrect, CHK_meshesPCdeformable, CHK_allUnwrapsCollapsed, CHK_icCacheHasTcAncestor, CHK_correctWirecolor, \
+ 								 CHK_notSceneStatesInAssetFile, CHK_matMatEditorCleanTask, CHK_bitmapsExistAndCollectedTask, CHK_matBitmapsUnusedInAssetFolder, CHK_matProceduralExplicitMapChannel, CHK_matNotDuplicates,  \
+ 								 CHK_resetXFormTask, CHK_showFrozenGrayTask, CHK_duplicatedModifiersTask, CHK_turboSmoothDisabledTask, CHK_turboSmooth1iterTask, CHK_noObjectsAnimatedTask, CHK_noCamerasTask, CHK_noLightsTask, CHK_layer0EmptyTask, CHK_sceneUnitsTask, CHK_timeUnitsTask, CHK_timeLineRange, CHK_morpherARTdisabledTask, CHK_morpherUseLimitsDisabled, CHK_displayModeMaterial, CHK_noGroups, CHK_hideByCategoryDisabled, CHK_noFrozenActive, CHK_noXRay,  CHK_noEmptySelectionSets, CHK_sceneGammaValues, CHK_maxFileIsCompressed, CHK_deleteFGRenderOutput, CHK_deleteSceneRootCAs, CHK_noIsolateActivated,  \
+  								 CHK_noVertexChannel, \
+								 CHK_hasBasePieceTask, CHK_rootNodesCorrect, CHK_objectSetsTask, CHK_hasIconTask, CHK_rigAndSkinPiecesHasParent, CHK_hasKeepConnected, CHK_hasLinkPointConstraint, CHK_hasLinkConstraintVirtualWorld, CHK_hasLinkPointConstraintKey,  CHK_hasSkinConnectionInfo, CHK_skinBonesConnected, CHK_skinRigNodesParentSameClass, CHK_splinesRigSkin2IterationsNoOptimize, CHK_animNodesVirtualParent, CHK_noInheritanceFlagsOff, CHK_noXrefControllers, CHK_allOutOfRangeCurvesAreConstant, CHK_afterBurnDisplayInCorrectLayer, CHK_fxPFObjsInCorrectLayer, CHK_notNumberedSubassets, CHK_fxSubassetsNameCorrect, CHK_fxAtmosphericsAssetName, CHK_fxAtmosphericsNoIndex, CHK_edgeLengthCorrectInProperties, CHK_edgeLengthCorrectInGlobalProperties, CHK_noPCTCInScene, \
+  								 CHK_PCspecifiedTask)
+								
+		_sortAndAddTitles 	CHK_assetFxTasks
+								
+		------------------------------ SEQUENCE TASKS ----------------------------------
+		--Sequence Layout Tasks
+		global CHK_sequenceLayoutTasks = #( \
+								 CHK_NCfileNameTask, CHK_NCseqFileNameAsSeqPath, CHK_NClayersNameTask, CHK_NCobjectsNameTask, CHK_NCobjectsAsTheirLayer, CHK_NCuniqueNamesTask, CHK_noCarriageReturnInNames, \
+ 								 CHK_correctWirecolor, \
+								 /*CHK_bitmapsExistAndCollectedTask,*/ CHK_matMatEditorCleanTask, \
+ 								 CHK_layer0EmptyTask, CHK_sceneUnitsTask, CHK_timeUnitsTask, CHK_displayModeMaterial, CHK_hideByCategoryDisabled, CHK_noFrozenActive, CHK_noXRay,  /*CHK_sceneGammaValues,*/ CHK_maxFileIsCompressed, CHK_deleteFGRenderOutput, CHK_deleteSceneRootCAs, CHK_noIsolateActivated,  \
+  								 CHK_camsInCorrectLayer, CHK_camsNumberCorrect, CHK_camsRangeAfter100, CHK_camsLockedTransforms, CHK_lightsInCorrectLayer, CHK_auxObjsInCorrectLayer, CHK_camAndAnimWithSameRange, CHK_camLensWithoutDecimals, CHK_camAndRenderWithSameRange, \
+								 CHK_setXrefScene, CHK_edgeLengthCorrectInProperties, CHK_edgeLengthCorrectInGlobalProperties, CHK_noPCTCInScene, CHK_camCorrectScale, CHK_noClippingPlaneOnCams)
+								 
+		_sortAndAddTitles CHK_sequenceLayoutTasks
+		
+		--Sequence Anim Tasks
+		global CHK_sequenceAnimTasks = #( \
+								 CHK_NCfileNameTask, CHK_NCseqFileNameAsSeqPath, CHK_NClayersNameTask, CHK_NCobjectsNameTask, CHK_NCobjectsAsTheirLayer, CHK_NCuniqueNamesTask, CHK_noCarriageReturnInNames, \
+ 								 CHK_meshRenderableTask, CHK_meshNotHiddenVertsOrPolys, CHK_chrMeshesWithTurbosmooth, CHK_correctWirecolor, \
+ 								 CHK_matMatEditorCleanTask, \
+ 								 CHK_duplicatedModifiersTask, CHK_turboSmoothDisabledTask, CHK_turboSmooth1iterTask, CHK_layer0EmptyTask, CHK_sceneUnitsTask, CHK_timeUnitsTask, CHK_displayModeMaterial, CHK_hideByCategoryDisabled, CHK_noFrozenActive, CHK_noXRay,  /*CHK_sceneGammaValues,*/ CHK_maxFileIsCompressed, CHK_noMissingClasses, CHK_deleteFGRenderOutput, CHK_deleteSceneRootCAs, CHK_noHairFarmClasses, CHK_noIsolateActivated,  \
+  								 CHK_camsInCorrectLayer, CHK_camsNumberCorrect, CHK_camsRangeAfter100, CHK_camsLockedTransforms, CHK_lightsInCorrectLayer, CHK_auxObjsInCorrectLayer, CHK_firstCamFrameKeyToAll, CHK_firstCamFrameKeyToLinkConstraint, CHK_camAndAnimWithSameRange, CHK_camAndRenderWithSameRange, \
+								 CHK_prpAndSprXrefMeshObjects, CHK_setXrefScene, CHK_noPCTCInScene, CHK_camCorrectScale, CHK_assetsAnimationInCameraRange, CHK_meshXrefInAnimFiles)
+		
+		_sortAndAddTitles CHK_sequenceAnimTasks
+		
+		--Sequence Cloth Tasks
+		global CHK_sequenceClothTasks = #( \
+								 CHK_NCfileNameTask, CHK_NCseqFileNameAsSeqPath, CHK_NClayersNameTask, CHK_NCobjectsNameTask, CHK_NCobjectsAsTheirLayer, CHK_NCuniqueNamesTask, CHK_noCarriageReturnInNames, \
+ 								 CHK_meshRenderableTask, CHK_meshNotHiddenVertsOrPolys, CHK_chrMeshesWithTurbosmooth, CHK_correctWirecolor, \
+ 								 CHK_matMatEditorCleanTask, \
+ 								 CHK_duplicatedModifiersTask, CHK_turboSmoothDisabledTask, CHK_turboSmooth1iterTask, CHK_layer0EmptyTask, CHK_sceneUnitsTask, CHK_timeUnitsTask, CHK_displayModeMaterial, CHK_hideByCategoryDisabled, CHK_noFrozenActive, CHK_noXRay,  CHK_sceneGammaValues, CHK_maxFileIsCompressed, CHK_deleteFGRenderOutput, CHK_deleteSceneRootCAs, CHK_noIsolateActivated,  \
+  								 CHK_camsInCorrectLayer, CHK_camsNumberCorrect, CHK_camsRangeAfter100,  CHK_camsLockedTransforms, CHK_lightsInCorrectLayer, CHK_auxObjsInCorrectLayer, CHK_firstCamFrameKeyToAll, CHK_firstCamFrameKeyToLinkConstraint, CHK_camAndAnimWithSameRange, CHK_camAndRenderWithSameRange, \
+								 CHK_edgeLengthCorrectInProperties, CHK_edgeLengthCorrectInGlobalProperties, CHK_noPCTCInScene)
+		
+		_sortAndAddTitles CHK_sequenceClothTasks
+								
+		--Sequence Fx Tasks
+		global CHK_sequenceFxTasks = #( \
+								 CHK_NCfileNameTask, CHK_NCseqFileNameAsSeqPath, CHK_NClayersNameTask, CHK_NCobjectsNameTask, CHK_NCobjectsAsTheirLayer, CHK_NCuniqueNamesTask, CHK_noCarriageReturnInNames, \
+ 								 CHK_meshRenderableTask, CHK_meshNotHiddenVertsOrPolys, CHK_chrMeshesWithTurbosmooth, CHK_correctWirecolor, \
+ 								 CHK_matMatEditorCleanTask, \
+ 								 CHK_turboSmoothDisabledTask, CHK_turboSmooth1iterTask, CHK_layer0EmptyTask, CHK_sceneUnitsTask, CHK_timeUnitsTask, CHK_displayModeMaterial, CHK_hideByCategoryDisabled, CHK_noFrozenActive, CHK_noXRay,  CHK_sceneGammaValues, CHK_maxFileIsCompressed, CHK_deleteFGRenderOutput, CHK_deleteSceneRootCAs, CHK_noIsolateActivated,  \
+  								 CHK_camsInCorrectLayer, CHK_camsNumberCorrect, CHK_camsRangeAfter100,  CHK_camsLockedTransforms, CHK_lightsInCorrectLayer, CHK_auxObjsInCorrectLayer, CHK_firstCamFrameKeyToAll, CHK_firstCamFrameKeyToLinkConstraint, CHK_camAndAnimWithSameRange, CHK_camAndRenderWithSameRange, CHK_setXrefScene, CHK_edgeLengthCorrectInProperties, CHK_edgeLengthCorrectInGlobalProperties)
+		
+		_sortAndAddTitles CHK_sequenceFxTasks
+								
+		--Sequence Hair Tasks
+		global CHK_sequenceHairTasks = #( \
+								 CHK_NCfileNameTask, CHK_NCseqFileNameAsSeqPath, CHK_NClayersNameTask, CHK_NCobjectsNameTask, CHK_NCobjectsAsTheirLayer, CHK_NCuniqueNamesTask, CHK_noCarriageReturnInNames, \
+ 								 CHK_correctWirecolor, CHK_noHairCorruptPCNodes, CHK_hairRenderableTask,
+								 CHK_matMatEditorCleanTask, \
+ 								 CHK_duplicatedModifiersTask, CHK_deleteFGRenderOutput, CHK_deleteSceneRootCAs, CHK_noIsolateActivated,  \
+								 CHK_setXrefScene, CHK_edgeLengthCorrectInProperties, CHK_edgeLengthCorrectInGlobalProperties)
+		
+		_sortAndAddTitles CHK_sequenceHairTasks
+								 
+		--Sequence Cache Tasks
+		global CHK_sequenceCacheTasks = #( \
+								 CHK_NCfileNameTask, CHK_NCseqFileNameAsSeqPath, CHK_NClayersNameTask, CHK_NCobjectsNameTask, CHK_NCobjectsAsTheirLayer, CHK_NCuniqueNamesTask, CHK_noCarriageReturnInNames, \
+ 								 CHK_meshRenderableTask, CHK_meshFreezePoseTask, CHK_meshFreezePoseCorrect, CHK_meshNotHiddenVertsOrPolys, CHK_chrMeshesWithTurbosmooth, CHK_correctWirecolor, \
+ 								 CHK_matMatEditorCleanTask, CHK_skinWrapWithTarget, \
+ 								 CHK_duplicatedModifiersTask, CHK_turboSmoothDisabledTask, CHK_turboSmooth1iterTask, CHK_layer0EmptyTask, CHK_sceneUnitsTask, CHK_timeUnitsTask, CHK_displayModeMaterial, CHK_hideByCategoryDisabled, CHK_noFrozenActive, CHK_noXRay,  CHK_sceneGammaValues, CHK_maxFileIsCompressed, CHK_deleteFGRenderOutput, CHK_deleteSceneRootCAs, CHK_noIsolateActivated,  \
+  								 CHK_camsInCorrectLayer, CHK_camsNumberCorrect,  CHK_camsLockedTransforms, CHK_noAuxObjs, CHK_camAndAnimWithSameRange, CHK_camAndRenderWithSameRange, CHK_noXRefScenes, CHK_noCamMultipass, \
+								 CHK_rigPartsOnZero, CHK_noMeshProxies, CHK_edgeLengthCorrectInProperties, CHK_edgeLengthCorrectInGlobalProperties, \
+  								 CHK_cacheFilesRightPath, CHK_noPausedCaches, CHK_tcAndPcEnabled, CHK_assetsAnimFrozenHidden, CHK_assetsMeshMotionBlurNone, CHK_assetsMeshUnfrozenUnhidden, CHK_hairNiceProperties, CHK_connectNodesAllProperties, CHK_hairShadowNoMatHairFarm, CHK_camCorrectScale, CHK_deleteHairRefsLighting, CHK_noClippingPlaneOnCams, CHK_correlativeCopyNames, CHK_deleteHairWrapsLighting, CHK_hairNoPushOutModifier, CHK_hairNoWhispModifierOverCluster, CHK_meshScaleNotResetTask)
+		
+		_sortAndAddTitles CHK_sequenceCacheTasks
+								 
+		--Sequence Cache Fx Tasks
+		global CHK_sequenceCacheFxTasks = #( \
+								 CHK_NCfileNameTask, CHK_NCseqFileNameAsSeqPath, CHK_NClayersNameTask, CHK_NCobjectsNameTask, CHK_NCobjectsAsTheirLayer, CHK_NCuniqueNamesTask, CHK_noCarriageReturnInNames, \
+ 								 CHK_meshRenderableTask, CHK_meshFreezePoseTask, CHK_meshFreezePoseCorrect, CHK_meshNotHiddenVertsOrPolys, CHK_chrMeshesWithTurbosmooth, CHK_correctWirecolor, \
+ 								 CHK_matMatEditorCleanTask, \
+ 								 CHK_duplicatedModifiersTask, CHK_turboSmoothDisabledTask, CHK_turboSmooth1iterTask, CHK_noCamerasTask, CHK_layer0EmptyTask, CHK_sceneUnitsTask, CHK_timeUnitsTask, CHK_displayModeMaterial, CHK_hideByCategoryDisabled, CHK_noFrozenActive, CHK_noXRay,  CHK_sceneGammaValues, CHK_maxFileIsCompressed, CHK_noPhysXClasses, CHK_noMissingClasses, CHK_noFxEventsInCacheFx, CHK_noFxObjectsInCacheFx, CHK_noFxModifiersInCacheFx, CHK_noFxAtmosphericsInCacheFx, CHK_deleteFGRenderOutput, CHK_deleteSceneRootCAs, CHK_noIsolateActivated,  \
+  								 CHK_noXRefScenes, \
+								 CHK_rigPartsOnZero, CHK_noMeshProxies, CHK_edgeLengthCorrectInProperties, CHK_edgeLengthCorrectInGlobalProperties, \
+  								 CHK_cacheFilesRightPath, CHK_noPausedCaches )
+		
+		_sortAndAddTitles CHK_sequenceCacheFxTasks
+								 
+		--Sequence Render Tasks
+		global CHK_sequenceRenderTasks = #( \
+								 CHK_NCfileNameTask, CHK_NCseqFileNameAsSeqPath, CHK_NClayersNameTask, CHK_NCobjectsNameTask, CHK_NCobjectsAsTheirLayer, CHK_NCuniqueNamesTask, CHK_NClpmPass, CHK_NCrenderElements, CHK_noCarriageReturnInNames, CHK_LPMNoDuplicatedNames, \
+ 								 CHK_meshRenderableTask, CHK_meshFreezePoseTask, CHK_meshFreezePoseCorrect, CHK_meshNotHiddenVertsOrPolys, CHK_chrMeshesWithTurbosmooth, CHK_correctWirecolor, \
+ 								 CHK_matMatEditorCleanTask, CHK_mrArchNDesignFastInterpolateDisabled, CHK_bitmapsInCorrectFolder, CHK_sssScatterGroupsDiffer,  \
+ 								 CHK_duplicatedModifiersTask, CHK_turboSmoothDisabledTask, CHK_turboSmooth1iterTask, CHK_layer0EmptyTask, CHK_sceneUnitsTask, CHK_timeUnitsTask, CHK_hideByCategoryDisabled, CHK_noFrozenActive, CHK_timeOutputOnRange, CHK_mrSamplesPerPixelValidRange, CHK_sceneGammaValues, CHK_assetTrackingDependenciesExist, CHK_batchRenderNoReadOnlyFiles, CHK_maxFileIsCompressed, CHK_correctRenderResolution, CHK_noFGGICalculationEnabled, CHK_noXrefsOnScene, CHK_noBitmapProxies, CHK_mrNoRenderRegionOptionsEnabled, CHK_finalGatherDiskCache, CHK_noPhysXClasses, CHK_noMissingClasses, CHK_noInfoOverlayEffect, CHK_deleteSceneRootCAs, CHK_noIsolateActivated,  \
+  								 CHK_camsInCorrectLayer, CHK_camsNumberCorrect, CHK_camsLockedTransforms, CHK_lightsInCorrectLayer, CHK_auxObjsInCorrectLayer, CHK_noClippingPlaneOnCams, CHK_camAndAnimWithSameRange, CHK_camAndRenderWithSameRange, CHK_LPMdirCorrect, CHK_LPMpassesActive, CHK_LPMcamView, CHK_allLightsAreOn, CHK_allLightsAreRenderable, CHK_LPMActiveNodes, CHK_noXRefScenes, CHK_noCamMultipass, CHK_LPMhasCommonProperties, CHK_LPMOverrideTimeAndSizeOutput, CHK_LPMResolution2K, CHK_LPMhasMrRenderProperties, CHK_LPMFinalGatherOff, CHK_noFGMapFile, CHK_LPMCamRangesOk, CHK_newLPMCamRangesOk, CHK_renderSmoothingOff, CHK_LPMRenderSmoothingOff, CHK_heightmapObjectsNoSmoothing, CHK_LPMsetsBaked, CHK_LPMallObjectsAndLightsOff, CHK_LPMsetsWithIndependentObjects, CHK_LPManimatedBgCamRange, CHK_fgNonSourceFileGIPassesOk, CHK_fgSourceFileGIPassesOk, CHK_lockViewportDisabled, CHK_LPMCorrectInstances, CHK_LPMNoAlternateRootDir, CHK_LPMLayerFrozenHidden, CHK_renderSourceVersioned, CHK_fgmPathCorrect, CHK_LPMNoRenderInstances, CHK_LPMRootDuplicated, CHK_LPMRootPathCamAndSeqCorrect, CHK_LPMEnvMapsSphericalOrCylindrical, CHK_skipRenderedFramesDisabled, \
+								 CHK_rigPartsOnZero, CHK_noMeshProxies, CHK_edgeLengthCorrectInProperties, CHK_edgeLengthCorrectInGlobalProperties, \
+  								 CHK_cacheFilesRightPath, CHK_noPausedCaches, CHK_tcAndPcEnabled, CHK_settingsOutputPM, CHK_existCameraSettingPM, CHK_projectOutputSizePM, CHK_projectOutputTypePM, CHK_projectOutputPathPM, CHK_projectOutputFilePM, CHK_overrideRenderSettingsPM, CHK_renderSettingsNoSubsetPixelPM, CHK_passNamingConventionPM, CHK_minimumSamplesPM, CHK_passGIoverRenderSettingsPM, CHK_passMaskoutPutTypePM, CHK_passElementObjectIDPM, CHK_passVelOutputTypePM, CHK_areaToRender, CHK_objHiddenLightSetsPM,CHK_timeOutPutPM, CHK_outPutRangePMOnStaticCams, CHK_outPutRangePM, CHK_hairNiceProperties, CHK_hairRendererEnvironment, CHK_hairShadowNoMatHairFarm, CHK_enabledStatePM, CHK_variationsMaterialsIDCorrectionLighting, CHK_sourcePreCalculationsPM, CHK_FGwithGImidQualityPM, CHK_samplingQualityGroupsPM, CHK_archAndDesignOpaque/*CHK_passVelWithHairIncludeHairVelocityPM*/, CHK_camCorrectScale, CHK_photometricLightsNoShadowMap, CHK_assetsMeshMotionBlurNone,CHK_maskXYZFrameBuffer32BitsPM,CHK_Force2SidedCommonParametersPM,CHK_renderCorrectAssetConfig, CHK_hairNoPushOutModifier, CHK_hairNoWhispModifierOverCluster, CHK_noNestedSubMaterials, CHK_noDisplaceInSSS/*, CHK_meshScaleNotResetTask*/)
+		
+		_sortAndAddTitles CHK_sequenceRenderTasks
+								 
+		--Sequence RenderFx Tasks
+		global CHK_sequenceRenderFxTasks =  #( CHK_NCfileNameTask, CHK_NCseqFileNameAsSeqPath, CHK_NClayersNameTask, CHK_NCobjectsNameTask, CHK_NCobjectsAsTheirLayer, CHK_NCuniqueNamesTask, CHK_NClpmPass, CHK_NCrenderElements, CHK_noCarriageReturnInNames, CHK_LPMNoDuplicatedNames, \
+ 								 CHK_meshRenderableTask, CHK_meshFreezePoseTask, CHK_meshFreezePoseCorrect, CHK_correctWirecolor, \
+ 								 CHK_matMatEditorCleanTask, CHK_mrArchNDesignFastInterpolateDisabled, CHK_bitmapsInCorrectFolder,  \
+ 								 CHK_duplicatedModifiersTask, CHK_turboSmoothDisabledTask, CHK_turboSmooth1iterTask, CHK_layer0EmptyTask, CHK_sceneUnitsTask, CHK_timeUnitsTask, CHK_hideByCategoryDisabled, CHK_noFrozenActive, CHK_timeOutputOnRange, CHK_mrSamplesPerPixelValidRange, CHK_sceneGammaValues, CHK_assetTrackingDependenciesExist, CHK_batchRenderNoReadOnlyFiles, CHK_maxFileIsCompressed, CHK_correctRenderResolution, CHK_noFGGICalculationEnabled, CHK_noXrefsOnScene, CHK_noBitmapProxies, CHK_mrNoRenderRegionOptionsEnabled, CHK_finalGatherDiskCache, CHK_noPhysXClasses, CHK_noInfoOverlayEffect, CHK_deleteSceneRootCAs, CHK_noIsolateActivated,  \
+  								 CHK_camsInCorrectLayer, CHK_camsNumberCorrect, CHK_camsLockedTransforms, CHK_lightsInCorrectLayer, CHK_auxObjsInCorrectLayer, CHK_noClippingPlaneOnCams, CHK_camAndAnimWithSameRange, CHK_camAndRenderWithSameRange, CHK_LPMdirCorrect, CHK_LPMpassesActive, CHK_LPMcamView, CHK_allLightsAreOn, CHK_allLightsAreRenderable, CHK_LPMActiveNodes, CHK_noXRefScenes, CHK_noCamMultipass,  CHK_LPMhasCommonProperties, CHK_LPMOverrideTimeAndSizeOutput, CHK_LPMResolution2K, CHK_LPMhasMrRenderProperties, CHK_LPMFinalGatherOff, CHK_noFGMapFile, CHK_LPMCamRangesOk, CHK_newLPMCamRangesOk, CHK_renderSmoothingOff, CHK_LPMRenderSmoothingOff, CHK_heightmapObjectsNoSmoothing, CHK_LPMsetsBaked, CHK_LPMallObjectsAndLightsOff, CHK_LPMsetsWithIndependentObjects, CHK_LPManimatedBgCamRange, CHK_fgNonSourceFileGIPassesOk, CHK_fgSourceFileGIPassesOk, CHK_lockViewportDisabled, CHK_LPMCorrectInstances, CHK_LPMNoAlternateRootDir, CHK_LPMLayerFrozenHidden, CHK_fgmPathCorrect, CHK_LPMNoRenderInstances, CHK_LPMRootDuplicated, CHK_LPMRootPathCamAndSeqCorrect, CHK_skipRenderedFramesDisabled, \
+								 CHK_rigPartsOnZero, CHK_noMeshProxies, CHK_afterBurnDisplayInCorrectLayer, CHK_edgeLengthCorrectInProperties, CHK_edgeLengthCorrectInGlobalProperties, \
+  								 CHK_cacheFilesRightPath, CHK_noPausedCaches, CHK_tcAndPcEnabled, CHK_settingsOutputPM, CHK_existCameraSettingPM, CHK_projectOutputSizePM, CHK_projectOutputTypePM, CHK_projectOutputPathPM, CHK_projectOutputFilePM, CHK_overrideRenderSettingsPM, CHK_renderSettingsNoSubsetPixelPM, CHK_passNamingConventionPM, CHK_minimumSamplesPM, CHK_passGIoverRenderSettingsPM, CHK_passMaskoutPutTypePM, CHK_passElementObjectIDPM, CHK_passVelOutputTypePM, CHK_areaToRender, CHK_objHiddenLightSetsPM,CHK_timeOutPutPM,CHK_outPutRangePMOnStaticCams, CHK_outPutRangePM, CHK_hairNiceProperties, CHK_hairRendererEnvironment, CHK_enabledStatePM, CHK_variationsMaterialsIDCorrectionLighting, CHK_sourcePreCalculationsPM, CHK_FGwithGImidQualityPM, CHK_samplingQualityGroupsPM, /*CHK_passVelWithHairIncludeHairVelocityPM*/ CHK_camCorrectScale, CHK_photometricLightsNoShadowMap, CHK_assetsMeshMotionBlurNone)
+		
+		_sortAndAddTitles CHK_sequenceRenderFxTasks
+		/**************************************************************************************/
+		
+							
+		--tareas con fix------------------------
+		global CHK_fixableTasks = #(CHK_assetsVisMode, CHK_nonAnimTracksTransformsLockedTask, CHK_animInfoDefaults, CHK_meshPositionInZeroTask, CHK_meshRotationZeroTask, CHK_meshFreezePoseTask, /*CHK_meshFreezePoseCorrect,*/ CHK_nonAnimTracksNonKeyableTask, \
+										CHK_meshEffectsIDcorrectTask, CHK_meshScaleNotResetTask, CHK_meshRenderableTask, CHK_meshNoInstances, CHK_showFrozenGrayTask, CHK_matMatEditorCleanTask, CHK_noObjectsAnimatedTask, CHK_noCamerasTask, CHK_meshPCmodifier, CHK_meshNotHiddenVertsOrPolys, \
+										CHK_timeLineRange, CHK_noLightsTask, CHK_sceneUnitsTask, CHK_timeUnitsTask, CHK_morpherARTdisabledTask, CHK_meshNotFrozenTransformsTask, CHK_turboSmoothDisabledTask, CHK_meshVertexColorsNormalized, CHK_matProceduralExplicitMapChannel, \
+										CHK_duplicatedModifiersTask, CHK_turboSmooth1iterTask, CHK_TCObjectsControllersRightTask, CHK_isHeadSystem, CHK_hasKeepConnected, CHK_splinesRigSkin2IterationsNoOptimize, CHK_noEnviromentMap, CHK_hairNoSkinConnectionInfo, \
+										CHK_chrMeshesWithTurbosmooth, CHK_meshFrozenTransformsStateTask, CHK_meshLockedTransformsStateTask, CHK_displayModeMaterial, CHK_camsInCorrectLayer, CHK_lightsInCorrectLayer, CHK_auxObjsNoRenderable, CHK_matNotXrefAssetLayoutFiles, \
+										CHK_firstCamFrameKeyToAll, CHK_firstCamFrameKeyToLinkConstraint, CHK_morpherUseLimitsDisabled, CHK_camsLockedTransforms, CHK_hideByCategoryDisabled, CHK_noFrozenActive, CHK_noXRay,  CHK_matVisibleInViewports, CHK_proxyObjectsWithoutMats, \
+										CHK_correctAnimationMaskName, CHK_proxyModifiersActivated, CHK_selectionSetsCorrectNames, CHK_noClippingPlaneOnCams, CHK_timeOutputOnRange, CHK_mrSamplesPerPixelValidRange, CHK_sceneGammaValues, CHK_mrArchNDesignFastInterpolateDisabled, \
+										CHK_camAndAnimWithSameRange, CHK_correctRenderResolution, CHK_noFGGICalculationEnabled, CHK_skinConnectionInfoIsCorrect, CHK_noXrefsOnScene, CHK_noBitmapProxies, CHK_noMeshProxies, CHK_mrNoRenderRegionOptionsEnabled, CHK_camAndRenderWithSameRange, \
+										CHK_noInheritanceFlagsOff, CHK_noXrefControllers, CHK_noPhysXClasses, CHK_noMissingClasses, CHK_allLightsAreOn, CHK_allLightsAreRenderable, CHK_LPMActiveNodes, CHK_allOutOfRangeCurvesAreConstant, CHK_noCamMultipass, CHK_LPMResolution2K, \
+										CHK_afterBurnDisplayInCorrectLayer, CHK_fxPFObjsInCorrectLayer, CHK_noCarriageReturnInNames, CHK_noInfoOverlayEffect, CHK_renderSmoothingOff, CHK_LPMRenderSmoothingOff, CHK_heightmapObjectsNoSmoothing, CHK_LPMsetsBaked, CHK_LPMallObjectsAndLightsOff, CHK_LPMsetsWithIndependentObjects, CHK_PCInRightPlace, CHK_PCwithLinkToWorld, \
+										CHK_LPManimatedBgCamRange, CHK_sssScatterGroupsDiffer, CHK_fgSourceFileGIPassesOk, CHK_lockViewportDisabled, CHK_LPMCorrectInstances, CHK_edgeLengthCorrectInProperties, CHK_edgeLengthCorrectInGlobalProperties, CHK_noFxObjectsInCacheFx, CHK_noFxModifiersInCacheFx, \
+										CHK_noFxAtmosphericsInCacheFx, CHK_LPMNoAlternateRootDir, CHK_LPMLayerFrozenHidden, CHK_LPMOverrideTimeAndSizeOutput, CHK_LPMNoRenderInstances, CHK_tcAndPcEnabled, CHK_clothNodesWithoutMaterial, CHK_rigNodesWithoutMaterial, CHK_skipRenderedFramesDisabled, CHK_deleteFGRenderOutput, \
+										CHK_deleteSceneRootCAs, CHK_lockOverrideDeactivated, CHK_correctWirecolor, CHK_noHairFarmClasses, CHK_NCCorrectObjectTypes, CHK_noVertexChannel, CHK_noIsolateActivated,  CHK_noMorphsInScene, CHK_hairModifiersOffInViewport, CHK_hairRenderableTask, \
+										CHK_clothColorsOk, CHK_displaySelectedWithEdgedFacesOn, CHK_noRenderElementsInScene, CHK_dynConnectCorrectNames, CHK_displayModeObject,CHK_ffdsWithCorrectAlign, CHK_forceUndefinedCacheInRigObjs, CHK_objSetInFacialAnimFlagC, CHK_settingsOutputPM, CHK_existCameraSettingPM, CHK_turboSmoothSurfaceParametersOff, CHK_meshModoBoxOff, CHK_projectOutputSizePM, CHK_projectOutputTypePM, CHK_assetsAnimFrozenHidden, CHK_assetsMeshMotionBlurNone, CHK_assetsMeshUnfrozenUnhidden, CHK_minimumSamplesPM, CHK_passMaskoutPutTypePM, CHK_passElementObjectIDPM, CHK_passVelOutputTypePM, CHK_renderSettingsNoSubsetPixelPM, CHK_areaToRender, CHK_PCinRootAndBase, CHK_noPCinAnimNodes, CHK_nodeInfoNameCoherence, CHK_timeOutPutPM, CHK_outPutRangePM, CHK_matArchDesignTranspaON, CHK_matWithNames, CHK_PCspecifiedTask, CHK_hairNiceProperties, CHK_hairRendererEnvironment, CHK_hairColorScalp, CHK_connectNodesAllProperties, CHK_hairShadowNoMatHairFarm, CHK_correctSubObjectLevel, CHK_puppetsOFF, CHK_morphNoLimits, CHK_noGroups, CHK_variationsMaterialsIDCorrectionLighting, CHK_variationsMaterialsParentID, CHK_variationsMaterialsIDCorrectionModeling, CHK_FGwithGImidQualityPM, CHK_samplingQualityGroupsPM, CHK_archAndDesignOpaque, CHK_camCorrectScale, CHK_connectCorrectProperitesAnim, CHK_deleteHairRefsLighting, CHK_archAndDesignGlossinessSamples, CHK_correlativeCopyNames, CHK_boneBoxPropertyOff, CHK_photometricLightsNoShadowMap, CHK_backFaceCullingDisabled, CHK_hairTextureRoutedCorrectly, CHK_deleteHairWrapsLighting,CHK_maskXYZFrameBuffer32BitsPM,CHK_Force2SidedCommonParametersPM, CHK_renderCorrectAssetConfig, CHK_assetsAnimationInCameraRange, CHK_noNestedSubMaterials, CHK_noDisplaceInSSS)
+										
+		--tareas sin fix para presets de animacion ------------------------
+		global CHK_nonFixablePrtAnimTasks = #(CHK_NCfileNameTask, CHK_NClayersNameTask, CHK_NClayersNameTask, CHK_NCobjectsNameTask, CHK_NCobjectsAsTheirLayer, CHK_NCmatsNameTask, CHK_NCuniqueNamesTask, CHK_NCbitmapsNameTask, CHK_flagsCorrectTask, CHK_noCarriageReturnInNames, CHK_NCObjectSets, \
+												CHK_animInfoTask , CHK_animTracksNotCorruptal, CHK_nonAnimTracksNonKeyableTask, CHK_nonAnimTracksTransformsLockedTask, CHK_animInfoDefaults,CHK_lockOverrideDeactivated, CHK_animTracksDifName, \
+												CHK_ffdsWithCorrectAlign, \
+												CHK_matVisibleInViewports, \
+												CHK_noObjectsAnimatedTask,CHK_noFrozenActive, CHK_puppetsOFF,CHK_exposeWithTargets,CHK_connectCorrectProperitesAnim,\
+												CHK_noVertexChannel,\
+												CHK_noXrefControllers,CHK_sFlagInSkinBones, CHK_PCinRootAndBase, CHK_PCInRightPlace, CHK_PCwithLinkToWorld, CHK_boneBoxPropertyOff, CHK_NCBoneCorrectFlags, CHK_skinAndSkinMorphCorrectPath, CHK_tcPieceDynConnectCorrectPath,\
+												CHK_PCspecifiedTask, CHK_forceUndefinedCacheInRigObjs)
+
+		--tareas por tipo de asset--------------								
+		global CHK_chrTasks = #( CHK_assetsVisMode, CHK_fileInVersionFolder, CHK_differentAssetNodeName, CHK_noHairMeshMirror, CHK_skinWithCorrectBones, \
+								 CHK_NCfileNameTask, CHK_NClayersNameTask, CHK_NClayersNameMatchFileName, CHK_NCobjectsNameTask, CHK_NCobjectsAsTheirLayer, CHK_NClibObjectsNameTask, CHK_NCmatsNameTask, CHK_NCuniqueNamesTask, CHK_NCbitmapsNameTask, CHK_flagsCorrectTask, CHK_noCarriageReturnInNames, CHK_NCCorrectObjectTypes, \
+								 CHK_animInfoDefaults, CHK_animInfoTask, CHK_animTracksNotCorrupt, CHK_nonAnimTracksNonKeyableTask, CHK_nonAnimTracksTransformsLockedTask, \
+								 CHK_meshFrozenTransformsStateTask, CHK_meshLockedTransformsStateTask, CHK_meshHierarchyTask, CHK_meshPositionInZeroTask, CHK_meshRotationZeroTask, CHK_meshScaleNotResetTask, CHK_meshEffectsIDcorrectTask, CHK_meshRenderableTask, CHK_meshWithMaterialsTask, CHK_meshNoInstances, CHK_meshNotFrozenTransformsTask, CHK_meshFreezePoseTask, CHK_meshFreezePoseCorrect, CHK_meshPCmodifier, CHK_meshNotHiddenVertsOrPolys, CHK_meshVertexColorsNormalized, CHK_meshXrefInAnimFiles, CHK_chrMeshesWithTurbosmooth, CHK_meshesPCdeformable, CHK_allUnwrapsCollapsed, CHK_icCacheHasTcAncestor, CHK_tcMeshesWithSkinParent, CHK_pcMeshesWithDeformableModifier	, CHK_ffdsLinkedToFacialParent, CHK_facialAndRigHaveParent, CHK_PCInRightPlace, CHK_PCwithLinkToWorld,  \
+								 CHK_notSceneStatesInAssetFile, CHK_matMatEditorCleanTask, CHK_bitmapsExistAndCollectedTask, CHK_matBitmapsUnusedInAssetFolder, CHK_matProceduralExplicitMapChannel, CHK_matNotDuplicates, CHK_matXrefInAnimFiles, CHK_matNotXrefAssetLayoutFiles, CHK_matVisibleInViewports, CHK_clothNodesWithoutMaterial, CHK_rigNodesWithoutMaterial, \
+								 CHK_resetXFormTask, CHK_duplicatedModifiersTask, CHK_timeLineRange, CHK_showFrozenGrayTask, CHK_turboSmoothDisabledTask, CHK_turboSmooth1iterTask, CHK_noObjectsAnimatedTask, CHK_noCamerasTask, CHK_noLightsTask, CHK_layer0EmptyTask,  CHK_noEmptyLayers, CHK_sceneUnitsTask, CHK_timeUnitsTask, CHK_morpherARTdisabledTask, CHK_morpherUseLimitsDisabled, CHK_noEnviromentMap, CHK_noGroups, CHK_noFrozenActive, CHK_noXRay,  \
+								 CHK_firstCamFrameKeyToAll, CHK_firstCamFrameKeyToLinkConstraint, CHK_clothColorsOk, CHK_skinWrapWithTarget, \
+								 CHK_skinBonesConnected, CHK_skinRigNodesParentSameClass, CHK_hasBasePieceTask, CHK_rootNodesCorrect, CHK_objectSetsTask, CHK_hasIconTask, CHK_rigAndSkinPiecesHasParent, CHK_isHeadSystem, CHK_hasKeepConnected, CHK_animPiecesFrozen, CHK_hasLinkPointConstraint, CHK_hasLinkConstraintVirtualWorld, CHK_hasLinkPointConstraintKey, CHK_hasSkinConnectionInfo, CHK_skinRigNodesParentSameClass, CHK_splinesRigSkin2IterationsNoOptimize, CHK_animNodesVirtualParent, CHK_proxyObjectsWithoutMats, CHK_correctAnimationMaskName, CHK_selectionSetsCorrectNames, CHK_rigPartsOnZero, CHK_rigAndSkinTransformsFrozen, CHK_skinConnectionInfoIsCorrect, CHK_noSkinWrapOnCloth, CHK_noInheritanceFlagsOff, /*CHK_allAssetsInScene, */CHK_noXrefControllers, CHK_allOutOfRangeCurvesAreConstant, CHK_edgeLengthCorrectInProperties, CHK_edgeLengthCorrectInGlobalProperties, CHK_noPCTCInScene, \
+								 CHK_PCspecifiedTask, CHK_TCObjectsControllersRightTask, CHK_cacheFilesRightPath, CHK_tcAndPcEnabled, CHK_hairModifiersOffInViewport,\
+								CHK_noHairCorruptPCNodes, CHK_forceUndefinedCacheInRigObjs, CHK_hairRenderableTask, CHK_hairNoSkinConnectionInfo, CHK_correctWirecolor, CHK_sFlagInSkinBones, CHK_objSetInFacialAnimFlagC, CHK_dynConnectCorrectNames, CHK_meshWithoutModifiers,CHK_morpherWithoutEmptyChannels, CHK_morpherWithAnimController, CHK_meshModoBoxOff, CHK_turboSmoothSurfaceParametersOff, CHK_nodeInfoNameCoherence, CHK_meshPositionInZeroTask, CHK_matArchDesignTranspaON, CHK_matWithNames, CHK_correctSubObjectLevel)
+								
+		global CHK_prpTasks = #( CHK_assetsVisMode, CHK_fileInVersionFolder, CHK_differentAssetNodeName, CHK_noHairMeshMirror, \
+								 CHK_NCfileNameTask, CHK_NClayersNameTask, CHK_NClayersNameMatchFileName, CHK_NCobjectsNameTask, CHK_NCobjectsAsTheirLayer, CHK_NClibObjectsNameTask, CHK_NCmatsNameTask, CHK_NCuniqueNamesTask, CHK_NCbitmapsNameTask, CHK_flagsCorrectTask, CHK_noCarriageReturnInNames, CHK_NCCorrectObjectTypes, \
+								 CHK_animInfoDefaults, CHK_animInfoTask, CHK_animTracksNotCorrupt, CHK_nonAnimTracksNonKeyableTask, CHK_nonAnimTracksTransformsLockedTask, \
+								 CHK_meshFrozenTransformsStateTask, CHK_meshLockedTransformsStateTask, CHK_meshHierarchyTask, CHK_meshScaleNotResetTask,  CHK_meshEffectsIDcorrectTask, CHK_meshRenderableTask, CHK_meshWithMaterialsTask, CHK_meshNoInstances, CHK_meshNotFrozenTransformsTask, CHK_meshFreezePoseTask, CHK_meshFreezePoseCorrect, CHK_meshPCmodifier, CHK_meshNotHiddenVertsOrPolys, CHK_meshXrefInAnimFiles, CHK_meshesPCdeformable, CHK_allUnwrapsCollapsed, CHK_icCacheHasTcAncestor, CHK_PCInRightPlace, CHK_PCwithLinkToWorld, \
+								 CHK_notSceneStatesInAssetFile, CHK_matMatEditorCleanTask, CHK_bitmapsExistAndCollectedTask, CHK_matBitmapsUnusedInAssetFolder, CHK_matProceduralExplicitMapChannel, CHK_matNotDuplicates, CHK_matXrefInAnimFiles, CHK_matVisibleInViewports, \
+								 CHK_resetXFormTask, CHK_duplicatedModifiersTask, CHK_timeLineRange, CHK_showFrozenGrayTask, CHK_turboSmoothDisabledTask, CHK_turboSmooth1iterTask, CHK_noObjectsAnimatedTask, CHK_noCamerasTask, CHK_noLightsTask, CHK_layer0EmptyTask,  CHK_noEmptyLayers, CHK_sceneUnitsTask, CHK_timeUnitsTask, CHK_morpherARTdisabledTask, CHK_morpherUseLimitsDisabled, CHK_noEnviromentMap, CHK_noGroups, CHK_noFrozenActive, CHK_noXRay,  \
+								 CHK_firstCamFrameKeyToAll, CHK_firstCamFrameKeyToLinkConstraint, CHK_clothColorsOk, CHK_skinWrapWithTarget, \
+								 CHK_hasBasePieceTask, CHK_rootNodesCorrect, CHK_objectSetsTask, CHK_hasIconTask, CHK_rigAndSkinPiecesHasParent, CHK_animPiecesFrozen, CHK_hasLinkPointConstraint, CHK_hasLinkConstraintVirtualWorld, CHK_hasLinkPointConstraintKey, CHK_hasSkinConnectionInfo, CHK_skinBonesConnected, CHK_skinRigNodesParentSameClass, CHK_splinesRigSkin2IterationsNoOptimize, CHK_animNodesVirtualParent, CHK_prpAndSprXrefMeshObjects, CHK_proxyObjectsWithoutMats, CHK_proxyModifiersActivated, CHK_selectionSetsCorrectNames, CHK_rigPartsOnZero, CHK_rigAndSkinTransformsFrozen, CHK_skinConnectionInfoIsCorrect, CHK_noMeshProxies, CHK_noSkinWrapOnCloth, CHK_noInheritanceFlagsOff, /*CHK_allAssetsInScene,*/ CHK_noXrefControllers,  CHK_allOutOfRangeCurvesAreConstant, CHK_notNumberedSubassets, CHK_edgeLengthCorrectInProperties, CHK_edgeLengthCorrectInGlobalProperties, CHK_noPCTCInScene,  \
+								 CHK_PCspecifiedTask, CHK_TCObjectsControllersRightTask, CHK_cacheFilesRightPath, CHK_tcAndPcEnabled,CHK_hairModifiersOffInViewport,\
+								CHK_noHairCorruptPCNodes, CHK_forceUndefinedCacheInRigObjs, CHK_hairRenderableTask, CHK_hairNoSkinConnectionInfo, CHK_sFlagInSkinBones, CHK_dynConnectCorrectNames, CHK_meshWithoutModifiers, CHK_PCinRootAndBase, CHK_noPCinAnimNodes, CHK_nodeInfoNameCoherence, CHK_meshPositionInZeroTask, CHK_meshRotationZeroTask, CHK_matArchDesignTranspaON,CHK_matWithNames, CHK_correctSubObjectLevel) 
+								
+		global CHK_litTasks = #( CHK_assetsVisMode, CHK_fileInVersionFolder, \
+								 CHK_NCfileNameTask, CHK_NClayersNameTask, CHK_NClayersNameMatchFileName, CHK_NCobjectsNameTask, CHK_NCobjectsAsTheirLayer, CHK_NClibObjectsNameTask, CHK_NCmatsNameTask, CHK_NCuniqueNamesTask, CHK_NCbitmapsNameTask, CHK_flagsCorrectTask, CHK_noCarriageReturnInNames, CHK_NCCorrectObjectTypes, \
+								 CHK_animInfoDefaults, CHK_animInfoTask, CHK_animTracksNotCorrupt, CHK_nonAnimTracksNonKeyableTask, CHK_nonAnimTracksTransformsLockedTask, \
+								 CHK_meshFrozenTransformsStateTask, CHK_meshLockedTransformsStateTask, CHK_meshHierarchyTask, CHK_meshScaleNotResetTask,  CHK_meshEffectsIDcorrectTask, CHK_meshRenderableTask, CHK_meshNotFrozenTransformsTask, CHK_meshFreezePoseTask, CHK_meshFreezePoseCorrect, CHK_meshPCmodifier, CHK_meshNotHiddenVertsOrPolys, CHK_meshesPCdeformable, CHK_allUnwrapsCollapsed, CHK_icCacheHasTcAncestor, \
+								 CHK_notSceneStatesInAssetFile, CHK_matMatEditorCleanTask, CHK_bitmapsExistAndCollectedTask, CHK_matBitmapsUnusedInAssetFolder, CHK_matProceduralExplicitMapChannel, CHK_matNotDuplicates, CHK_matXrefInAnimFiles, CHK_matVisibleInViewports, \
+								 CHK_resetXFormTask, CHK_duplicatedModifiersTask, CHK_timeLineRange, CHK_showFrozenGrayTask, CHK_turboSmoothDisabledTask, CHK_turboSmooth1iterTask, CHK_noObjectsAnimatedTask, CHK_noCamerasTask, CHK_noLightsTask, CHK_layer0EmptyTask, CHK_sceneUnitsTask, CHK_timeUnitsTask, CHK_morpherARTdisabledTask, CHK_morpherUseLimitsDisabled, CHK_noEnviromentMap, CHK_noGroups, CHK_noFrozenActive, CHK_noXRay,  \
+								 CHK_firstCamFrameKeyToAll, CHK_firstCamFrameKeyToLinkConstraint, \
+								 CHK_hasBasePieceTask, CHK_rootNodesCorrect, CHK_objectSetsTask, CHK_hasIconTask, CHK_rigAndSkinPiecesHasParent, CHK_animPiecesFrozen, CHK_hasLinkPointConstraint, CHK_hasLinkConstraintVirtualWorld, CHK_hasLinkPointConstraintKey, CHK_hasSkinConnectionInfo, CHK_skinBonesConnected, CHK_skinRigNodesParentSameClass, CHK_splinesRigSkin2IterationsNoOptimize, CHK_animNodesVirtualParent, CHK_prpAndSprXrefMeshObjects, CHK_proxyObjectsWithoutMats, CHK_proxyModifiersActivated, CHK_selectionSetsCorrectNames, CHK_rigPartsOnZero, CHK_rigAndSkinTransformsFrozen, CHK_skinConnectionInfoIsCorrect, CHK_noMeshProxies, CHK_noSkinWrapOnCloth, CHK_noInheritanceFlagsOff, /*CHK_allAssetsInScene,*/ CHK_noXrefControllers,  CHK_allOutOfRangeCurvesAreConstant, CHK_notNumberedSubassets, CHK_edgeLengthCorrectInProperties, CHK_edgeLengthCorrectInGlobalProperties, CHK_noPCTCInScene, \
+								 CHK_PCspecifiedTask, CHK_TCObjectsControllersRightTask, CHK_cacheFilesRightPath, CHK_tcAndPcEnabled, CHK_hairRenderableTask)
+								
+		global CHK_sprTasks = #( CHK_assetsVisMode, CHK_fileInVersionFolder, CHK_differentAssetNodeName, CHK_noHairMeshMirror, CHK_clothColorsOk, \
+								CHK_NCfileNameTask, CHK_NClayersNameTask, CHK_NClayersNameMatchFileName, CHK_NCobjectsNameTask, CHK_NCobjectsAsTheirLayer, CHK_NCmatsNameTask, CHK_NCuniqueNamesTask, CHK_NCbitmapsNameTask, CHK_flagsCorrectTask, CHK_noCarriageReturnInNames, CHK_NCCorrectObjectTypes, \
+								CHK_animInfoDefaults, CHK_animInfoTask, CHK_nonAnimTracksNonKeyableTask, CHK_nonAnimTracksTransformsLockedTask, \
+								CHK_meshFrozenTransformsStateTask, CHK_meshLockedTransformsStateTask, CHK_meshHierarchyTask, CHK_meshScaleNotResetTask, CHK_meshEffectsIDcorrectTask, CHK_meshRenderableTask, CHK_meshWithMaterialsTask, CHK_meshNoInstances, CHK_meshNotFrozenTransformsTask, CHK_meshFreezePoseTask, CHK_meshFreezePoseCorrect, CHK_meshPCmodifier, CHK_meshNotHiddenVertsOrPolys, CHK_meshXrefInAnimFiles, CHK_meshesPCdeformable,  CHK_allUnwrapsCollapsed, CHK_icCacheHasTcAncestor, \
+								CHK_notSceneStatesInAssetFile, CHK_matMatEditorCleanTask, CHK_bitmapsExistAndCollectedTask, CHK_matProceduralExplicitMapChannel, CHK_matNotDuplicates, CHK_matXrefInAnimFiles, CHK_matVisibleInViewports, CHK_PCInRightPlace, CHK_PCwithLinkToWorld, \
+								CHK_resetXFormTask, CHK_duplicatedModifiersTask, CHK_timeLineRange, CHK_showFrozenGrayTask, CHK_turboSmoothDisabledTask, CHK_turboSmooth1iterTask, CHK_noObjectsAnimatedTask, CHK_noCamerasTask, CHK_noLightsTask, CHK_layer0EmptyTask,  CHK_noEmptyLayers, CHK_sceneUnitsTask, CHK_timeUnitsTask, CHK_morpherARTdisabledTask, CHK_morpherUseLimitsDisabled, CHK_noEnviromentMap, CHK_noGroups, CHK_noFrozenActive, CHK_noXRay,  \
+								CHK_firstCamFrameKeyToAll, CHK_firstCamFrameKeyToLinkConstraint, CHK_hairRenderableTask, CHK_skinWrapWithTarget, \
+								CHK_hasBasePieceTask, CHK_rootNodesCorrect, CHK_objectSetsTask, CHK_rigAndSkinPiecesHasParent, CHK_animPiecesFrozen, CHK_hasLinkPointConstraint, CHK_hasLinkConstraintVirtualWorld, CHK_hasLinkPointConstraintKey, CHK_hasSkinConnectionInfo, CHK_skinBonesConnected, CHK_skinRigNodesParentSameClass, CHK_splinesRigSkin2IterationsNoOptimize, CHK_animNodesVirtualParent, CHK_prpAndSprXrefMeshObjects, CHK_proxyObjectsWithoutMats, CHK_proxyModifiersActivated, CHK_selectionSetsCorrectNames, CHK_rigPartsOnZero, CHK_rigAndSkinTransformsFrozen, CHK_skinConnectionInfoIsCorrect, CHK_noSkinWrapOnCloth, CHK_noInheritanceFlagsOff, /*CHK_allAssetsInScene,*/ CHK_noXrefControllers, CHK_allOutOfRangeCurvesAreConstant, CHK_notNumberedSubassets, CHK_edgeLengthCorrectInProperties, CHK_edgeLengthCorrectInGlobalProperties, CHK_noPCTCInScene, \
+								CHK_PCspecifiedTask, CHK_TCObjectsControllersRightTask, CHK_cacheFilesRightPath, CHK_tcAndPcEnabled, CHK_hairModifiersOffInViewport,\
+								CHK_noHairCorruptPCNodes, CHK_forceUndefinedCacheInRigObjs, CHK_hairRenderableTask, CHK_hairNoSkinConnectionInfo, CHK_sFlagInSkinBones, CHK_dynConnectCorrectNames, CHK_meshWithoutModifiers, CHK_nodeInfoNameCoherence, CHK_meshPositionInZeroTask, CHK_meshRotationZeroTask, CHK_correctSubObjectLevel)
+								
+		global CHK_setTasks = #( CHK_assetsVisMode, CHK_fileInVersionFolder, CHK_differentAssetNodeName, CHK_noHairMeshMirror, \
+								CHK_NCfileNameTask, CHK_NClayersNameTask, CHK_NClayersNameMatchFileName, CHK_NCobjectsNameTask, CHK_NCobjectsAsTheirLayer, CHK_NCmatsNameTask, CHK_NCuniqueNamesTask, CHK_NCbitmapsNameTask, CHK_flagsCorrectTask, CHK_noCarriageReturnInNames, \
+								CHK_animInfoTask, CHK_PCInRightPlace, CHK_PCwithLinkToWorld, \
+								CHK_meshFrozenTransformsStateTask, CHK_meshLockedTransformsStateTask, CHK_meshScaleNotResetTask,  CHK_meshEffectsIDcorrectTask, CHK_meshRenderableTask, CHK_meshWithMaterialsTask, CHK_meshNotFrozenTransformsTask, CHK_meshFreezePoseTask, CHK_meshFreezePoseCorrect, CHK_meshPCmodifier, CHK_meshNotHiddenVertsOrPolys, CHK_allUnwrapsCollapsed, \
+								CHK_notSceneStatesInAssetFile, CHK_matMatEditorCleanTask, CHK_bitmapsExistAndCollectedTask, CHK_matProceduralExplicitMapChannel, CHK_matNotDuplicates, CHK_matVisibleInViewports, \
+								CHK_resetXFormTask, CHK_duplicatedModifiersTask, CHK_timeLineRange, CHK_showFrozenGrayTask, CHK_turboSmoothDisabledTask, CHK_turboSmooth1iterTask, CHK_noObjectsAnimatedTask, CHK_noCamerasTask, CHK_noLightsTask, CHK_layer0EmptyTask,  CHK_noEmptyLayers, CHK_sceneUnitsTask, CHK_timeUnitsTask, CHK_morpherARTdisabledTask, CHK_noEnviromentMap, CHK_noGroups, CHK_noFrozenActive, CHK_noXRay,  \
+								CHK_setXrefScene, CHK_setsOnXrefObject, CHK_noInheritanceFlagsOff, CHK_edgeLengthCorrectInProperties, CHK_edgeLengthCorrectInGlobalProperties,CHK_hairModifiersOffInViewport,\
+								CHK_noHairCorruptPCNodes, CHK_hairRenderableTask, CHK_hairNoSkinConnectionInfo, CHK_meshWithoutModifiers, CHK_nodeInfoNameCoherence, CHK_meshPositionInZeroTask, CHK_meshRotationZeroTask, CHK_PCspecifiedTask, CHK_correctSubObjectLevel)
+								
+		global CHK_fxTasks =  #(  CHK_assetsVisMode, CHK_fileInVersionFolder, \
+								 CHK_NCfileNameTask, CHK_NClayersNameTask, CHK_NClayersNameMatchFileName, CHK_NCobjectsNameTask, CHK_NCobjectsAsTheirLayer, CHK_NCmatsNameTask, CHK_NCuniqueNamesTask, CHK_NCbitmapsNameTask, CHK_flagsCorrectTask, CHK_NCAtmospherics, CHK_noCarriageReturnInNames, \
+ 								 CHK_animInfoTask, CHK_animTracksNotCorrupt, CHK_nonAnimTracksTransformsLockedTask, CHK_animInfoDefaults, \
+ 								 CHK_meshFrozenTransformsStateTask, CHK_meshLockedTransformsStateTask, CHK_meshHierarchyTask, CHK_meshPositionInZeroTask, CHK_meshRotationZeroTask, CHK_meshScaleNotResetTask, CHK_meshEffectsIDcorrectTask, CHK_meshRenderableTask, CHK_meshNoInstances, CHK_meshNotFrozenTransformsTask, CHK_meshFreezePoseTask, CHK_meshFreezePoseCorrect, CHK_meshesPCdeformable, CHK_allUnwrapsCollapsed, CHK_icCacheHasTcAncestor, \
+ 								 CHK_notSceneStatesInAssetFile, CHK_matMatEditorCleanTask, CHK_bitmapsExistAndCollectedTask, CHK_matBitmapsUnusedInAssetFolder, CHK_matProceduralExplicitMapChannel, CHK_matNotDuplicates,  \
+ 								 CHK_resetXFormTask, CHK_showFrozenGrayTask, CHK_duplicatedModifiersTask, CHK_turboSmoothDisabledTask, CHK_turboSmooth1iterTask, CHK_noObjectsAnimatedTask, CHK_noCamerasTask, CHK_noLightsTask, CHK_layer0EmptyTask, CHK_sceneUnitsTask, CHK_timeUnitsTask, CHK_timeLineRange, CHK_morpherARTdisabledTask, CHK_morpherUseLimitsDisabled, CHK_displayModeMaterial, CHK_noGroups, CHK_hideByCategoryDisabled, CHK_noFrozenActive, CHK_noXRay,  CHK_noEmptySelectionSets, CHK_sceneGammaValues, CHK_maxFileIsCompressed, \
+								 CHK_hasBasePieceTask, CHK_rootNodesCorrect, CHK_objectSetsTask, CHK_hasIconTask, CHK_rigAndSkinPiecesHasParent, CHK_hasKeepConnected, CHK_hasLinkPointConstraint, CHK_hasLinkConstraintVirtualWorld, CHK_hasLinkPointConstraintKey,  CHK_hasSkinConnectionInfo, CHK_skinBonesConnected, CHK_skinRigNodesParentSameClass, CHK_splinesRigSkin2IterationsNoOptimize, CHK_animNodesVirtualParent, CHK_noInheritanceFlagsOff, CHK_noXrefControllers, CHK_allOutOfRangeCurvesAreConstant, CHK_afterBurnDisplayInCorrectLayer, CHK_fxPFObjsInCorrectLayer, CHK_notNumberedSubassets, CHK_fxSubassetsNameCorrect, CHK_fxAtmosphericsAssetName, CHK_fxAtmosphericsNoIndex, CHK_edgeLengthCorrectInProperties, CHK_edgeLengthCorrectInGlobalProperties, \
+  								 CHK_PCspecifiedTask, CHK_tcAndPcEnabled)
+	
+	----------------------------------------
+	--------------- OTHER  --------------
+	----------------------------------------
+	
+	global currentChecksArrayName = undefined
+	global FI_passedChecks = #()
+	global FI_failedChecks = #()
+	global FI_notRequiredChecks = #()
+	global FI_warningChecks = #()
+	global FI_overrideActivated = false
+	global FI_checkedFile = false
+	global FI_time = undefined
+
+	OK
+)

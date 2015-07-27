@@ -1,0 +1,3197 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--Descripcion: libreria de gestion de pases de render
+------------------------------------------------------------------------------------------------------------------------------------------------
+(	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@attribute: containerInfo | Custom attribute para almacenar en los nodos que guarden la información de cada container.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	ca_containerInfo = attributes containerInfo
+	(
+		parameters main
+		(
+			--guarda la descripcion del CA y su version.
+			CA_version		type:#float		animatable:false	default:1.2
+			CA_description	type:#string	default:"Almacena la informacion de un container de render."
+				
+			--informacion específica del container
+			caption	type:#string	default:""	--@var | caption | Nombre para mostrar del container de iluminacion personalizado.
+			type	type:#string	default:"container"	--@var | type | Tipo del custom attribute. Container de iluminación en este caso.
+			subType	type:#string	default:""	--@var | subType| Indica que tipo de container es ("passTree" para los arboles de pases, "passGroup" para grupos de pases, "pass" para pases, "ObjectSet" para grupos de nodeSets, "lightSet" para grupos de luces, "hiddenObjectSet" para grupos de nodes a ocultar, "lodSet" para grupos de level of detail).
+			
+			------------------------------------------------
+			--informacion sobre el contenido almacenado en el container
+			enabled type:#boolean default:true --@var | enabled | Indica si el contenedor esta activo o apagado.
+			
+			--ESTO NO HACE FALTA AQUI YA QUE SON NODOS INDEPENDIENTES CARGADOS DESDE LA LIBRERIA DE OVERRIDES
+			--overrideNames type:#stringTab tabSizeVariable:true --@var | overrideNames | Nombres de los overrides del contenedor.
+			--overrideEnabledStates type:#boolTab tabSizeVariable:true --@var | overrideEnabledStates | Estado habilitado/deshabilitado de los overrides del contenedor.
+			
+			lightNodes type:#nodeTab tabSizeVariable:true --@var | lightNodes | Luces del contenedor.
+			lightNames type:#stringTab tabSizeVariable:true --@var | lightNames | Nombres de las luces del contenedor.
+			lightEnabledStates type:#boolTab tabSizeVariable:true --@var | lightEnabledStates | Estado habilitado/deshabilitado de las luces del contenedor.
+			
+			nodeSetNames type:#stringTab tabSizeVariable:true --@var | nodeSetNames | Nombres de los nodeSets del contenedor.
+			nodeSetEnabledStates type:#boolTab tabSizeVariable:true --@var | nodeSetEnabledStates | Estado habilitado/deshabilitado de los nodeSets del contenedor.
+
+			nodes		type:#nodeTab tabSizeVariable:true		--@var | nodes | Nodos del contenedor.
+			nodesNames	type:#stringTab tabSizeVariable:true	--@var | nodesNames | Nombres de los nodos del contenedor.
+			nodesEnabledStates type:#boolTab tabSizeVariable:true --@var | nodesEnabledStates | Estado habilitado/deshabilitado de los nodos del contenedor.
+			------------------------------------------------
+		)
+	)
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: container | Contiene todas las funciones de un container de iluminacion.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct str_container
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		caption = undefined,	--@var | caption | Nombre para mostrar del Container de iluminacion personalizado.
+		type = #container,	--@var | type | Tipo del struct. Container de iluminacion en este caso.
+		subType = undefined,	--@var | subType | Indica que tipo de container es (#passTree para los arboles de pases con settings generales de la escena, #passGroup para grupos de pases, #pass para pases, #ObjectSet para grupos de nodeSets, #lightSet para grupos de luces, #overrides, #hiddenObjectSet, #lodSet).
+		
+		subTypeOrder = #(#passTree, #setting, #overrides, #override, #passGroup, #pass, #lightSet, #ObjectSet,#flatColorObjectSet, #hiddenObjectSet, #lodSet), --@var | subTypeOrder | Orden de jerarquia y de muestra en interface de los hijos.
+		
+		parent = undefined,	--@var | parent | Padre del container. Si es un pase, supadre puede ser un grupo o el pase general de escena. Si es un grupo su padre solo puede ser el pase general de escena.etc.
+		children = #(),		--@var | children | Containers hijos. Si es el general de escena puede tener grupos y containers. Si es un grupo puede tener containers. Los containers normales no pueden tener hijos.
+		
+		overrides = #(),		--@var | overrides | overrides pertenecientes a este container. Se cargan en memoria apartir de los nodos que los representan en la escena.
+		
+		infoNode = undefined,		--@var | infoNode | Nodo de la escena que guarda la información del container de forma permanente.
+		infoNodeRegExp = "container_(?'type'.+)_(?'name'.+)", --@var | infoNodeRegExp | Expresión regular del nombre de los nodos de la escena que representan cada container.
+		
+		containerInfo = ca_containerInfo,	--@var | containerInfo | Custom attribute para almacenar los datos de cada container en los nodos.
+		
+		uiObj = undefined,	--@var | uiObj | Objeto de interfaz equivalente a este container, para poder buscar la equivalencia de forma rápida entre un container y el objeto de interface que lo controla.
+		
+		createRequiredOnCreate = true, --@var | createRequiredOnCreate | Booleano para especificar si debemos crear los overrides obligatorios en la creación (para que en duplicate no se haga)
+
+		requiredBackupOverrides = #("generalBackup", "mentalGeneralBackup", "scanlineGeneralBackup", /*"renderSaveFile",*/ "interactivity", "renderingControls"), --@var | requiredBackupOverrides | Array de nombres de overrides obligatorios para hacer backup en cada pase.
+		
+		requiredPassTreeOverrides = #("outputPath", "outputFile", "outputType", "outputSize", "commonParametersOptions", "timeOutput", "camera", "sourcePathsMapping", "rendererSettings"), --@var | requiredPassTreeOverrides | Array de nombres de overrides obligatorios.
+		requiredPassGroupOverrides = #(), --@var | requiredPassGroupOverrides | Array de nombres de overrides obligatorios.
+		requiredPassOverrides = #(), --@var | requiredPassOverrides | Array de nombres de overrides obligatorios.
+		requiredLightSetOverrides = #(), --@var | requiredLightSetOverrides | Array de nombres de overrides obligatorios.
+		requiredObjectSetOverrides = #(), --@var | requiredObjectSetOverrides | Array de nombres de overrides obligatorios.
+		requiredHiddenObjectSetOverrides = #(), --@var | requiredHiddenObjectSetOverrides | Array de nombres de overrides obligatorios.
+		requiredLodSetOverrides = #("lod"), --@var | requiredLodSetOverrides | Array de nombres de overrides obligatorios.
+		requiredFlatColorObjectSetOverrides = #("customMaterial"), --@var | requiredLodSetOverrides | Array de nombres de overrides obligatorios.
+		
+		allowedPassTreeOverrides = #("commonParametersOptions", "rendererSettings", "environmentAndEffects"), --@var | allowedPassTreeOverrides | Array de nombres de overrides permitidos.
+		allowedPassGroupOverrides = #("outputType", "timeOutput", "outputSize", "commonParametersOptions","rendererSettings", "environmentAndEffects", "hairThicknessAndDensity"), --@var | allowedPassGroupOverrides | Array de nombres de overrides permitidos.
+		allowedPassOverrides = #("atmospherics", "customMaterial", "material", "noOutput", "outputType", "timeOutput", "outputSize", "commonParametersOptions", "rendererSettings", "renderElements", "environmentAndEffects", "hairThicknessAndDensity"), --@var | allowedPassOverrides | Array de nombres de overrides permitidos.
+		allowedLightSetOverrides = #(), --@var | allowedLightSetOverrides | Array de nombres de overrides permitidos.
+		allowedObjectSetOverrides = #("objectID", "customMaterial", "material", "interactivity", "renderingControls", "hairThicknessAndDensity"), --@var | allowedObjectSetOverrides | Array de nombres de overrides permitidos.		
+		allowedHiddenObjectSetOverrides = #(), --@var | allowedHiddenObjectSetOverrides | Array de nombres de overrides permitidos.		
+		allowedLodSetOverrides = #("lod"), --@var | allowedLodSetOverrides | Array de nombres de overrides permitidos.		
+		allowedFlatColorObjectSetOverrides = #("customMaterial"), --@var | allowedLodSetOverrides | Array de nombres de overrides permitidos.		
+		
+		
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+			
+		------------------------------------------------
+		--@fn: string | getCaption | Devuelve el nombre para mostrar del container.
+		------------------------------------------------
+		fn getCaption =
+		(
+			this.infoNode.custAttributes[#containerInfo].caption
+		),
+			
+		------------------------------------------------
+		--@fn: string | getType | Devuelve el tipo del container.
+		------------------------------------------------
+		fn getType =
+		(
+			this.infoNode.custAttributes[#containerInfo].type as name
+		),
+		
+		------------------------------------------------
+		--@fn: string | getSubType | Devuelve el subtipo del container.
+		------------------------------------------------
+		fn getSubType =
+		(
+			this.infoNode.custAttributes[#containerInfo].subType as name			
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | getEnabledState | Devuelve el estado de habilitado/deshabilitado del contenedor.
+		------------------------------------------------
+		fn getEnabledState =
+		(
+			this.infoNode.custAttributes[#containerInfo].enabled
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | getEnabledState | Devuelve el estado de #ok, #warning o #error del contenedor.
+		------------------------------------------------
+		fn getState =
+		(
+			_subType = this.getSubtype()
+			if _subType == #passGroup or _subType == #pass or _subType == #ObjectSet or _subType == #flatColorObjectSet or _subType == #overrides then
+			(	
+				--if (this.getFirstOverrideOfEachType()).count > 0 then
+				if (this.getFirstLevelOverrides()).count > 0 then
+					_state = #okOverride
+				else
+					_state = #ok
+			)
+			else
+				_state = #ok
+
+			_state
+		),
+		
+		------------------------------------------------
+		--@fn: container | getParent | Devuelve el container padre o undefined si no tiene.
+		------------------------------------------------
+		fn getParent =
+		(
+			this.parent
+		),
+		
+		------------------------------------------------
+		--@fn: array{container} | getChildren | Devuelve los containers hijos, o un array vacio si no tiene.
+		------------------------------------------------
+		fn getChildren =
+		(
+			this.children
+		),
+			
+		------------------------------------------------
+		--@fn: node | getInfoNode | Devuelve el nodo físico de la escena que contiene la información del container.
+		------------------------------------------------
+		fn getInfoNode =
+		(
+			this.infoNode
+		),
+		
+		------------------------------------------------
+		--@fn: dotneObject | getUiObj | Devuelve el objeto de interface .net que controla este objeto.
+		------------------------------------------------
+		fn getUiObj =
+		(
+			this.uiObj
+		),
+		
+		------------------------------------------------
+		--@fn: array{override} | getOverrides | Devuelve el array de overrides de este contenedor.
+		------------------------------------------------
+		fn getOverrides =
+		(
+			this.overrides
+		),
+		
+		------------------------------------------------
+		--@fn: array{override} | getFirstOverrideOfEachType | Devuelve un array de overrides que obtiene de forma recursiva recorriendo contenedores y quedandose solo con el primer override que encuentra de cada tipo.
+		------------------------------------------------
+		fn getFirstOverrideOfEachType _foundTypes:#() =
+		(
+			_overrides = #()
+			
+			--coge el primer override de cada tipo
+			for _ov in (this.getOverrides()) where (_ov.getEnabledState()) and (findItem _foundTypes (_ov.getSubType()) == 0) do (append _foundTypes (_ov.getSubType()); append _overrides _ov)
+			
+			for _ch in (this.getChildren()) do
+			(
+				_childrendOverrides = _ch.getFirstOverrideOfEachType _foundTypes:_foundTypes
+				if _childrendOverrides.count != 0 then for _ov in _childrendOverrides do (append _foundTypes (_ov.getSubType()); append _overrides _ov)
+			)
+			
+			_overrides
+		),
+
+		------------------------------------------------
+		--@fn: array{override} | getFirstLevelOverrides | Devuelve un array de overrides de primer nivel.
+		------------------------------------------------
+		fn getFirstLevelOverrides =
+		(
+			_overrides = #()
+			
+			--coge el primer override de cada tipo
+			for _ov in (this.getOverrides()) where (_ov.getEnabledState()) do append _overrides _ov
+			
+			for _ch in (this.getChildren()) do
+			(
+				for _ov in (_ch.getOverrides()) where (_ov.getEnabledState()) do append _overrides _ov
+			)
+			
+			_overrides
+		),
+		
+		------------------------------------------------
+		--@fn: array{string} | getOverrideNames | Devuelve el array de nombres de overrides del contenedor.
+		------------------------------------------------
+		fn getOverrideNames =
+		(
+			(for _ov in this.overrides collect _ov.getCaption())
+		),
+
+
+		------------------------------------------------
+		--@fn: array{string} | getOverrideNames | Devuelve el array de nombres de overrides del contenedor.
+		------------------------------------------------
+		fn getOverrideNamesRecursive =
+		(
+			_myOverrides = for _ov in (this.getOverrideNames()) collect _ov
+			
+			for _ch in (this.getChildren()) do for _ov in (_ch.getOverrideNamesRecursive()) do appendIfUnique _myOverrides _ov
+
+			_myOverrides
+		),
+
+		------------------------------------------------
+		--@fn: array{boolean} | getOverrideEnabledStates | Devuelve el array de estados (habilitado/deshabilitado) de los overrides del contenedor.
+		------------------------------------------------
+		fn getOverrideEnabledStates =
+		(
+			(for _ov in this.overrides collect _ov.getEnabledState())
+		),
+		
+		------------------------------------------------
+		--@fn: array{string} | getLightNames | Devuelve el array de nombres de luces del contenedor.
+		--@opt: boolean | purge | Hace purge primero para asegurar la coherencia de la informacion
+		------------------------------------------------
+		fn getLightNames purge:true=
+		(
+			if purge do
+				this.purgueLightArrays() --se asegura la coherencia de la informacion
+			
+			this.infoNode.custAttributes[#containerInfo].lightNames
+		),
+
+		------------------------------------------------
+		--@fn: array{string} | getLightNamesRecursive | Devuelve mis luces y las de todos mis descendientes
+		--@opt: boolean | purge | Hace purge primero para asegurar la coherencia de la informacion
+		------------------------------------------------
+		fn getLightNamesRecursive purge:true =
+		(
+			_myLights = for l in this.getLightNames purge:purge collect l
+			
+			for _ch in (this.getChildren()) do for _light in (_ch.getLightNamesRecursive purge:purge) do appendIfUnique _myLights _light
+
+			_myLights
+		),
+		
+		------------------------------------------------
+		--@fn: array{boolean} | getLightEnabledStates | Devuelve el array de estados (habilitado/deshabilitado) de las luces del contenedor.
+		------------------------------------------------
+		fn getLightEnabledStates =
+		(
+			this.purgueLightArrays() --se asegura la coherencia de la informacion
+			
+			this.infoNode.custAttributes[#containerInfo].lightEnabledStates
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | getLightEnabledState | Devuelve estado (habilitado/deshabilitado) de la luz.
+		--@gets: integer | index | Indice de la luz del que obtener el estado (habilitado/deshabilitado).
+		------------------------------------------------
+		fn getLightEnabledState index =
+		(
+			(this.getLightEnabledStates())[index]
+		),
+		
+		------------------------------------------------
+		--@fn: array{nodes} | getLightNodes | Devuelve el array de luces del contenedor.
+		------------------------------------------------
+		fn getLightNodes =
+		(
+			this.purgueLightArrays() --se asegura la coherencia de la informacion
+			
+			this.infoNode.custAttributes[#containerInfo].lightNodes
+		),
+		
+		------------------------------------------------
+		--@fn: array{string} | getNodeSetNames | Devuelve el array de nombres de nodeSets del contenedor.
+		------------------------------------------------
+		fn getNodeSetNames =
+		(
+			this.infoNode.custAttributes[#containerInfo].nodeSetNames
+		),
+
+		------------------------------------------------
+		--@fn: array{string} | getNodeSetNamesRecursive | Devuelve mis nodeSets y los de todos mis descendientes
+		------------------------------------------------
+		fn getNodeSetNamesRecursive =
+		(
+			_myNodeSets = for _ns in (this.getNodeSetNames()) collect _ns
+			
+			for _ch in (this.getChildren()) do for _nodeSet in (_ch.getNodeSetNamesRecursive()) where (findItem _myNodeSets _nodeSet) == 0 do append _myNodeSets _nodeSet
+
+			_myNodeSets
+		),
+		
+		------------------------------------------------
+		--@fn: array{nodeSet} | getNodeSets | Devuelve el array de nodeSets del contenedor.
+		------------------------------------------------
+		fn getNodeSets =
+		(
+			--lb.timeStamps.start()
+
+			_nodeSets = #()
+			_nodeSetNames = this.getNodeSetNames() --obtiene los nombres de los nodeSets contenidos
+			
+			--lb.timeStamps.printTime message:("updateTrvContainers - getNodeSetNames - " + (this.getCaption()))
+
+			--recorre los nombres y busca el nodeSet correspondiente a cada uno
+			for _ns in _nodeSetNames do
+			(
+				_nodeSetsByName = lb.nodeSets.getByCaption _ns
+				if _nodeSetsByName.count != 0 then _nodeSets += _nodeSetsByName
+			)--for
+
+			--lb.timeStamps.printTime message:("updateTrvContainers - getByCaption - " + (this.getCaption()))
+			
+			_nodeSets
+		),
+		
+		------------------------------------------------
+		--@fn: array{boolean} | getNodeSetEnabledStates | Devuelve el array de estados (habilitado/deshabilitado) de los nodeSets del contenedor.
+		------------------------------------------------
+		fn getNodeSetEnabledStates =
+		(
+			this.infoNode.custAttributes[#containerInfo].nodeSetEnabledStates
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | getNodeSetEnabledState | Devuelve estado (habilitado/deshabilitado) del nodeSet
+		--@gets: integer | index | Indice del nodeSet del que obtener el estado (habilitado/deshabilitado).		
+		------------------------------------------------
+		fn getNodeSetEnabledState index =
+		(
+			this.infoNode.custAttributes[#containerInfo].nodeSetEnabledStates[index]
+		),
+
+		------------------------------------------------
+		--@fn: array{string} | getNodesNames | Devuelve el array de nombres de nodos del contenedor.
+		------------------------------------------------
+		fn getNodesNames =
+		(
+			this.purgueNodesArrays() --se asegura la coherencia de la informacion
+			
+			this.infoNode.custAttributes[#containerInfo].nodesNames
+		),
+		
+		------------------------------------------------
+		--@fn: array{boolean} | getNodesEnabledStates | Devuelve el array de estados (habilitado/deshabilitado) de las nodos del contenedor.
+		------------------------------------------------
+		fn getNodesEnabledStates =
+		(
+			this.purgueNodesArrays() --se asegura la coherencia de la informacion
+			
+			this.infoNode.custAttributes[#containerInfo].NodesEnabledStates
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | getNodesEnabledState | Devuelve estado (habilitado/deshabilitado) del nodo.
+		--@gets: integer | index | Indice del nodo del que obtener el estado (habilitado/deshabilitado).
+		------------------------------------------------
+		fn getNodeEnabledState index =
+		(
+			(this.getNodesEnabledStates())[index]
+		),
+		
+		------------------------------------------------
+		--@fn: array{nodes} | getNodes | Devuelve el array de nodos del contenedor.
+		------------------------------------------------
+		fn getNodes =
+		(
+			this.purgueNodesArrays() --se asegura la coherencia de la informacion
+			
+			this.infoNode.custAttributes[#containerInfo].nodes
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | getAllowedOverrideTypes | Devuelve los tipos de los overrides permitidos para el tipo de contenedor actual.
+		------------------------------------------------
+		fn getAllowedOverrideTypes =
+		(
+			if (this.getSubType()) == #overrides do
+			(
+				_parent = this.getParent()
+				if _parent != undefined do
+					case (_parent.getSubType()) of
+					(
+						#passTree:	return this.allowedPassTreeOverrides
+						#passGroup:	return this.allowedPassGroupOverrides
+						#pass:		return this.allowedPassOverrides
+						#lightSet:	return this.allowedLightSetOverrides
+						#ObjectSet:	return this.allowedObjectSetOverrides
+						#hiddenObjectSet:	return this.allowedHiddenObjectSetOverrides
+						#lodSet:	return this.allowedLodSetOverrides
+						#flatColorObjectSet:	return this.allowedFlatColorObjectSetOverrides
+					)--case
+			)
+			
+			return #()
+		),	
+		
+		------------------------------------------------
+		--@fn: boolean | getRequiredOverrideTypes | Devuelve los tipos de los overrides obligatorios para el tipo de contenedor actual.
+		------------------------------------------------
+		fn getRequiredOverrideTypes =
+		(
+			case (this.getSubType()) of
+			(
+				#overrides:
+				(
+					_parent = this.getParent()
+					if _parent != undefined do
+						case (_parent.getSubtype()) of
+						(
+							#passTree:	return this.requiredPassTreeOverrides
+							#passGroup:	return this.requiredPassGroupOverrides
+							#pass:		return this.requiredPassOverrides
+							#lightSet:	return this.requiredLightSetOverrides
+							#ObjectSet:	return this.requiredObjectSetOverrides
+							#hiddenObjectSet: return this.requiredHiddenObjectSetOverrides
+							#lodSet:	return this.requiredLodSetOverrides
+							#flatColorObjectSet: return this.requiredFlatColorObjectSetOverrides
+						)
+				)
+				#passTree:
+				(
+					return this.requiredBackupOverrides
+				)
+			)--case
+			
+			return #()
+		),
+		
+		------------------------------------------------
+		--@fn: node | getSettingsBackupNode | Devuelve el nodo de backup de propiedades antes del render.
+		------------------------------------------------
+		fn getSettingsBackupNode =
+		(
+			_settingsBackupNode = undefined
+			
+			if isValidNode this.infoNode then for _ch in this.infoNode.children where _ch.name == "settingsBackup" do _settingsBackupNode = _ch
+
+			_settingsBackupNode
+		),
+		
+		------------------------------------------------
+		--@fn: node | getOverridesEditBackupNode | Devuelve el nodo de backup de overrides en la edicion
+		------------------------------------------------
+		fn getOverridesEditBackupNode =
+		(
+			_overridesEditBackupNode = undefined
+			
+			if isValidNode this.infoNode then for _ch in this.infoNode.children where _ch.name == "overridesEditBackup" do _overridesEditBackupNode = _ch
+			
+			_overridesEditBackupNode
+		),
+		
+		------------------------------------------------
+		--@fn: container | getRootContainer | Devuelve el contenedor raiz de la jerarquia de contenedores a la que pertenece el actual.
+		------------------------------------------------
+		fn getRootContainer =
+		(
+			_rootContainer = this
+			while _rootContainer.getParent() != undefined do _rootContainer = _rootContainer.getParent()
+			
+			_rootContainer
+		),
+		
+		------------------------------------------------
+		--@fn: string | getInfo | Devuelve la informacion del container que mostrar en el objeto de interface que lo representa
+		------------------------------------------------
+		fn getInfo =
+		(
+			_info = ""
+			
+			case (this.getSubType()) of
+			(
+				#passTree:
+				(
+					_passGroups = for _ch in this.getChildren() where _ch.getSubType() == #passGroup collect _ch
+					_passes = #(); for _pg in _passGroups do for _ch in _pg.getChildren() where _ch.getSubType() == #pass do append _passes _ch
+					
+					_info = "passGroups(" + (_passGroups.count as string) + "), passes(" + (_passes.count as string) + ")"
+				)
+				
+				#passGroup:
+				(
+					_passes = for _ch in this.getChildren() where _ch.getSubType() == #pass collect _ch
+					
+					_info = "passes(" + (_passes.count as string) + ")"
+				)
+				
+				#pass:
+				(
+					_lightSets = for _ch in this.getChildren() where _ch.getSubType() == #lightSet collect _ch
+					_ObjectSets = for _ch in this.getChildren() where _ch.getSubType() == #ObjectSet collect _ch
+					_hiddenObjectSets = for _ch in this.getChildren() where _ch.getSubType() == #hiddenObjectSet collect _ch
+					_lodSets = for _ch in this.getChildren() where _ch.getSubType() == #lodSet collect _ch
+					_flatColorObjectSets = for _ch in this.getChildren() where _ch.getSubType() == #flatColorObjectSet collect _ch
+					
+					_info = "lightSets(" + (_lightSets.count as string) + "), ObjectSets(" + (_ObjectSets.count as string) + "), hiddenObjectSets(" + (_hiddenObjectSets.count as string) + "), lodSets(" + (_lodSets.count as string) + "), flatColorObjectSets(" + (_flatColorObjectSets.count as string) + ")"
+				)
+				
+				#lightSet:
+				(
+					_lights = this.getLightNames()
+					_info = "lights(" + (_lights.count as string) + ")"
+				)
+				
+				#ObjectSet:
+				(
+					_nodeSets = this.getNodeSetNames()
+					_info = "nodeSets(" + (_nodeSets.count as string) + ")"
+				)
+
+				#hiddenObjectSet:
+				(
+					_nodeSets = this.getNodeSetNames()
+					_nodes = this.getNodesNames()
+					_info = "nodeSets(" + (_nodeSets.count as string) + "), nodes(" + (_nodes.count as string) + ")"
+				)
+				
+				#lodSet:
+				(
+					_nodeSets = this.getNodeSetNames()
+					_nodes = this.getNodesNames()
+					_info = "nodeSets(" + (_nodeSets.count as string) + "), nodes(" + (_nodes.count as string) + ")"
+				)
+				#flatColorObjectSet:
+				(
+					_nodeSets = this.getNodeSetNames()
+					_nodes = this.getNodesNames()
+					_info = "nodeSets(" + (_nodeSets.count as string) + "), nodes(" + (_nodes.count as string) + ")"
+				)
+				#overrides:
+				(
+					_overrides = this.getOverrides()
+					_info = "overrides(" + (_overrides.count as string) + ")"
+				)
+			)--case
+			
+			_info
+		),
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | setCaption | Sustituye el nombre para mostrar al container.
+		--@gets: string | newCaption | Nuevo nombre para mostrar en el container.
+		------------------------------------------------
+		fn setCaption newCaption =
+		(
+			_index = 0 --indice del nombre por si ya existe
+			_defCaption = newCaption --nombre definitivo
+			
+			-----------------------------			
+			--si no tiene padre, hay que renombrarlo teniendo en cuenta todos los contenedores de la escena
+			if (this.getParent()) == undefined then
+			(
+				_infoNodes = lb.passManager.getAllInfoNodes()
+				_infoNodesCaptions = #()
+				for _inode in _infoNodes do
+				(
+					_m = lb.re.matchObj _inode.name this.infoNodeRegExp
+					if _m.success do
+						append _infoNodesCaptions (_m.Groups.Item("name")).value
+				)
+
+				-----------------------------
+				--busca el indice
+				for _cap in _infoNodesCaptions do --busca el indice que ponerle al nombre
+				(
+					if _cap == newCaption and _index == 0 then _index = 1
+					else if (matchPattern _cap pattern:(newCaption + "#???")) then
+					(
+						_cParts = filterString _cap "#"
+						_enumeration = _cParts[2] as integer
+						if _enumeration >= _index then _index = _enumeration + 1
+					)
+				)--for
+				-----------------------------
+			)
+			else --si tiene padre, solo hay preocuparse de que no coincida en nombre con sus hermanos
+			(
+				_brothers = (this.getParent()).getChildren()
+
+				for br in _brothers where br != this do
+				(
+					if (br.getCaption() == newCaption) then _index = 1
+					else if (matchPattern (br.getCaption()) pattern:(newCaption + "#???")) then
+					(
+						_cParts = filterString (br.getCaption()) "#"
+						_enumeration = _cParts[2] as integer
+						if _enumeration >= _index then _index = _enumeration + 1
+					)
+				)--for
+			)--if else
+			-----------------------------
+			
+			--si hay indice es porque esta repetido y hay que diferenciarlo
+			if _index > 0 then _defCaption = newCaption + "#" + (formattedprint _index format:"03d")
+						
+			--aplica el nuevo caption
+			this.infoNode.custAttributes[#containerInfo].caption = _defCaption
+
+			--y el nombre
+			_replaces = dotNetObject "System.Collections.Hashtable"
+			_replaces.add "type" this.infoNode.custAttributes[#containerInfo].subType
+			_replaces.add "name" (this.infoNode.custAttributes[#containerInfo].caption)
+			this.infoNode.name = lb.re.replaceGroupsInPattern (this.infoNodeRegExp) _replaces
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | setSubType | Sustituye el subtipo concreto del container.
+		--@gets: name | newType | Nuevo tipo para el container. (#passTree para los arboles de pases con los settings generales de la escena, #passGroup para grupos de pases, #pass para pases, #ObjectSet para grupos de nodeSets, #lightSet para grupos de luces, #hiddenObjectSet para grupos de nodes a ocultar, #lodSet para grupos de nivel de detalle).
+		------------------------------------------------
+		fn setSubType newSubType =
+		(
+			this.infoNode.custAttributes[#containerInfo].subType = (newSubType as string)
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | setEnabledState | Sustituye el estado (habilitado/deshabilitado) de container.
+		--@gets: boolean | newState | Nuevo estado (habilitado/deshabilitado) para el conenedor.
+		------------------------------------------------
+		fn setEnabledState newState =
+		(
+			this.infoNode.custAttributes[#containerInfo].enabled = newState
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | setParent | Sustituye el padre del container.
+		--@gets: container | newParent | Nuevo container padre para el container actual.
+		--@opt: boolean | placeInSceneNodes | false | Indica si recolocar los nodos en la escena tras el emparentamiento.
+		--@opt: integer | index | -1 | Indica en que posicion de hijos emparentarse respecto a su padre. -1 indica que lo debe emparentar al final.
+		------------------------------------------------
+		fn setParent newParent placeInSceneNodes:false index:-1 =
+		(
+			this.parent = newParent
+
+			if this.infoNode.parent != newParent.getInfoNode() then this.infoNode.parent = newParent.getInfoNode()
+
+			this.parent.addChild this index:index
+			
+			this.parent.sortChildrenByType() --reordena los hijjos del padre, para que estén emparentados en un orden adecuado y se muestren en ese mismo orden en los interfaces.
+			if placeInSceneNodes then lb.passManager.placeInScene() --recoloca todos los containers en arbol segun jerarquia.
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | setChildren | Sustituye los containers hijos.
+		--@gets: array{container} | newChildren | Nuevos containers hijos para el container actual.
+		--@opt: boolean | placeInSceneNodes | false | Indica si recolocar los nodos en la escena tras el emparentamiento.
+		------------------------------------------------
+		fn setChildren newChildren placeInSceneNodes:false =
+		(
+			this.children = newChildren
+			for _ch in newChildren where (_ch.getInfoNode()).parent != this.infoNode do (_ch.getInfoNode()).parent = this.infoNode			
+			
+			this.sortChildrenByType() --Reordena los hijjos en caso de tener, para que estén emparentados en un orden adecuado y se muestren en ese mismo orden en los interfaces.	
+			if placeInSceneNodes then lb.passManager.placeInScene() --recoloca todos los containers en arbol segun jerarquia.
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | setUiObj | Sustituye el objeto de interface relacionado con el container.
+		--@gets: dotNetObject | newUiObj | Nuevo elemento de interface relacionado con el container.
+		------------------------------------------------
+		fn setUiObj newUiObj =
+		(
+			this.uiObj = newUiObj
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | setOverrides | Sustituye el array de overrides por unos nuevos
+		--@gets: array{override} | newOverrides | Nuevo array de overrides para el contenedor.
+		------------------------------------------------
+		fn setOverrides newOverrides =
+		(
+			this.overrides = newOverrides
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | setOverrideEnabledStates | Sustituye el array de estados (habilitado/deshabilitado) de overrides del contenedor.
+		--@gets: array{boolean} | overrideEnabledStates | Nuevo array de estados (habilitado/deshabilitado) de overrides para el contenedor.
+		------------------------------------------------
+		fn setOverrideEnabledStates overrideEnabledStates =
+		(			
+			for i=1 to this.overrides.count do this.overrides[i].setEnabledState overrideEnabledStates[i]
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | setLightNames | Sustituye el array de nombres de luces del contenedor.
+		--@gets: array{string} | lightNames | Nuevo array de nombres de luces para el contenedor.
+		------------------------------------------------
+		fn setLightNames lightNames =
+		(
+			this.infoNode.custAttributes[#containerInfo].lightNames = lightNames
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | setLightEnabledStates | Sustituye el array de estados (habilitado/deshabilitado) de luces del contenedor.
+		--@gets: array{boolean} | lightEnabledStates | Nuevo array de estados (habilitado/deshabilitado) de luces para el contenedor.
+		------------------------------------------------
+		fn setLightEnabledStates lightEnabledStates =
+		(
+			this.infoNode.custAttributes[#containerInfo].lightEnabledStates = lightEnabledStates
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | setNodeSetEnabledState | Sustituye estado (habilitado/deshabilitado) del nodeSet
+		--@gets: integer | index | Indice de laluz a la que establecer el estado (habilitado/deshabilitado).
+		--@gets: boolean | state | Nuevo estado (habilitado/deshabilitado) para el nodeSet.
+		------------------------------------------------
+		fn setLightEnabledState index state =
+		(
+			this.infoNode.custAttributes[#containerInfo].lightEnabledStates[index] = state
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | setLightNodes | Sustituye el array de luces del contenedor.
+		--@gets: array{node} | lightNodes | Nuevo array de luces para el contenedor.
+		------------------------------------------------
+		fn setLightNodes lightNodes =
+		(
+			this.infoNode.custAttributes[#containerInfo].lightNodes = lightNodes
+			
+			--tambien actualiza el array de nombres de las luces y el estado de habilitado de cada una de ellas
+			this.setLightNames (for _l in lightNodes collect _l.name)
+			this.setLightEnabledStates (for _l in lightNodes collect true)
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | setNodeSetNames | Sustituye el array de nombres de nodeSets del contenedor.
+		--@gets: array{string} | nodeSetNames | Nuevo array de nombres de nodeSets para el contenedor.
+		------------------------------------------------
+		fn setNodeSetNames nodeSetNames =
+		(
+			this.infoNode.custAttributes[#containerInfo].nodeSetNames = nodeSetNames
+			
+			--establece el estado de todos a true
+			_nodeSetStates = for _n in nodeSetNames collect true
+			this.setNodeSetEnabledStates _nodeSetStates
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | setNodeSets | Sustituye el array de nombres de nodeSets del contenedor a partir de un array de nodeSets.
+		--@gets: array{nodeSet} | newNodeSets | Nuevo array de nodeSets para el contenedor.
+		------------------------------------------------
+		fn setNodeSets newNodeSets nodesetStates:undefined =
+		(
+			this.infoNode.custAttributes[#containerInfo].nodeSetNames = (for _ns in newNodeSets collect _ns.getCaption())
+
+			--establece el estado de todos a true
+			if nodesetStates == undefined do
+				nodeSetStates = for _n in newNodeSets collect true
+
+			this.setNodeSetEnabledStates nodeSetStates
+		),		
+		
+		------------------------------------------------
+		--@fn: undefined | setNodeSetEnabledStates | Sustituye el array de estados (habilitado/deshabilitado) de nodeSets del contenedor.
+		--@gets: array{boolean} | nodeSetEnabledStates | Nuevo array de estados (habilitado/deshabilitado) de nodeSets para el contenedor.
+		------------------------------------------------
+		fn setNodeSetEnabledStates nodeSetEnabledStates =
+		(
+			this.infoNode.custAttributes[#containerInfo].nodeSetEnabledStates = nodeSetEnabledStates
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | setNodeSetEnabledState | Sustituye estado (habilitado/deshabilitado) del nodeSet
+		--@gets: integer | index | Indice del nodeSet al que establecer el estado (habilitado/deshabilitado).
+		--@gets: boolean | state | Nuevo estado (habilitado/deshabilitado) para el nodeSet.
+		------------------------------------------------
+		fn setNodeSetEnabledState index state =
+		(
+			this.infoNode.custAttributes[#containerInfo].nodeSetEnabledStates[index] = state
+		),	
+
+		------------------------------------------------
+		--@fn: undefined | setNodesNames | Sustituye el array de nombres de nodos del contenedor.
+		--@gets: array{string} | NodesNames | Nuevo array de nombres de nodos para el contenedor.
+		------------------------------------------------
+		fn setNodesNames nodesNames =
+		(
+			this.infoNode.custAttributes[#containerInfo].nodesNames = nodesNames
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | setNodesEnabledStates | Sustituye el array de estados (habilitado/deshabilitado) de nodos del contenedor.
+		--@gets: array{boolean} | nodesEnabledStates | Nuevo array de estados (habilitado/deshabilitado) de nodos para el contenedor.
+		------------------------------------------------
+		fn setNodesEnabledStates nodesEnabledStates =
+		(
+			this.infoNode.custAttributes[#containerInfo].nodesEnabledStates = nodesEnabledStates
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | setNodeSetEnabledState | Sustituye estado (habilitado/deshabilitado) del nodos
+		--@gets: integer | index | Indice de laluz a la que establecer el estado (habilitado/deshabilitado).
+		--@gets: boolean | state | Nuevo estado (habilitado/deshabilitado) para el nodos.
+		------------------------------------------------
+		fn setNodeEnabledState index state =
+		(
+			this.infoNode.custAttributes[#containerInfo].nodesEnabledStates[index] = state
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | setNodes | Sustituye el array de nodos del contenedor.
+		--@gets: array{node} | Nodes | Nuevo array de nodos para el contenedor.
+		------------------------------------------------
+		fn setNodes nodes =
+		(
+			this.infoNode.custAttributes[#containerInfo].nodes = nodes
+			
+			--tambien actualiza el array de nombres de las nodos y el estado de habilitado de cada una de ellas
+			this.setNodesNames (for _l in nodes collect _l.name)
+			this.setNodesEnabledStates (for _l in nodes collect true)
+		),
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | updateUIinfo | Actualiza la informacion del contenedor en su objeto de UI si tuviera.		
+		------------------------------------------------
+		fn updateUIinfo =
+		(
+			if this.getUiObj() != undefined then
+				(this.getUiObj()).setValue 1 (this.getInfo())
+			
+			--actualiza los contenedores padre jerarquicamente hacia arriba	
+			if this.getParent() != undefined then (this.getParent()).updateUIinfo()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | purgueLightArrays | Mantiene la coherencia entre las luces de la escena, las almacenadas y sus nombres.
+		------------------------------------------------
+		fn purgueLightArrays =
+		(
+			--recorre el array de nodos mirando si hay alguno que no sea valido o se haya eliminado
+			--si esto ocurre comprueba el nombre que tiene almacenado y si ese objeto existe en la escena lo toma como el que hay que usar
+			--si el nodo es valido, comprueba que no haya cambiado de nombre para almacenar el nuevo
+			for i=this.infoNode.custAttributes[#containerInfo].lightNodes.count to 1 by -1 do
+			(
+				_light = this.infoNode.custAttributes[#containerInfo].lightNodes[i] --luz almacenada
+				_lightName = this.infoNode.custAttributes[#containerInfo].lightNames[i] --nombre de la luz
+				
+				if not isValidNode _light then --si le ha pasado algo a la luz
+				(
+					_sceneNode = execute ("$'" + _lightName + "'") --intenta recuperar la luz a traves de su nombre
+					
+					if isValidNode _sceneNode then --si consigue recuperarla la almacena
+						this.infoNode.custAttributes[#containerInfo].lightNodes[i] = _sceneNode
+					else --si no, la elimina
+					(
+						deleteItem this.infoNode.custAttributes[#containerInfo].lightNodes i
+						deleteItem this.infoNode.custAttributes[#containerInfo].lightNames i
+						deleteItem this.infoNode.custAttributes[#containerInfo].lightEnabledStates i
+					)--if else
+				)
+				else if _light.name != _lightName then --si la luz esta correcta pero ha cambiado su nombre
+				(
+					this.infoNode.custAttributes[#containerInfo].lightNames[i] = _light.name --almacena el nuevo nombre					
+				)--if else if
+			)--for
+		),
+
+		------------------------------------------------
+		--@fn: undefined | purgueNodesArrays | Mantiene la coherencia entre los nodos de la escena, los almacenadas y sus nombres.
+		------------------------------------------------
+		fn purgueNodesArrays =
+		(
+			--recorre el array de nodos mirando si hay alguno que no sea valido o se haya eliminado
+			--si esto ocurre comprueba el nombre que tiene almacenado y si ese objeto existe en la escena lo toma como el que hay que usar
+			--si el nodo es valido, comprueba que no haya cambiado de nombre para almacenar el nuevo
+			for i=this.infoNode.custAttributes[#containerInfo].nodes.count to 1 by -1 do
+			(
+				_node = this.infoNode.custAttributes[#containerInfo].nodes[i] --luz almacenada
+				_nodeName = this.infoNode.custAttributes[#containerInfo].nodesNames[i] --nombre de el nodo
+				
+				if not isValidNode _node then --si le ha pasado algo a el nodo
+				(
+					_sceneNode = execute ("$'" + _nodeName + "'") --intenta recuperar el nodo a traves de su nombre
+					
+					if isValidNode _sceneNode then --si consigue recuperarla la almacena
+						this.infoNode.custAttributes[#containerInfo].nodes[i] = _sceneNode
+					else --si no, la elimina
+					(
+						deleteItem this.infoNode.custAttributes[#containerInfo].nodes i
+						deleteItem this.infoNode.custAttributes[#containerInfo].nodesNames i
+						deleteItem this.infoNode.custAttributes[#containerInfo].nodesEnabledStates i
+					)--if else
+				)
+				else if _node.name != _nodeName then --si el nodo esta correcta pero ha cambiado su nombre
+				(
+					this.infoNode.custAttributes[#containerInfo].nodesNames[i] = _node.name --almacena el nuevo nombre					
+				)--if else if
+			)--for
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | addLight | Añade una nueva luz en el contenedor.
+		--@gets: node | newLight | Nueva luz para el contenedor.
+		------------------------------------------------
+		fn addLight newLight =
+		(
+			this.purgueLightArrays() --primero se asegura la coerencia de la informacion de luces y nombres de luces
+			
+			if findItem (this.getLightNodes()) newLight == 0 then
+			(
+				append this.infoNode.custAttributes[#containerInfo].lightNodes newLight
+				append this.infoNode.custAttributes[#containerInfo].lightNames newLight.name
+				append this.infoNode.custAttributes[#containerInfo].lightEnabledStates true
+			)--if
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | addNodeSetByName | Almacena en el contenedor un nombre de nodeSet mas.
+		--@gets: string | nodeSetName | Nuevo nombre de nodeSet para el contenedor.
+		------------------------------------------------
+		fn addNodeSetByName nodeSetName =
+		(
+			if findItem (this.getNodeSetNames()) nodeSetName == 0 then
+			(
+				append (this.infoNode.custAttributes[#containerInfo].nodeSetNames) nodeSetName
+				append (this.infoNode.custAttributes[#containerInfo].nodeSetEnabledStates) true
+			)
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | addOverride | Crea un nuevo override en el contenedor.
+		--@gets: string | type | Tipo del nuevo override a crear.
+		------------------------------------------------
+		fn addOverride type _includeNotAllowed:false =
+		(
+			_newOverride = undefined
+
+			if findItem (this.getAllowedOverrideTypes()) type != 0 or _includeNotAllowed then
+			(
+				_newOverride = lb.overrides.newOverride caption:(lb.time.getCurrentTimeId()) subType:type parentContainer:this
+				
+				--si ha conseguido crear el override lo emparenta al contenendor y lo almacena en memoria dentro del contenedor
+				if _newOverride != undefined then
+				(
+					_newOverride.setParent this.infoNode --emparenta el override al contenedor					
+					append this.overrides _newOverride --almacena el override en el array de overrides del contenedor
+					_newOverride.setCaption type --el pone al override el nombre de su tipo
+				)--if
+				
+				this.sortOverridesByPrecedence() --ordena los overrides por precedencia
+			)
+
+			_newOverride
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | appendOverride | Añade un nuevo override en el contenedor.
+		--@gets: override | newOverride | Nuevo override que añadir.
+		------------------------------------------------
+		fn appendOverride newOverride _includeNotAllowed:false =
+		(
+			if findItem (this.getAllowedOverrideTypes()) (newOverride.getSubType()) != 0 or _includeNotAllowed then
+			(
+				newOverride.setParent (this.getInfoNode()) --hace al nodo del contenedor padre del override
+				newOverride.setParentContainer this --hace al contenedor padre del override
+				append this.overrides newOverride --almacena el override en el array de overrides del contenedor
+			)
+		),
+
+		------------------------------------------------
+		--@fn: undefined | addNode | Añade un nuevo nodo en el contenedor.
+		--@gets: node | newNode | Nuevo nodo para el contenedor.
+		------------------------------------------------
+		fn addNode newNode =
+		(
+			this.purgueNodesArrays() --primero se asegura la coerencia de la informacion de luces y nombres de luces
+			
+			if findItem (this.getNodes()) newNode == 0 then
+			(
+				append this.infoNode.custAttributes[#containerInfo].nodes newNode
+				append this.infoNode.custAttributes[#containerInfo].nodesNames newNode.name
+				append this.infoNode.custAttributes[#containerInfo].nodesEnabledStates true
+			)--if
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | removeOverrideByName | Elimina el override del listado a partir de nombre pasado. Devuelve TRUE si estaba en el listado y lo elimina, FALSE si no.
+		--@gets: string | overrideName | Nombre de override para eliminar del contenedor.
+		------------------------------------------------
+		fn removeOverrideByName overrideName =
+		(
+			_success = false
+			
+			_index = findItem (this.getOverrideNames()) overrideName
+			if _index != 0 then
+			(
+				lb.overrides.removeOverride (this.overrides[_index])
+				deleteItem this.overrides _index
+					
+				_success = true
+			)
+			
+			_success
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | removeOverrides | Elimina todos los overrides del contenedor.
+		------------------------------------------------
+		fn removeOverrides =
+		(
+			for i=this.overrides.count to 1 by -1 do
+			(
+				lb.overrides.removeOverride (this.overrides[i])
+				deleteItem this.overrides i
+			)--for
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | removeLightByIndex | Elimina la luz que ocupa el indice pasado por parametro del array de luces del contenedor.
+		--@gets: integer | lightIndex | Indice de la luz para eliminar del contenedor.
+		------------------------------------------------
+		fn removeLightByIndex lightIndex =
+		(
+			_success = false
+			
+			if lightIndex > 0 and lightIndex <= (this.getLightNames()).count then
+			(
+				deleteItem (this.infoNode.custAttributes[#containerInfo].lightNodes) lightIndex
+				deleteItem (this.infoNode.custAttributes[#containerInfo].lightNames) lightIndex
+				deleteItem (this.infoNode.custAttributes[#containerInfo].lightEnabledStates) lightIndex
+				_success = true
+			)
+			
+			_success
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | removeLights | Elimina todas las luces de un contenedor.
+		------------------------------------------------
+		fn removeLights =
+		(
+			this.infoNode.custAttributes[#containerInfo].lightNodes = #()
+			this.infoNode.custAttributes[#containerInfo].lightNames = #()
+			this.infoNode.custAttributes[#containerInfo].lightEnabledStates = #()
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | removeNodeSetByName | Elimina el nodeSet del listado a partir de nombre pasado. Devuelve TRUE si estaba en el listado y lo elimina, FALSE si no.
+		--@gets: string | nodeSetName | Nombre de nodeSet para eliminar del contenedor.
+		------------------------------------------------
+		fn removeNodeSetByName nodeSetName =
+		(
+			_success = false
+			
+			_index = findItem (this.getNodeSetNames()) nodeSetName 
+			if _index != 0 then
+			(
+				deleteItem (this.infoNode.custAttributes[#containerInfo].nodeSetNames) _index
+				deleteItem (this.infoNode.custAttributes[#containerInfo].nodeSetEnabledStates) _index
+				_success = true
+			)
+			
+			_success
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | removeNodeSets | Elimina todos los nodeSets del contenedor.
+		------------------------------------------------
+		fn removeNodeSets =
+		(
+			this.infoNode.custAttributes[#containerInfo].nodeSetNames = #()
+			this.infoNode.custAttributes[#containerInfo].nodeSetEnabledStates = #()
+		),
+
+		------------------------------------------------
+		--@fn: boolean | removeNodeByIndex | Elimina el nodo que ocupa el indice pasado por parametro del array de luces del contenedor.
+		--@gets: integer | nodeIndex | Indice del nodo para eliminar del contenedor.
+		------------------------------------------------
+		fn removeNodeByIndex nodeIndex =
+		(
+			_success = false
+			
+			if nodeIndex > 0 and nodeIndex <= (this.getNodesNames()).count then
+			(
+				deleteItem (this.infoNode.custAttributes[#containerInfo].nodes) nodeIndex
+				deleteItem (this.infoNode.custAttributes[#containerInfo].nodesNames) nodeIndex
+				deleteItem (this.infoNode.custAttributes[#containerInfo].nodesEnabledStates) nodeIndex
+				_success = true
+			)
+			
+			_success
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | removeNodes | Elimina todos los nodos de un contenedor.
+		------------------------------------------------
+		fn removeNodes =
+		(
+			this.infoNode.custAttributes[#containerInfo].nodes = #()
+			this.infoNode.custAttributes[#containerInfo].nodesNames = #()
+			this.infoNode.custAttributes[#containerInfo].nodesEnabledStates = #()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | removeChild | Elimina el contenedor hijo del listado. Importante, solo lo elimina de los hijos, no lo elimina de la escena.
+		--@gets: container | childToRemove | Container hijo que eliminar de la lista de hijos.
+		--@opt: boolean | placeInSceneNodes | false | Indica si recolocar los nodos en la escena tras la eliminacion.
+		------------------------------------------------
+		fn removeChild childToRemove placeInSceneNodes:false =
+		(
+			_index = findItem this.children childToRemove
+
+			if _index != 0 then 
+			(
+				(childToRemove.getInfoNode()).parent = undefined
+				childToRemove.parent = undefined
+				deleteItem this.children _index
+
+				if placeInSceneNodes then lb.passManager.placeInScene() --recoloca todos los containers en arbol segun jerarquia.	
+			)--if
+		),
+
+		------------------------------------------------
+		--@fn: undefined | remove | Elimina el container y todos sus subContainers.
+		--@opt: boolean | placeInSceneNodes | false | Indica si recolocar los nodos en la escena tras el emparentamiento.
+		------------------------------------------------
+		fn remove placeInSceneNodes:false =
+		(
+			--primero elimina los hijos de forma recursiva
+			for i = (this.getChildren()).count to 1 by -1 do (this.getChildren())[i].remove placeInSceneNodes:false
+			
+			--despues le dice a su padre si tiene, que ya no va a ser su hijo
+			if this.parent != undefined then
+			(
+				_index = findItem this.parent.children this
+				if _index !=0 then deleteItem this.parent.children _index
+			)
+			
+			--antes de la eliminacion debe eliminar si tiene, sus overrides
+			this.removeOverrides()
+			
+			--antes de la eliminacion debe eliminar si tiene, el nodo de backup de settings para el render
+			if this.getSettingsBackupNode() != undefined then delete (this.getSettingsBackupNode())
+				
+			--antes de la eliminacion debe eliminar si tiene, el nodo de backup de edicion de overrides.
+			if this.getOverridesEditBackupNode() != undefined then delete (this.getOverridesEditBackupNode())	
+			
+			if isValidNode this.infoNode then delete this.infoNode
+			if placeInSceneNodes then lb.passManager.placeInScene() --recoloca todos los containers en arbol segun jerarquia.
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | removeUiObjHierarchy | Elimina el objeto de interface de este contenedor y de todos sus descendientes
+		------------------------------------------------
+		fn removeUiObjHierarchy =
+		(
+			this.uiObj = undefined
+			
+			for _ch in this.getChildren() do _ch.removeUiObjHierarchy()
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | purge | Limpia el container para evitar incoherencias en su información interna. Devuelve TRUE si todo va bien y FALSE si no.
+		--@opt: boolean | purgeDescendants | false | Indica si purgar recursivamente los containers hijos.
+		------------------------------------------------
+		fn purge purgeDescendants:false =
+		(
+			_success = false
+			
+			------------------------------------------------
+			--proceso de purga para este container
+			--AQUI: DE MOMENTO NO SE HACE PURGA PORQUE ES PELIGROSO, HAY QUE AVANZAR EN ESTE CAMPO PERO CON CALMA Y CABEZA
+			
+			------------------------------------------------
+			--proceso de purga de nodeSets si tuviera
+			/*if (this.getNodeSetNames()).count != 0 then
+			(
+				_changed = false --para saber si se ha perdido algun nodeSet
+				_newNodeSetNames = #() --para almacenar los nodeSets que siguen existiendo
+				
+				--recorre los nombres averiguando si siguen existiendo en la escena
+				for _name in this.getNodeSetNames() do
+				(
+					_nodeSets = lb.nodeSets.getByCaption _name
+					if _nodeSets.count == 0 then _changed = true else append _newNodeSetNames _name
+				)--for
+				
+				--si algo ha cambiado lo actualiza
+				if _changed then this.setNodeSetNames _newNodeSetNames
+			)--if*/
+			------------------------------------------------
+			
+			_success = true	
+			------------------------------------------------
+			
+			------------------------------------------------
+			--proceso de purga para sus hijos
+			if purgeDescendants then
+				for _ch in this.getChildren() where not (_chr.purge purgeDescendants:purgeDescendants) do _success = false
+			------------------------------------------------
+			
+			_success
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | addChild | Añade un hijo al container.
+		--@gets: container | newChild | Nuevo container hijo para el container actual.
+		--@opt: boolean | placeInSceneNodes | false | Indica si recolocar los nodos en la escena tras el emparentamiento.
+		--@opt: boolean | sortChildrenByTypes | true | Indica si ordenar los hijos por tipos.
+		--@opt: integer | index | -1 | Indica en que posicion añadir al hijo.
+		------------------------------------------------
+		fn addChild newChild placeInSceneNodes:false sortChildrenByTypes:true index:-1 =
+		(
+			_added = false
+
+			if index < 0 then _added = appendIfUnique this.children newChild
+			else
+			(
+				_sortedChildren = for i=1 to (index - 1) collect this.children[i]
+				_sortedChildren += #(newChild)
+				for i=index to this.children.count do append _sortedChildren this.children[i]
+
+				this.children = _sortedChildren
+				_added = true
+			)--if else
+
+			if _added and (((newChild.getInfoNode()).parent != this.infoNode) /*or (index > 0)*/) then
+			--if appendIfUnique this.children newChild and (newChild.getInfoNode()).parent != this.infoNode then
+			(
+				(newChild.getInfoNode()).parent = this.infoNode
+				newChild.parent = this
+				
+				if sortChildrenByTypes then this.sortChildrenByType() --Reordena los hijjos en caso de tener, para que estén emparentados en un orden adecuado y se muestren en ese mismo orden en los interfaces.
+				
+				if placeInSceneNodes then lb.passManager.placeInScene() --recoloca todos los containers en arbol segun jerarquia.	
+			)--if
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | sortChildrenByType | Reordena los hijjos en caso de tener, para que estén emparentados en un orden adecuado y se muestren en ese mismo orden en los interfaces.
+		------------------------------------------------
+		fn sortChildrenByType =
+		(
+			_sortedChildren = #() --array para los hijos bien ordenados
+			_settingsBackupNode = this.getSettingsBackupNode() --nodo de backup de settings de render, que no se debe desemparentar
+			_overridesEditBackupNode = this.getOverridesEditBackupNode() --nodo de backup de settings de render, que no se debe desemparentar
+			_overridesNodes = for _ov in this.getOverrides() collect _ov.getInfoNode()
+			
+			--recopila de nuevo todos los hijos pero en el orden correcto
+			for i=1 to this.subTypeOrder.count do
+				for _ch in this.children where _ch.getSubType() == this.subTypeOrder[i] do append _sortedChildren _ch
+			
+			this.children = _sortedChildren --susitutye los hijos por los hijos ordenados
+			this.infoNode.children.parent = undefined --desemparenta todos los hijos para poder reemparentarlos en el orden correcto
+			
+			--recorre los hijos en el orden correcto y rehace los emparentamientos
+			if _settingsBackupNode != undefined then _settingsBackupNode.parent = this.infoNode
+			if _overridesEditBackupNode != undefined then _overridesEditBackupNode.parent = this.infoNode
+			if _overridesNodes.count != 0 then _overridesNodes.parent = this.infoNode
+			_childrenInfoNodes = for _sc in _sortedChildren collect _sc.getInfoNode()
+			_childrenInfoNodes.parent = this.infoNode	
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | sortOverridesByPrecedence | Reordena los overrides de un contenedor, para que estén emparentados en un orden adecuado y se muestren en ese mismo orden en los interfaces.
+		------------------------------------------------
+		fn sortOverridesByPrecedence =
+		(
+			--obtiene los overrides del contenedor y sus tipos
+			_currentOverrides = this.getOverrides()
+			_currentOverridesTypes = for _ov in _currentOverrides collect _ov.getSubType()
+			
+			--obtiene el orden correcto para ese tipo de contenedor
+			_orderTypes = makeUniqueArray (this.getRequiredOverrideTypes()) + (this.getAllowedOverrideTypes())
+				
+			_sortedOverrides = #() --array para los overrides en el nuevo orden correcto
+				
+			--recorre los tipos buscando en los actuales el que toque por orden
+			for _type in _orderTypes do
+				for i=_currentOverrides.count to 1 by -1 do
+				(
+					if _type == _currentOverridesTypes[i] then
+					(
+						append _sortedOverrides _currentOverrides[i]
+						deleteItem _currentOverrides i
+						deleteItem _currentOverridesTypes i
+					)--if
+				)--for			
+			
+			_sortedOverrides += _currentOverrides --añade los que no tienen orden establecido
+			
+			--obtiene los points de representacion de cada override
+			_sortedOverridesNodes = for _ov in _sortedOverrides collect _ov.getInfoNode()
+			
+			--remparenta en el orden correcto
+			_sortedOverridesNodes.parent = undefined
+			for _ovNode in _sortedOverridesNodes do _ovNode.parent = this.getInfoNode()
+			
+			--rellena de nuevo la variable overrides del contenedor
+			this.overrides = _sortedOverrides
+		),
+		
+		------------------------------------------------
+		--@fn: node | createSettingsBackupNode | Crea el nodo de settings de backup donde se amlacena todo parametro necesario antes de un render y lo devuelve.
+		------------------------------------------------
+		fn createSettingsBackupNode =
+		(
+			_settingsBackupNode = undefined
+			
+			if isValidNode this.infoNode then
+			(
+				_settingsBackupNode = this.getSettingsBackupNode() --obtiene el nodo de backup de settings por si ya existe
+				
+				--si no existe el nodo lo crea y lo emparenta al infoNode
+				if _settingsBackupNode == undefined then
+				(
+					_settingsBackupNode = point size:2 box:on cross:off axistripod:off centermarker:off
+					_settingsBackupNode.wirecolor = color 0 0 0
+					_settingsBackupNode.name = "settingsBackup"
+					_settingsBackupNode.transform = this.infoNode.transform
+					_settingsBackupNode.parent = this.infoNode
+					this.infoNode.layer.addNode _settingsBackupNode
+				)--if
+			)--if
+			
+			_settingsBackupNode
+		),
+		
+		------------------------------------------------
+		--@fn: node | createOverridesEditBackupNode | Crea el nodo de backup de edicion de overrides y lo devuelve.
+		------------------------------------------------
+		fn createOverridesEditBackupNode =
+		(
+			_overridesEditBackupNode = undefined
+			
+			if isValidNode this.infoNode then
+			(
+				_overridesEditBackupNode = this.getOverridesEditBackupNode() --obtiene el nodo de backup por si ya existe
+				
+				--si no existe el nodo lo crea y lo emparenta al infoNode
+				if _overridesEditBackupNode == undefined then
+				(
+					_overridesEditBackupNode = point size:3 box:on cross:off axistripod:off centermarker:off
+					_overridesEditBackupNode.wirecolor = color 255 255 0
+					_overridesEditBackupNode.name = "overridesEditBackup"
+					_overridesEditBackupNode.transform = this.infoNode.transform
+					_overridesEditBackupNode.parent = this.infoNode
+					this.infoNode.layer.addNode _overridesEditBackupNode
+				)--if
+			)--if
+			
+			_overridesEditBackupNode
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | createRequiredOverrides | Crea los overrides obligatorios para el tipo de contenedor actual. Si el contenedor de settings u overrides no tiene padre no los crae ya que no sabe cual son sus obligatorios.
+		------------------------------------------------
+		fn createRequiredOverrides =
+		(
+			_requiredOverrideTypes = this.getRequiredOverrideTypes() --overrides requeridos
+		
+			_currentOverridesTypes = for _ov in this.overrides collect _ov.getSubType() --overrides ya creados
+			_reqOvsToAdd = for _ovType in _requiredOverrideTypes where findItem _currentOverridesTypes _ovType == 0 collect _ovType --overrides obligatorios no añadidos aun
+
+			for _ovType in _reqOvsToAdd do this.addOverride _ovType _includeNotAllowed:true
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | createInfoNode | Crea el nodo de la escena que lleva la información del container y lo rellena.
+		--@opt: boolean | placeInSceneNodes | false | Indica si recolocar los nodos en la escena tras el emparentamiento.
+		------------------------------------------------
+		fn createInfoNode placeInSceneNodes:false =
+		(
+			--crea el nodo de informacion y lo mete en la capa correspondiente
+			this.infoNode = point size:5 box:on cross:off axistripod:off centermarker:off --crea el nuevo nodo para el container
+			this.infoNode.wirecolor = color 0 0 0
+			_replaces = dotNetObject "System.Collections.Hashtable"
+			_replaces.add "type" (this.subType as string)
+			_replaces.add "name" (this.caption)
+			this.infoNode.name = lb.re.replaceGroupsInPattern (this.infoNodeRegExp) _replaces
+			(lb.passManager.getLayer()).addNode this.infoNode --lo añade a la capa correspondiente
+			
+			--le añade el atributo de información
+			custAttributes.add (this.infoNode) (this.containerInfo) #unique baseobject:false --le añade el atributo
+			this.infoNode.custAttributes[#containerInfo].caption = this.caption; this.caption = undefined
+			this.infoNode.custAttributes[#containerInfo].subType = (this.subType as string); this.subType = ""
+			
+			--ESTAS DOS LINEAS SI SE ESTA CONSTRUYENDO UN NUEVO NODO NO SON NECESARIAS O NO LO SON TAL COMO ESTAN AHORA
+			--emparenta al padre y los hijos
+			--if isValidNode this.parent and this.infoNode.parent != this.parent.getInfoNode() then this.infoNode.parent = newParent.getInfoNode()
+			--for _ch in this.children where isValidNode (_ch.getInfoNode()) and (_ch.getInfoNode()).parent != this.infoNode do (_ch.getInfoNode()).parent = this.infoNode
+				
+			--emparenta al padre si se ha indicado
+			if this.parent != undefined and (isValidNode (this.parent.getInfoNode())) then this.infoNode.parent = this.parent.getInfoNode()				
+				
+			--reordena los hijjos del padre en caso de tener, para que estén emparentados en un orden adecuado y se muestren en ese mismo orden en los interfaces.
+			if this.parent != undefined then this.parent.sortChildrenByType()
+			
+			--si es de tipo passTree le añade un nodo de backup de settings hijo
+			if this.getSubType() == #passTree then this.createSettingsBackupNode()
+				
+			if placeInSceneNodes then lb.passManager.placeInScene() --recoloca todos los containers en arbol segun jerarquia.
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | construct | Rellena la información del container y crea el objeto fisico en la escena que contendrá la información.
+		------------------------------------------------
+		fn construct =
+		(
+			--si existe el nodo de la escena con la información la coge de el.
+			if isValidNode this.infoNode then
+			(			
+				--primero mira si hay cambios en la escena que afecten al container y lo limpia
+				this.purge()
+
+				--si tiene overrides hijos los rellena
+				for ch in this.infoNode.children where lb.overrides.isOverride ch do append this.overrides (lb.overrides.newOverride infoNode:ch parentContainer:this)				
+			)
+			else --si se está creando un nuevo container
+			(
+				-----------------------------------------
+				--asigna el nombre al container. Si no se ha pasado nombre se le asigna uno por defecto. Si el que se ha pasado ya existe, se le añade un índice detras.
+					
+				--si no se ha asignado nombre se le asigna uno por defecto
+				if this.caption == undefined then this.caption = "newContainer"
+				
+				--si se ha asignado un nombre se comprueba que no haya ya un container con el mismo. Si lo hay le añade un indice.
+				if this.caption != undefined then
+				(
+					_infoNodes = lb.passManager.getAllInfoNodes()
+					_infoNodesCaptions = #()
+					for _inode in _infoNodes do
+					(
+						_m = lb.re.matchObj _inode.name this.infoNodeRegExp
+						if _m.success do
+							append _infoNodesCaptions (_m.Groups.Item("name")).value
+					)
+					
+					-----------------------------
+					--busca el indice
+					_index = 0
+					for _cap in _infoNodesCaptions do --busca el indice que ponerle al nombre
+					(
+						if _cap == this.caption and _index == 0 then _index = 1
+						else if (matchPattern _cap pattern:(this.caption + "#???")) then
+						(
+							_cParts = filterString _cap "#"
+							_enumeration = _cParts[2] as integer
+							if _enumeration >= _index then _index = _enumeration + 1
+						)
+					)--for
+					-----------------------------
+					
+					--si hay indice es porque esta repetido y hay que diferenciarlo
+					if _index > 0 then this.caption = this.caption + "#" + (formattedprint _index format:"03d")
+				)--if
+				
+				-----------------------------------------
+					
+				--crea el nodo de la escena que va a llevar la información del container.
+				this.createInfoNode()
+			)--if
+			
+			------------------------------------------------
+			--si el contenedor es de overrides o de settings y no tiene añadidos los overrides obligatorios los añade
+			
+			if createRequiredOnCreate and ((this.getSubType() == #overrides) or (this.getSubType() == #passTree)) then this.createRequiredOverrides()
+			------------------------------------------------
+		),
+
+		------------------------------------------------
+		--@fn: undefined | showOnlyObjectsInSets | Mustra solo los objetos correspondientes al Objectsets
+		--@opt: boolean | saveLogs | false | Indica si salvar logs.
+		------------------------------------------------
+		fn showOnlyObjectsInSets saveLogs:false logLevel:1 =
+		(
+			objects.ishidden = true --oculta todos los objetos de la escena
+			for _os in this.getChildren() where _os.getSubType() == #ObjectSet and _os.getEnabledState() do --recorre los ObjectSets del contenedor
+			(
+				_nodeSets = _os.getNodeSets()
+				for i=1 to _nodeSets.count where (_os.getNodeSetEnabledState i) do (_nodeSets[i].getNodes()).ishidden = false --hace visibles los objetos de cada nodeSet
+			)--for
+			
+			if saveLogs then lb.log.add ("Set OBJECTSETs nodes visible - pass: " + this.getCaption()) sender:"lb.passManager.pass.preRender" type:#info level:(logLevel + 1)
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | showOnlyMyLights | Mustra solo las luces de este pase
+		--@opt: boolean | saveLogs | false | Indica si salvar logs.
+		------------------------------------------------
+		fn showOnlyMyLights saveLogs:false logLevel:1 =
+		(
+			_sceneLights = for _o in objects where superClassOf _o == light collect _o --CAMBIAR POR GETSCENELIGHTS CUANDO ESTE HECHO
+			_sceneLights.ishidden = true --oculta las luces
+			for _ls in this.getChildren() where _ls.getSubType() == #lightSet and _ls.getEnabledState() do --recorre los lightSets del contenedor
+			(
+				_lights = _ls.getLightNodes()
+				for i=1 to _lights.count where (_ls.getLightEnabledState i) do
+				(
+					_lights[i].ishidden = false --muestra las luces activas del lightSet
+					if _lights[i].target != undefined do
+						_lights[i].target.ishidden = false --muestra el target si lo tiene
+				)
+			)--for
+
+			if saveLogs then lb.log.add ("Set LIGHTSETS lights visible - pass: " + this.getCaption()) sender:"lb.passManager.pass.preRender" type:#info level:(logLevel + 1)
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | renderOnlyMyLights | Hace rendeables solo las luces de este pase
+		--@opt: boolean | saveLogs | false | Indica si salvar logs.
+		------------------------------------------------
+		fn renderOnlyMyLights saveLogs:false logLevel:1 =
+		(
+			_sceneLights = for _o in objects where superClassOf _o == light collect _o --CAMBIAR POR GETSCENELIGHTS CUANDO ESTE HECHO
+			_sceneLights.renderable = false --hace las luces no renderizables
+			for _ls in this.getChildren() where _ls.getSubType() == #lightSet and _ls.getEnabledState() do --recorre los lightSets del contenedor
+			(
+				_lights = _ls.getLightNodes()
+				for i=1 to _lights.count where (_ls.getLightEnabledState i) do _lights[i].renderable = true --ha renderizables las luces activas del lightSet				
+			)--for
+			
+			if saveLogs then lb.log.add ("Set LIGHTSETS lights renderable - pass: " + this.getCaption()) sender:"lb.passManager.pass.preRender" type:#info level:(logLevel + 1)
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | hideHiddenObjects | Oculta los objectos correspondientes a los hiddenObjectSets
+		--@opt: boolean | saveLogs | false | Indica si salvar logs.
+		------------------------------------------------
+		fn hideHiddenObjects saveLogs:false logLevel:1 =
+		(
+			for _hos in this.getChildren() where _hos.getSubType() == #hiddenObjectSet and _hos.getEnabledState() do --recorre los ObjectSets del contenedor
+			(
+				_nodeSets = _hos.getNodeSets()
+				for i=1 to _nodeSets.count where (_hos.getNodeSetEnabledState i) do (_nodeSets[i].getNodes()).ishidden = true --hace invisibles los objetos de cada nodeSet
+				_nodes = _hos.getNodes()
+				for i=1 to _nodes.count where (_hos.getNodeEnabledState i) do _nodes[i].ishidden = true --hace invisibles los objetos sueltos
+			)--for
+
+			if saveLogs then lb.log.add ("Set HIDDENOBJECTSETs nodes visible - pass: " + this.getCaption()) sender:"lb.passManager.pass.preRender" type:#info level:(logLevel + 1)
+		),
+		fn showOnlyFlatColorObjectSets saveLogs:false logLevel:1 =
+		(
+			--objects.ishidden = true --oculta todos los objetos de la escena
+			for _os in this.getChildren() where _os.getSubType() == #flatColorObjectSet and _os.getEnabledState() do --recorre los ObjectSets del contenedor
+			(
+				_nodeSets = _os.getNodeSets()
+				_nodes = _os.getNodes()
+				for i=1 to _nodeSets.count where (_os.getNodeSetEnabledState i) do (_nodeSets[i].getNodes()).ishidden = false --hace visibles los objetos de cada nodeSet
+				for i=1 to _nodes.count where (_os.getNodeEnabledState i) do _nodes[i].ishidden = false --hace visibles los objetos sueltos
+			)--for
+			
+			if saveLogs then lb.log.add ("Set OBJECTSETs nodes visible - pass: " + this.getCaption()) sender:"lb.passManager.pass.preRender" type:#info level:(logLevel + 1)
+		),		
+		--------------------------------------------------
+		----@fn: undefined | applyLOD | Aplica los Niveles de detalle de los lodSets hijos
+		----@opt: boolean | saveLogs | false | Indica si salvar logs.
+		--------------------------------------------------
+		--fn applyLOD saveLogs:false logLevel:1 =
+		--(
+		--	for _lod in this.getChildren() where _lod.getSubType() == #lodSet and _lod.getEnabledState() do --recorre los ObjectSets del contenedor
+		--	(
+		--		--_nodeSets = _lod.getNodeSets()
+		--		--for i=1 to _nodeSets.count where (_lod.getNodeSetEnabledState i) do print "doing something LOD related"
+		--		--_nodes = _lod.getNodes()
+		--		--for i=1 to _nodes.count where (_lod.getNodeEnabledState i) do print "doing something LOD related"
+		--		_overrides = _lod.getOverrides()
+		--	)--for
+
+		--	if saveLogs then lb.log.add ("Set LODs nodes applied - pass: " + this.getCaption()) sender:"lb.passManager.pass.preRender" type:#info level:(logLevel + 1)
+		--),
+		
+		------------------------------------------------
+		--@fn: boolean | applyOverrides | Aplica los overrides del contenedor y todos lo relacionados jerarquicamente en profuncidad hacia la raiz y hacia los hijos. Devuelve TRUE si consigue aplicar los overrides y FALSE si no.
+		--@opt: boolean | uniqueTypes | false | Indica si devolver solo el primero de cada tipo.
+		--@opt: boolean | saveLogs | false | Indica si salvar logs.
+		------------------------------------------------
+		fn getOverridesToApply uniqueTypes:false saveLogs:false logLevel:1 =
+		(
+			_success = true
+			
+			--es importante explicar que los overrides se aplican jerarquicamente en niveles en profundidad, el que manda es el de mas abajo
+			--dentro del mismo nivel se aplican de abajo a arriba como si fuesen capas de photoshop, la que manda es la de mas arriba
+			
+			--hay que aplicar los overrides de toda la jerarquia desde la raiz hasta el contenedor en concreto
+			--esto quiere decir que hay que recopilar recursivamente hacia atrás los overrides de cada contenedor y luego aplicarlos hacia abajo
+			--una vez aplicados los overrides hasta el contenedor, hay que aplicar los de los contenedores hijos (lightSets, ObjectSets, etc.)
+			
+			--_overridesOwnerContainerCaptions = #() --array con los nombres de los contenedores a los que pertenencen los overrides a aplicar. Se almacena por si en un futuro se hace un log
+			_overrideTypes = #() --array con los tipos de los overrides a aplicar. Se almacena por si se piden unicos
+			_overridesToApply = #() --array con los overrides a aplicar por contenedor y en el orden correcto
+			
+			------------------------------------------------
+			--recopila los ancestros en orden de hijo a padre y luego le da la vuelta al array
+			_ancestors = #(this) --array para almacenar los ancestros del contenedor. Se incluye el contenedor actual como primer ancestro
+			while _ancestors[_ancestors.count].getParent() != undefined do append _ancestors (_ancestors[_ancestors.count].getParent())
+			_ancestors = for i=_ancestors.count to 1 by -1 collect _ancestors[i]
+			
+			if saveLogs then lb.log.add ("Ancestors compilation - pass: " + (this.getCaption())) sender:"lb.passManager.pass.applyOverrides" type:#info level:(logLevel + 1)
+			
+			--recopila los overrides a aplicar de cada ancestro
+			for _an in _ancestors do
+			(
+				--recopila el contenedor de overrides
+				_overridesContainer = undefined
+				for _ch in _an.getChildren() where (_ch.getSubType() == #overrides) and (_ch.getEnabledState()) do _overridesContainer = _ch
+				
+				--si hay contenedor de overrides, apila sus overrides en el array de overrides
+				if _overridesContainer != undefined then
+				(
+					--_ownerCaption = _an.getCaption()
+					_overrides = _overridesContainer.getOverrides()
+						
+					--for i=_overrides.count to 1 by -1 (_overrides[i].getEnabledState()) do
+					for i=1 to _overrides.count where (_overrides[i].getEnabledState()) and (uniqueTypes == false or (findItem _overrideTypes (_overrides[i].getSubtype())) == 0) do
+					(
+						--append _overridesOwnerContainerCaptions _ownerCaption --almacena el nombre del contenedor que lleva cada grupo de overrides
+						append _overridesToApply _overrides[i]
+						append _overrideTypes (_overrides[i].getSubtype())
+					)
+				)--if
+			)--for
+			------------------------------------------------
+			
+			if saveLogs then lb.log.add ("Ancestors overrides compilation - pass: " + (this.getCaption())) sender:"lb.passManager.pass.applyOverrides" type:#info level:(logLevel + 1)
+			
+			------------------------------------------------
+			--recopila los descendientes
+			--teniendo en cuenta que lo normal es hacer render de contenendores de tipo pase, lo que se busca ahora son Objectsets y lightSets
+			
+			--recopila los ObjectSets y los LightSets
+			--_objectSets = for i=(this.getChildren()).count to 1 by -1 where (this.getChildren())[i].getSubType() == #ObjectSet collect (this.getChildren())[i]
+			_objectSets = for i=1 to (this.getChildren()).count where (this.getChildren())[i].getSubType() == #ObjectSet collect (this.getChildren())[i]
+			--_lightSets = for i=(this.getChildren()).count to 1 by -1 where (this.getChildren())[i].getSubType() == #lightSet collect (this.getChildren())[i]
+			_lightSets = for i=1 to (this.getChildren()).count where (this.getChildren())[i].getSubType() == #lightSet collect (this.getChildren())[i]
+			--_lodSets = for i=(this.getChildren()).count to 1 by -1 where (this.getChildren())[i].getSubType() == #lodSet collect (this.getChildren())[i]
+			_lodSets = for i=1 to (this.getChildren()).count where (this.getChildren())[i].getSubType() == #lodSet collect (this.getChildren())[i]
+			_flatColorObjectSets = for i=1 to (this.getChildren()).count where (this.getChildren())[i].getSubType() == #flatColorObjectSet collect (this.getChildren())[i]
+
+			for _sets in #(_objectSets, _lightSets, _lodSets, _flatColorObjectSets) do
+			(
+				for _set in _sets do
+				(
+					_children = _set.getChildren()
+					--for i=_children.count to 1 by -1 where _children[i].getSubType() == #overrides do
+					for i=1 to _children.count where (_children[i].getSubType() == #overrides) and (_children[i].getEnabledState()) do
+					(
+						--_setCaption = _set.getCaption()
+						_overrides = _children[i].getOverrides()
+						
+						--for i=_overrides.count to 1 by -1 where (_overrides[i].getEnabledState())  do
+						for i=1 to _overrides.count where (_overrides[i].getEnabledState()) and (uniqueTypes == false or (findItem _overrideTypes (_overrides[i].getSubtype())) == 0) do
+						(
+							--append _overridesOwnerContainerCaptions _setCaption --almacena el nombre del contenedor que lleva cada grupo de overrides
+							append _overridesToApply _overrides[i]
+							append _overrideTypes (_overrides[i].getSubtype())
+						)
+					)--for
+				)--for
+			)
+
+			------------------------------------------------
+			
+			if saveLogs then lb.log.add ("Objectsets y Lightsets overrides compilation - pass: " + (this.getCaption())) sender:"lb.passManager.pass.applyOverrides" type:#info level:(logLevel + 1)
+			
+			return _overridesToApply
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | applyOverrides | Aplica los overrides del contenedor y todos lo relacionados jerarquicamente en profuncidad hacia la raiz y hacia los hijos. Devuelve TRUE si consigue aplicar los overrides y FALSE si no.
+		--@opt: boolean | saveLogs | false | Indica si salvar logs.
+		------------------------------------------------
+		fn applyOverrides saveLogs:false logLevel:1 =
+		(
+			_success = true
+			
+			if saveLogs then lb.log.add ("APPLY OVERRIDES start - pass: " + (this.getCaption())) sender:"lb.passManager.pass.applyOverrides" type:#info level:logLevel
+				
+			--es importante explicar que los overrides se aplican jerarquicamente en niveles en profundidad, el que manda es el de mas abajo
+			--dentro del mismo nivel se aplican de abajo a arriba como si fuesen capas de photoshop, la que manda es la de mas arriba
+			
+			--hay que aplicar los overrides de toda la jerarquia desde la raiz hasta el contenedor en concreto
+			--esto quiere decir que hay que recopilar recursivamente hacia atrás los overrides de cada contenedor y luego aplicarlos hacia abajo
+			--una vez aplicados los overrides hasta el contenedor, hay que aplicar los de los contenedores hijos (lightSets, ObjectSets, etc.)
+
+			_overridesToApply = this.getOverridesToApply uniqueTypes:false saveLogs:saveLogs logLevel:(logLevel + 1)
+
+			--aplica los overrides en el orden establecido
+			for i=1 to _overridesToApply.count where _success do
+			(
+				_success = _overridesToApply[i].apply saveLogs:saveLogs logLevel:(logLevel + 1) --aplica el override
+				--gc()
+
+				--print _success
+			)--for		
+
+			if saveLogs then
+			(
+				if _success then lb.log.add ("APPLY OVERRIDES completed - pass: " + (this.getCaption())) sender:"lb.passManager.pass.applyOverrides" type:#ok level:logLevel
+				else lb.log.add ("APPLY OVERRIDES error - pass: " + (this.getCaption())) sender:"lb.passManager.pass.applyOverrides" type:#ok level:logLevel
+			)
+
+			_success
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | createBackup | Crea el backup de los parametros necesarios antes del render. Devuelve TRUE si consigue crear el backup y FALSE si no.
+		--@opt: boolean | saveLogs | false | Indica si salvar logs.
+		------------------------------------------------
+		fn createBackup saveLogs:false logLevel:1 =
+		(
+			_success = true
+
+			--if saveLogs then lb.log.add "BACKUP --------------------------------------------------" sender:"lb.passManager" type:#sep level:logLevel
+			if saveLogs then lb.log.add ("BACKUP process start - pass: " + (this.getCaption())) sender:"lb.passManager.pass.createBackup" type:#info level:logLevel
+
+			_rootContainer = this.getRootContainer()--obtiene el root del arbol de pases
+			if _rootContainer == undefined and saveLogs then lb.log.add ("Root Container not found - pass: " + (this.getCaption())) sender:"lb.passManager.pass.createBackup" type:#error level:logLevel
+			
+			_success = _rootContainer != undefined
+			
+			if _success then
+			(
+				------------------------------------------------
+				--crea los backups obligatorios
+
+				_currentBackupOverridesTypes = for _ov in (_rootContainer.getOverrides()) collect _ov.getSubType() --mira los tipos de backup creados ya
+
+				--para cada tipo de override obligatorio que no este creado, lo crea	
+				for _ovType in _rootContainer.requiredBackupOverrides where (findItem _currentBackupOverridesTypes _ovType) == 0 do
+				(
+					if saveLogs then lb.log.add ("Adding not found required override - " + _ovType) sender:"lb.passManager.pass.createBackup" type:#info level:logLevel
+					
+					_rootContainer.addOverride _ovType _includeNotAllowed:true
+					
+					if saveLogs then lb.log.add ("Not found required override added - " + _ovType) sender:"lb.passManager.pass.createBackup" type:#info level:logLevel
+				)
+				------------------------------------------------
+				
+				------------------------------------------------
+				_overridesToBackup = #()
+				--backup de los overrides obligatorios
+				_overridesToBackup += for _ov in (_rootContainer.getOverrides()) where (finditem _rootContainer.requiredBackupOverrides (_ov.getSubtype())) != 0 collect _ov
+				--para cada override de backup que se vaya ha aplicar, hace backup
+				_overridesToBackup += this.getOverridesToApply uniqueTypes:true saveLogs:saveLogs logLevel:(logLevel + 1)
+				------------------------------------------------
+				
+				------------------------------------------------
+				--crea el backup de overrides de este arbol
+				
+				_success = lb.overrides.createBackup _rootContainer _overridesToBackup saveLogs:saveLogs logLevel:(logLevel + 1)
+				------------------------------------------------
+			)--if
+
+			if saveLogs then
+			(
+				if _success then lb.log.add ("BACKUP process completed - pass: " + (this.getCaption())) sender:"lb.passManager.pass.createBackup" type:#ok level:logLevel
+				else lb.log.add ("BACKUP process error - pass: " + (this.getCaption())) sender:"lb.passManager.pass.createBackup" type:#error level:logLevel
+			)
+
+			_success
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | restoreBackup | Restaura los valores anteriores al render. Devuelve TRUE si consigue restaurar el backup y FALSE si no.
+		--@opt: boolean | saveLogs | false | Indica si salvar logs.
+		------------------------------------------------
+		fn restoreBackup saveLogs:false logLevel:1 =
+		(
+			_success = true
+			
+			if saveLogs then lb.log.add ("RESTORE BACKUP process start - pass: " + (this.getCaption())) sender:"lb.passManager.pass.restoreBackup" type:#info level:logLevel
+
+			_rootContainer = this.getRootContainer()--obtiene el root del arbol de pases
+			if _rootContainer == undefined and saveLogs then lb.log.add ("Root Container not found - pass: " + (this.getCaption())) sender:"lb.passManager.pass.restoreBackup" type:#error level:logLevel
+			
+			_success = _rootContainer != undefined
+			
+			if _success then
+			(
+			
+				------------------------------------------------
+				--restaura el backup de este arbol
+				_overridesToRestore = #()
+				--restore de los overrides obligatorios
+				_overridesToRestore += for _ov in (_rootContainer.getOverrides()) where (finditem _rootContainer.requiredBackupOverrides (_ov.getSubtype())) != 0 collect _ov
+				--para cada override de backup que se haya aplicad, lo restaura
+				_overridesToRestore += this.getOverridesToApply uniqueTypes:true saveLogs:saveLogs logLevel:(logLevel + 1)
+				_success = lb.overrides.restoreBackup _rootContainer _overridesToRestore saveLogs:saveLogs logLevel:(logLevel + 1)
+				------------------------------------------------	
+					
+				------------------------------------------------	
+				--restaura los backups obligatorios
+				--ESTO LO HACE EL APARTADO ANTERIOR YA QUE LOS OVERRIDES CUELGAN DEL ROOT Y ESTAN HABILITADOS
+				------------------------------------------------
+				
+				--TO DO -- VER POR QUE NO RESTAURA LA VISIBILIDAD DE LOS OBJETOS COMO ESTABAN.
+			)
+
+			if saveLogs then
+			(
+				if _success then lb.log.add ("RESTORE BACKUP process completed - pass: " + (this.getCaption())) sender:"lb.passManager.pass.restoreBackup" type:#ok level:logLevel
+				else lb.log.add ("RESTORE BACKUP process error - pass: " + (this.getCaption())) sender:"lb.passManager.pass.restoreBackup" type:#error level:logLevel
+			)
+				
+			_success
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | preRender | Devuelve TRUE si consigue preparar el contenedor para render, FALSE si no.
+		--@opt: boolean | saveLogs | false | Indica si salvar logs.
+		------------------------------------------------
+		fn preRender saveLogs:false logLevel:1 =
+		(
+			_success = false
+			
+			if saveLogs then lb.log.add ("PRERENDER process start - pass: " + this.getCaption()) sender:"lb.passManager.pass.preRender" type:#info level:logLevel
+			
+			------------------------------------------------
+			--cambios necesarios a propiedades generales de la escena
+				
+			rendSaveFile = true --fuerza que se salve el fotograma a no ser que un override posterior lo desactive
+			
+			if saveLogs then lb.log.add ("Set RENDSAVEFILE to TRUE - pass: " + this.getCaption()) sender:"lb.passManager.pass.preRender" type:#info level:(logLevel + 1)
+			------------------------------------------------
+			
+			------------------------------------------------
+			--ObjectSets --solo debe dejar visibles los objetos de los objectsets que cuelgan en el contenedor
+			
+			this.showOnlyObjectsInSets saveLogs:saveLogs logLevel:(logLevel + 1)
+			------------------------------------------------
+			
+			------------------------------------------------
+			--LightSets --solo debe dejar renderables las luces del conentedor
+				
+			this.renderOnlyMyLights saveLogs:saveLogs logLevel:(logLevel + 1)
+			------------------------------------------------
+
+			------------------------------------------------
+			--HiddenObjectsSet --Oculta los objetos seleccionados
+			
+			this.hideHiddenObjects saveLogs:saveLogs logLevel:(logLevel + 1)
+			------------------------------------------------
+
+			------------------------------------------------
+			--FlatColorObjectSet --Oculta los objetos seleccionados
+
+			this.showOnlyFlatColorObjectSets saveLogs:saveLogs logLevel:(logLevel + 1)
+			--------------------------------------------------
+			----LODSet
+						
+			--_success = this.applyLOD saveLogs:saveLogs logLevel:(logLevel + 1)	
+			--------------------------------------------------
+			
+			------------------------------------------------
+			--Overrides
+			
+			--es importante explicar que los overrides se aplican jerarquicamente en niveles en profundidad, el que manda es el de mas abajo
+			--dentro del mismo nivel se aplican de abajo a arriba como si fuesen capas de photoshop, la que manda es la de mas arriba
+			
+			--hay que aplicar los overrides de toda la jerarquia desde la raiz hasta el pase en concreto
+			--esto quiere decir que hay que recopilar recursivamente hacia atrás los overrides de cada contenedor y luego aplicarlos hacia abajo
+			--una vez aplicados los overrides hasta el pase, hay que aplicar los de los contenedores hijos (lightSets, ObjectSets, etc.)
+						
+			_success = this.applyOverrides saveLogs:saveLogs logLevel:(logLevel + 1)	
+			------------------------------------------------
+			
+			------------------------------------------------
+			--Cambios necesarios tras la configuracion del pase
+			
+			--sustitucion del patron [pass] por el nombre del pase
+			if _success then
+			(
+				rendOutputFileName = substituteString rendOutputFileName "[pass]" (this.getCaption())					
+				if saveLogs then lb.log.add ("Include pass name in render output path - pass: " + this.getCaption()) sender:"lb.passManager.pass.preRender" type:#info level:(logLevel + 1)
+			)
+			else if saveLogs then lb.log.add ("Pass name in render output path not included - pass: " + this.getCaption()) sender:"lb.passManager.pass.preRender" type:#warning level:(logLevel + 1)
+			
+			------------------------------------------------
+			
+			if saveLogs then
+			(
+				if _success then if saveLogs then lb.log.add ("PRERENDER process completed - pass: " + this.getCaption()) sender:"lb.passManager.pass.preRender" type:#ok level:logLevel
+				else lb.log.add ("PRERENDER process error - pass: " + this.getCaption()) sender:"lb.passManager.pass.preRender" type:#error level:logLevel
+			)--if				
+			
+			_success
+
+		),
+		
+		--NO SE SI ESTA NO ES NECESARIA
+		------------------------------------------------
+		--@fn: boolean | postRender | Devuelve TRUE si consigue restaurar el estado antes del render, FALSE si no.
+		--@opt: boolean | saveLogs | false | Indica si salvar logs.
+		------------------------------------------------
+		fn postRender saveLogs:false logLevel:1 =
+		(
+			_success = false
+			
+			if saveLogs then lb.log.add ("POSTRENDER process start - pass: " + this.getCaption()) sender:"lb.passManager.pass.postRender" type:#info level:logLevel
+			
+			--TO DO: de momento no son necesarias operaciones aqui pero pueden hacer falta
+			
+			_success = true
+			
+			if saveLogs then
+			(
+				if _success then if saveLogs then lb.log.add ("POSTRENDER process completed - pass: " + this.getCaption()) sender:"lb.passManager.pass.postRender" type:#ok level:logLevel
+				else lb.log.add ("POSTRENDER process error - pass: " + this.getCaption()) sender:"lb.passManager.pass.postRender" type:#error level:logLevel
+			)--if		
+				
+			_success
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | renderPass | Devuelve TRUE si consigue realizar el render del contenedor actual, FALSE si no.
+		--@gets: name | type | Tipo de render que se quiere realizar, #preview, #local, #network.
+		--@opt: integer | previewPercentSize | 100 | Tamaño del previo respecto al original.
+		--@opt: boolean | saveLogs | false | Indica si salvar logs.
+		------------------------------------------------
+		fn renderPass type previewPercentSize:100 saveLogs:false logLevel:1 =
+		(
+			_success = false
+			
+			--if saveLogs then lb.log.add "RENDER PASS -------------------------------------------------------" sender:"lb.passManager" type:#sep level:logLevel
+			if saveLogs then lb.log.add ("RENDER PASS process start - pass: " + this.getCaption()) sender:"lb.passManager.pass.renderPass" type:#info level:logLevel
+			
+			------------------------------------------------
+			--operaciones previas al backup	
+				
+			renderSceneDialog.close() --cierra el dialogo de opciones de render para que se apliquen los cambios			
+			------------------------------------------------
+			
+			------------------------------------------------
+			--backup los parametros de la escena necesarios
+
+			_success = this.createBackup saveLogs:saveLogs logLevel:(logLevel + 1)
+			--gc()
+			------------------------------------------------
+			
+			if _success then
+			(
+				------------------------------------------------
+				--prepara el pase para renderizar
+				
+				_success = this.preRender saveLogs:saveLogs logLevel:(logLevel + 1)
+				--gc()
+				------------------------------------------------
+				
+				if _success then
+				(
+					------------------------------------------------
+					--proceso de render en funcion del tipo solicitado
+					case type of
+					(
+						#preview:
+						(
+							if saveLogs then lb.log.add ("RENDER PREVIEW start - pass: " + this.getCaption()) sender:"lb.passManager.pass.renderPass" type:#info level:(logLevel + 1)
+							
+							--hace que no se salve el render
+							rendSaveFile = false --en modo preview no se debe almacenar el render
+							rendTimeType = 1 --pone el modo de render en un fotograma simple para que el previo solo se haga del frame actual
+							
+							renderWidth = renderWidth/(100.0/previewPercentSize)
+							renderHeight = renderHeight/(100.0/previewPercentSize)
+							
+							if saveLogs then lb.log.add "RENDERING..." sender:"lb.passManager.pass.renderPass" type:#info level:(logLevel + 2)
+								
+							SetQuietMode true --activa el modo silencioso para que no se muestren mensajes durante el render
+							max quick render --hace el preview
+							SetQuietMode false --desactiva le modo silencioso
+								
+							if saveLogs then lb.log.add ("RENDER PREVIEW completed - pass: " + this.getCaption()) sender:"lb.passManager.pass.renderPass" type:#ok level:(logLevel + 1)							
+						)--preview
+						
+						#local:
+						(
+							if saveLogs then lb.log.add ("RENDER LOCAL start - pass: " + this.getCaption()) sender:"lb.passManager.pass.renderPass" type:#info level:(logLevel + 1)
+							
+							if saveLogs then lb.log.add "RENDERING..." sender:"lb.passManager.pass.renderPass" type:#info level:(logLevel + 2)
+							SetQuietMode true --activa el modo silencioso para que no se muestren mensajes durante el render
+							max quick render							
+							SetQuietMode false --desactiva le modo silencioso
+								
+							if saveLogs then lb.log.add ("RENDER LOCAL completed - pass: " + this.getCaption()) sender:"lb.passManager.pass.renderPass" type:#ok level:(logLevel + 1)
+						)--local
+						
+						#network:
+						(
+							if saveLogs then lb.log.add ("RENDER NETWORK start - pass: " + this.getCaption()) sender:"lb.passManager.pass.renderPass" type:#warning level:(logLevel + 1)
+								
+							SetQuietMode true --activa el modo silencioso para que no se muestren mensajes durante el render
+							max quick render		
+							SetQuietMode false --desactiva le modo silencioso
+								
+							if saveLogs then lb.log.add ("RENDER NETWORK completed - pass: " + this.getCaption()) sender:"lb.passManager.pass.renderPass" type:#warning level:(logLevel + 1)
+						)--network
+					)--case
+
+					--gc()
+					------------------------------------------------
+				)--if
+				
+				------------------------------------------------
+				--realiza las operaciones necesarias tras el render
+				if _success then
+				(
+					_success = this.postRender saveLogs:saveLogs logLevel:(logLevel + 1)
+				)
+				else
+				(
+					if (this.postRender saveLogs:saveLogs logLevel:(logLevel + 1)) then (if saveLogs then lb.log.add ("POSTRENDER after error completed - pass: " + this.getCaption()) sender:"lb.passManager.pass.renderPass" type:#warning level:logLevel)
+					else if saveLogs then lb.log.add ("POSTRENDER after error error - pass: " + this.getCaption()) sender:"lb.passManager.pass.renderPass" type:#error level:logLevel
+				)
+
+				--gc()
+				------------------------------------------------
+			)--if
+			
+			------------------------------------------------
+			--restaura los parametros de la escena que se han almacenado
+			if _success then
+			(			
+				_success = this.restoreBackup saveLogs:saveLogs logLevel:(logLevel + 1)	
+				if saveLogs then lb.log.add ("RENDER PASS process completed - pass: " + this.getCaption()) sender:"lb.passManager.pass.renderPass" type:#ok level:logLevel
+			)
+			else
+			(			
+				if (this.restoreBackup saveLogs:saveLogs logLevel:(logLevel + 1)) then (if saveLogs then lb.log.add ("BACKUP RESTORE after error completed - pass: " + this.getCaption()) sender:"lb.passManager.pass.renderPass" type:#warning level:logLevel)
+				else if saveLogs then lb.log.add ("BACKUP RESTORE after error error - pass: " + this.getCaption()) sender:"lb.passManager.pass.renderPass" type:#error level:logLevel
+			)
+			--gc()
+			------------------------------------------------
+						
+			_success
+		),	
+		
+		------------------------------------------------
+		--@fn: string | toString | Devuelve un string con la representacion del contenido del container.
+		------------------------------------------------
+		fn toString _level:1 =
+		(
+			--primero mira si hay cambios en la escena que afecten al container y lo limpia
+			this.purge()
+			
+			_levelTabulators = ""
+			for i=1 to (_level - 1) do _levelTabulators += "  "
+			
+			_theString = ""
+			
+			
+			if (this.getChildren()).count != 0 then
+			(
+				_theString += _levelTabulators + "<container subType=\"" + this.infoNode.custAttributes[#containerInfo].subType + "\" caption=\"" + this.infoNode.custAttributes[#containerInfo].caption + "\">\n"
+				
+				for _ch in (this.getChildren()) do _theString += _ch.toString _level:(_level + 1)
+				
+				_theString += _levelTabulators + "<container>\n"
+			)
+			else
+			(
+				_theString += _levelTabulators + "<container subType=\"" + this.infoNode.custAttributes[#containerInfo].subType + "\" caption=\"" + this.infoNode.custAttributes[#containerInfo].caption + "\" />\n"
+			)
+			
+			_theString
+		),
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+			
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event | create | Ejecución al crearse la instancia del struct.
+		on create do
+		(
+			this.construct() --genera toda la información necesaria y el nodo de la escena donde almacenarla en paralelo, o lee el ya existente en la escena.
+		)
+		
+	)--str_container
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: passManager | Contiene todas las funciones de gestion pases de render.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct lib_passManager
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #lighting,					--@var: category | Categoria de la libreria.
+		className = lb.getFileLibName (getThisScriptFilename() as string),	--@var: className | Nombre de la libreria.
+		description = "Libreria de funciones de pases de render",	--@var: description | Descripcion de la libreria.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		infoNodeRegExp = "container_(?'type'.+)_(?'name'.+)", --@var | infoNodeRegExp | Expresión regular del nombre de los nodos de la escena que representan cada container.
+		
+		container = str_container,			--@var: container | Struct de containers individuales.
+		
+		containerInfo = ca_containerInfo,	--@var | containerInfo | Custom attribute para almacenar los datos de cada container en los nodos.
+		
+		currentEditInstance = undefined,	--@var: currentEditInstance | Variable auxiliar para almacenar instancias de structs que necesitan ser encontradas por sus rolloust de edicion hijos. (Ejemplo overrides y sus rollouts de edicion)
+		
+		isNetworkRender = false,			--@var: isNetworkRender | Indica si se trata de un render en red, para saber si aplicar algunas operaciones.
+		isPreviewRender = false,			--@var: isPreviewRender | Indica si se trata de un render en preview, para saber si aplicar algunas operaciones.
+
+		errorMessages = #(),				--@var: errorMessages | Array que almacena los valores de los errores de los arrays.
+
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: boolean | getNetworkRenderMode | Devuelve TRUE si esta en modo de render en red y FALSE si no.
+		------------------------------------------------
+		fn getNetworkRenderMode =
+		(
+			this.isNetworkRender
+		),
+
+		------------------------------------------------
+		--@fn: boolean | getPreviewRenderMode | Devuelve TRUE si esta en modo de render preview y FALSE si no.
+		------------------------------------------------
+		fn getPreviewRenderMode =
+		(
+			this.isPreviewRender
+		),
+		
+		------------------------------------------------
+		--@fn: String | getErrorMessages | Devuelve los mensajes de error en un string
+		------------------------------------------------
+		fn getErrorMessages =
+		(
+			_output = ""
+			for msg in this.errorMessages do _output += (msg + "\x0D")
+			_output
+		),
+		
+		------------------------------------------------
+		--@fn: LayerProperties | getLayer | Devuelve la capa que contiene los nodos auxiliares con la información de los containers.		
+		------------------------------------------------
+		fn getLayer =
+		(
+			_passManagerLayer = lb.layer.getLayerByName "aux-passManager" --[[CAMBIAR ESTO POR LA VARIABLE DEL NAMING CONVENTION CORRESPONDIENTE CUANDO ESTE HECHO]]
+			if _passManagerLayer == undefined then
+			(
+				_passManagerLayer = lb.layer.newLayer name:"aux-passManager"
+				_passManagerLayer.ishidden = true
+				_passManagerLayer.isfrozen = true
+			)--if
+			
+			_passManagerLayer
+		),
+		
+		------------------------------------------------
+		--@fn: array{node} | getAllInfoNodes | Devuelve los objetos de la escena que contienen informacion de containers de render
+		------------------------------------------------
+		fn getAllInfoNodes =
+		(
+			_infoNodes = lb.layer.getLayerNodes (this.getLayer())
+			for i=_infoNodes.count to 1 by -1 where (_infoNodes[i].custAttributes[#containerInfo] == undefined) do deleteItem _infoNodes i
+			
+			_infoNodes = lb.misc.sortNodesByName _infoNodes
+				
+			_infoNodes
+		),
+		
+		------------------------------------------------
+		--@fn: array{container} | getContainerTrees | Devuelve los arboles de containers de la escena en un array de arboles jerarquizados. Devuelve un array con los containers padre de cada arbol.
+		--@opt: node | infoNode | undefined | Objeto que contiene la información necesaria para recrear un contenedor en memoria. Si se le administra, el arbol se genera a partir de ella. Si no, se generan todos los aboles posibles de la escena.
+		------------------------------------------------
+		fn getContainerTrees infoNode:undefined updateOldCAs:true =
+		(
+			_treeRoots = #()
+			
+			--actualiza las definiciones de los CAs de los contenedores y overrides si hubiesen cambiado
+			if updateOldCAs then
+			(
+				--actualiza si es necesario los CA de los containers y de los overrides
+				_updated = (this.updateOldInfoNodesCA()) or (lb.overrides.updateOldInfoNodesCA())
+			
+				--si se ha actualizado algo elimina por si acaso los dos points de backup y edicion de overrides por si tienen definiciones viejas
+				if _updated then this.removeOverridesBackupAndEditPoints()
+			)--if
+
+			------------------------------------------------
+			--crea una funcion global temporal recursiva para montar el arbol
+			global _createContainerFromInfoNode
+			fn _createContainerFromInfoNode infoNode parentContainer =
+			(
+				_currentContainer = lb.passManager.newContainer infoNode:infoNode --crea el container
+
+				if parentContainer != undefined then _currentContainer.setParent parentContainer --almacena su container padre si tiene
+
+				--crea los overrides obligatorios si no los tiene creados ya o falta alguno
+				_currentContainer.createRequiredOverrides()
+
+				--reordena los overrides de cada nodo del arbol segun precedencia, es importante hacer esto despues de emparentar el container, ya que si no no sabe cuales son los overrides requeridos y los permitidos.
+				_currentContainer.sortOverridesByPrecedence() --ordena los overrides por precedencia
+				
+				--lb.overrides.placeInScene() --recoloca los overrides en la escena
+
+				for _ch in infoNode.children where (_ch.custAttributes[#containerInfo] != undefined) do _createContainerFromInfoNode _ch _currentContainer
+				
+				_currentContainer
+			)
+			------------------------------------------------
+
+			--recolecta los inicios de arbol
+			_infoRootNodes = (if infoNode != undefined then infoNode else (for _in in (this.getAllInfoNodes()) where _in.parent == undefined collect _in))
+
+			for _rootInfoNode in _infoRootNodes do append _treeRoots (_createContainerFromInfoNode _rootInfoNode undefined) --crea los arboles			
+
+			_createContainerFromInfoNode = undefined --destruye la funcion temporal			
+			
+			_treeRoots
+		),
+		
+		------------------------------------------------
+		--@fn: container | getContainerTree | Devuelve los containers de la escena en un arbol jerarquizado. Devuelve el container padre de todos los demás.
+		------------------------------------------------
+		fn getContainerTree updateOldCAs:true =
+		(
+			_treeRoot = undefined
+			
+			_containerTrees = this.getContainerTrees updateOldCAs:updateOldCAs
+			if _containerTrees.count != 0 then _treeRoot = _containerTrees[1]
+			
+			_treeRoot
+		),
+
+		------------------------------------------------
+		--@fn: array(container) | getPassTreeGroups | Devuelve todos los grupos de pases del arbol.
+		--@gets: passTree | currentPassTree | Arbol de pases del que sacar los grupos de pases.
+		------------------------------------------------
+		fn getPassTreeGroups currentPassTree =
+		(
+			_passGroups = #()
+
+			_children = currentPassTree.getChildren()
+			for _ch in _children where (_ch.getSubType()) == #passGroup do append _passGroups _ch
+
+			_passGroups
+		),
+
+		------------------------------------------------
+		--@fn: array(container) | getPassTreePasses | Devuelve todos los pases del arbol.
+		--@gets: passTree | currentPassTree | Arbol de pases del que sacar los pases.
+		------------------------------------------------
+		fn getPassTreePasses currentPassTree =
+		(
+			_passes = #()
+
+			_children = currentPassTree.getChildren()
+
+			for _ch in _children where (_ch.getSubType()) == #passGroup do
+			(	
+				_groupChildren = _ch.getChildren()
+				for _pgch in _groupChildren where _pgch.getSubtype() == #pass do append _passes _pgch
+			)--for
+
+			_passes
+		),
+
+		------------------------------------------------
+		--@fn: container | getContainerSubTree | Devuelve un subarbol de contenedores a partir del nodo pasado por parámetro.
+		--@gets: node | infoNode | Objeto que contiene la información necesaria para recrear un contenedor en memoria.
+		------------------------------------------------
+		fn getContainerSubTree infoNode updateOldCAs:true =
+		(
+			(getContainerTrees infoNode:infoNode updateOldCAs:updateOldCAs)[1]
+		),
+
+		------------------------------------------------
+		--@fn: array{container} | getByCaption | Devuelve los containers que tengan el caption solicitado y cualquiera de sus enumeraciones.
+		--@gets: string | caption | Caption del container que se solicita.
+		--@opt: container | containerTree | undefined | Container raiz del arbol de containers donde empezar a buscar.
+		--@opt: boolean | enumerated | false | Indica si devolver todos los containers derivados del que se solicita mediante su numeracion.
+		------------------------------------------------
+		fn getByCaption caption containerTree:undefined enumerated:false =
+		(
+			_containers = #()
+			
+			--si no se le pasa un arbol obtiene el de la escena
+			if containerTree == undefined then containerTree = this.getContainerTree()
+			
+			--si tiene un arbol con el que trabajar, realiza la busqueda
+			if containerTree != undefined then
+			(
+				if containerTree.getCaption() == caption then append _containers containerTree
+				if enumerated and MatchPattern (containerTree.getCaption()) pattern:(caption + "#???") then append _containers containerTree
+				
+				for _ch in containerTree.getChildren() do _containers += (this.getByCaption caption containerTree:_ch enumerated:enumerated)
+			)--if
+			
+			_containers
+		),
+		
+		------------------------------------------------
+		--@fn: container | getByCaption | Devuelve el container que tenga el infoNode solicitado.
+		--@gets: string | caption | infoNode por el cual buscar el contenedor.
+		--@opt: container | containerTree | undefined | Container raiz del arbol de containers donde empezar a buscar.		
+		------------------------------------------------
+		fn getByInfoNode infoNodeToFind containerTree:undefined =
+		(
+			_container = undefined
+			
+			--si no se le pasa un arbol obtiene el de la escena
+			if containerTree == undefined then containerTree = this.getContainerTree()
+			
+			--si tiene un arbol con el que trabajar, realiza la busqueda
+			if containerTree != undefined then
+			(
+				if containerTree.getInfoNode() == infoNodeToFind then _container = containerTree
+						
+				for _ch in containerTree.getChildren() where _container == undefined do _container = (this.getByInfoNode infoNodeToFind containerTree:_ch)
+			)--if
+			
+			_container
+		),
+		
+		------------------------------------------------
+		--@fn: array{container} | getBySubType | Devuelve los containers que tengan el subtipo solicitado.
+		--@gets: string | subType | Subtipo del container que se solicita. (#pass, #passGroup, #passTree, #ObjectSet, #lightSet, #hiddenObjectSet, #lodSet)
+		--@opt: container | containerTree | undefined | Container raiz del arbol de containers donde empezar a buscar.		
+		------------------------------------------------
+		fn getBySubType subType containerTree:undefined =
+		(
+			_containers = #()
+			
+			--si no se le pasa un arbol obtiene el de la escena
+			if containerTree == undefined then containerTree = this.getContainerTree()
+			
+			--si tiene un arbol con el que trabajar, realiza la busqueda
+			if containerTree != undefined then
+			(
+				if containerTree.getSubType() == subType then append _containers containerTree
+				
+				for _ch in containerTree.getChildren() do _containers += (this.getBySubType subType containerTree:_ch)
+			)--if
+			
+			_containers
+		),
+		
+		------------------------------------------------
+		--@fn: array{container} | getByUiObj | Devuelve los containers que tengan el objeto de interface solicitado.
+		--@gets: dotNetControl | uiObj | Objeto de .net que contiene el container.
+		--@opt: container | containerTree | undefined | Container raiz del arbol de containers donde empezar a buscar.		
+		------------------------------------------------
+		fn getByUiObj uiObj containerTree:undefined =
+		(
+			_containers = #()
+			
+			--si no se le pasa un arbol obtiene el de la escena
+			if containerTree == undefined then containerTree = this.getContainerTree()
+			
+			--si tiene un arbol con el que trabajar, realiza la busqueda
+			if containerTree != undefined then
+			(
+				if containerTree.getUiObj() == uiObj then append _containers containerTree				
+				for _ch in containerTree.getChildren() do _containers += (this.getByUiObj uiObj containerTree:_ch)
+			)--if
+			
+			_containers
+		),
+		
+		------------------------------------------------
+		--@fn: array{container} | getByNodeSetName | Devuelve los containers que contengan el nodeSet solicitado.
+		--@gets: string | nodeSetName | Nombre del nodeSet que se busca en el contenedor.
+		--@opt: container | containerTree | undefined | Container raiz del arbol de containers donde empezar a buscar.		
+		------------------------------------------------
+		fn getByNodeSetName nodeSetName containerTree:undefined =
+		(
+			_containers = #()
+			
+			--si no se le pasa un arbol obtiene el de la escena
+			if containerTree == undefined then containerTree = this.getContainerTree()
+			
+			--si tiene un arbol con el que trabajar, realiza la busqueda
+			if containerTree != undefined then
+			(
+				if findItem (containerTree.getNodeSetNames()) nodeSetName != 0 then append _containers containerTree
+				for _ch in containerTree.getChildren() do _containers += (this.getByNodeSetName nodeSetName containerTree:_ch)
+			)--if
+			
+			_containers
+		),
+		
+		------------------------------------------------
+		--@fn: array{string} | getFileContainerCaptions | Captions de los containers de un archivo en concreto.
+		--@gets: string | file | Path completo del archivo del cual se quieren consultar los containers.
+		------------------------------------------------
+		fn getFileContainerCaptions file =
+		(
+			_containerCaptions = #()
+			
+			--si ele archivo pasado existe, entonces intenta ver los containers que tiene dentro
+			if doesFileExist file then
+			(
+				_fileNames = getMAXFileObjectNames file quiet:true
+				_containerCaptions = #()
+				for _name in _fileNames do
+				(
+					_m = lb.re.matchObj _name this.infoNodeRegExp
+					if _m.success do
+						append _containerCaptions _name
+				)
+			)
+				
+			_containerCaptions
+		),
+		
+		------------------------------------------------
+		--@fn: Instance | getCurrentEditInstance | Devuelve la instancia de edicion almacenada para que los rollouts de edicion la conozcan.
+		------------------------------------------------
+		fn getCurrentEditInstance =
+		(
+			this.currentEditInstance
+		),
+		
+		------------------------------------------------
+		--@fn: array{override} | getAllSubcontainersOverrides | Devuelve un array con todos los overrides de un contenedor de pases y sus subcontenedores.
+		--@gets: container | rootContainer | Contenedor del que obtener los overrides.
+		------------------------------------------------
+		fn getAllSubcontainersOverrides rootContainer =
+		(
+			_overrides = #()
+
+			_overrides += rootContainer.getOverrides()
+			for _ch in rootContainer.getChildren() where _ch != undefined do _overrides += this.getAllSubcontainersOverrides _ch
+
+			_overrides
+		),
+
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | setNetworkRenderMode | Establece el mode de render en red.
+		--@gets: boolean | renderMode | Establece el modo de render en red.
+		------------------------------------------------
+		fn setNetworkRenderMode renderMode =
+		(
+			this.isNetworkRender = renderMode
+		),
+
+		------------------------------------------------
+		--@fn: undefined | setPreviewRenderMode | Establece el mode de render preview.
+		--@gets: boolean | renderMode | Establece el modo de render preview.
+		------------------------------------------------
+		fn setPreviewRenderMode renderMode =
+		(
+			this.isPreviewRender = renderMode
+		),
+
+		------------------------------------------------
+		--@fn: undefined | setCurrentEditInstance | Almacena la instancia pasada por parametro para ser utilizada por rollouts de edicion.
+		--@gets: instance | newEditInstance | Nueva instancia a almacenar de forma temporal.
+		------------------------------------------------
+		fn setCurrentEditInstance newEditInstance =
+		(
+			this.currentEditInstance = newEditInstance
+		),
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | addErrorMessage | Apila mensajes de error.
+		------------------------------------------------
+		fn addErrorMessage message =
+		(
+			this.errorMessages[this.errorMessages.count+1] = message
+			this.errorMessages[this.errorMessages.count+1] = ""
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | clearErrorMessages | Apila mensajes de error.
+		------------------------------------------------
+		fn clearErrorMessages =
+		(
+			this.errorMessages = #()
+		),
+
+		------------------------------------------------
+		--Elimina el point de backup y el de edit de overrides
+		------------------------------------------------
+		fn removeOverridesBackupAndEditPoints =
+		(
+			_nodes = lb.layer.getLayerNodes (this.getLayer()) --obtiene todos los nodos de la capa de overrides.
+			for i = _nodes.count to 1 by -1 where _nodes[i].name == "settingsBackup" or _nodes[i].name == "overridesEditBackup" do delete _nodes[i]
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | updateOldInfoNodesCA | Devuelve TRUE si ha tenido que actualizar algún CA y FALSE si no hacia falta. Si algun objeto tiene un CA con version anterior lo actualiza con el CA nuevo.
+		------------------------------------------------
+		fn updateOldInfoNodesCA =
+		(
+			_updated = false
+			
+			--obtiene todos los nodos con informacion de contenedores
+			_infoNodes = this.getAllInfoNodes()
+			
+			--obtiene el numero de version mas reciente del CA
+			_currentVersion = 0
+			_tempPoint = point size:10 box:off cross:on axistripod:off centermarker:off --crea un point temporal
+			_tempPoint.wirecolor = color 0 255 115
+			_tempPoint.name = "updateOldInfoNodesCAtemp"
+			custAttributes.add _tempPoint (this.containerInfo) #unique baseobject:false --le añade el atributo
+			_currentVersion = _tempPoint.custAttributes[#containerInfo].CA_version --obtiene la version
+			delete _tempPoint --elimina el point temporal
+			
+			--recorre los nodos mirando si tiene que actualizar su CA
+			for _infoNode in _infoNodes where _infoNode.custAttributes[#containerInfo].CA_version < _currentVersion do
+			(				
+				_propNames = getPropNames _infoNode.custAttributes[#containerInfo]
+				_propValues = for _prop in _propNames collect (getProperty _infoNode.custAttributes[#containerInfo] _prop)
+				
+				custAttributes.delete _infoNode (custAttributes.getDef _infoNode.custAttributes[#containerInfo]) baseobject:false --elimina el viejo
+				custAttributes.add _infoNode (this.containerInfo) #unique baseobject:false --le añade el atributo nuevo
+				
+				for i=1 to _propNames.count where _propNames[i] != #CA_version and _propNames[i] != #_description do
+				(				
+					--restablece el valor
+					setProperty (_infoNode.custAttributes[#containerInfo]) _propNames[i] _propValues[i]
+					
+					--casos especiales para mantener la coherencia
+					case _propNames[i] of
+					(
+						#lightNames:
+						(
+							if (_infoNode.custAttributes[#containerInfo].lightEnabledStates.count == 0) then
+								_infoNode.custAttributes[#containerInfo].lightEnabledStates = for _ln in _infoNode.custAttributes[#containerInfo].lightNames collect true
+						)--lightNames
+						
+						#nodeSetNames:
+						(
+							if (_infoNode.custAttributes[#containerInfo].nodeSetEnabledStates.count == 0) then
+								_infoNode.custAttributes[#containerInfo].nodeSetEnabledStates = for _ns in _infoNode.custAttributes[#containerInfo].nodeSetNames collect true
+						)--nodeSetNames
+					)--case					
+				)--for
+				
+				_updated = true
+			)--for
+			
+			_updated
+		),
+
+		------------------------------------------------
+		--@fn: integer | compareContainersByCaption | Compara dos containers por caption. Devuelve 0 si tienen el mismo, -1 si el del primero va antes que el del segundo, 1 si el del segundo va antes. 
+		--@gets: node | node1 | Primer container a comparar.
+		--@gets: node | node2 | Segundo container a comparar.
+		--@opt: boolean | invert | false | Indica si devolver el resultado invertido, para ordenaciones inversas.
+		--@opt: boolean | ignoreCase | false | Indica si tener en cuenta mayusculas y minusculas.
+		------------------------------------------------
+		fn compareContainersByCaption node1 node2 invert:false ignoreCase:false =
+		(			
+			--obtiene los nombres de los dos nodos
+			cap1 = node1.infoNode.custAttributes[#containerInfo].caption
+			cap2 = node2.infoNode.custAttributes[#containerInfo].caption
+			
+			--si no tiene en cuenta mayusculas y minusculas lo pasa todo a minusculas
+			if ignoreCase then
+			(
+				cap1 = tolower node1.infoNode.custAttributes[#containerInfo].caption
+				cap2 = tolower node2.infoNode.custAttributes[#containerInfo].caption
+			)--if
+			
+			--realiza las comparaciones
+			if cap1 == cap2 then --si los nombres son iguales devuelve 0
+				0
+			else --si nos osn iguales los compara
+			(
+				auxArray = sort #(cap1, cap2)					
+				if cap1 == auxArray[1] then (if invert then 1 else -1)
+				else (if invert then -1 else 1)
+			)--if else
+		),
+		
+		------------------------------------------------
+		--@fn: array{container} | sortContainersByCaption | Ordena los containers de un array de forma alfabética y lo devuelve.
+		--@gets: array{container} | containersToSort | Array de containers a ordenar.
+		--@opt: boolean | invert | false | Indica si devolver el resultado invertido, para ordenaciones inversas.
+		--@opt: boolean | ignoreCase | false | Indica si tener en cuenta mayusculas y minusculas.
+		--@returns: array{container} | Array de containers ordenados.
+		------------------------------------------------
+		fn sortContainersByCaption containersToSort invert:false ignoreCase:false =
+		(
+			qsort containersToSort this.compareContainersByCaption invert:invert ignoreCase:ignoreCase
+			
+			containersToSort
+		),
+		
+		------------------------------------------------
+		--@fn: container | newContainer | Crea un nuevo container y lo devuelve. 
+		--@opt: string | caption | undefined | Nombre para mostrar que se le dará el nuevo container creado. Si ya existe lo crea con un indice.
+		--@opt: name | subType | #pass | Tipo de container. #passTree, #passGroup, #pass, #ObjectSet, #lightSet, #hiddenObjectSet, #lodSet.
+		--@opt: container | parent |  undefined | Container padre del que se va a crear.
+		--@opt: array{container} | children | #() | Containers hijos para el que se va a crear.
+		--@opt: node | infoNode | undefined | Nodo de la escena con la información de un container y a partir del cual generar un container en memoria.
+		--@opt: boolean | createRequiredOnCreate | true | Especifica si debemos crear los overrides obligatorios en la creación (para que en duplicate no se haga)
+		------------------------------------------------
+		fn newContainer caption:undefined subType:#pass parent:undefined children:#() infoNode:undefined uiObj:undefined createRequiredOnCreate:true =
+		(
+			_newContainer = undefined
+			
+			--crea el nuevo container
+			_newContainer = this.container caption:caption subType:subType parent:parent children:children infoNode:infoNode uiObj:uiObj createRequiredOnCreate:createRequiredOnCreate
+			
+			_newContainer
+		),
+		
+		------------------------------------------------
+		--@fn: container | duplicateContainer | Duplica un container pasado por parametro y lo devuelve. Lo nombra igual añadiendo un subindice.
+		--@gets: container | containerToDuplicate | Container personalizado que se quiere duplicar.
+		--@opt: boolean | keepCaption | false | Indica si mantener el mismo nombre en el duplicado.
+		------------------------------------------------
+		fn duplicateContainer containerToDuplicate keepCaption:false =
+		(
+			_newContainer = undefined
+			
+			--if (containerToDuplicate.getOverrides()).count != 0 then duplicateOverride
+			
+			------------------------------------------------
+			--crea un nuevo container con el mismo nombre, tipo y propiedades. La funcion de creacion se encarga de ponerle nombre con un índice.
+			_containerCaption = (filterString (containerToDuplicate.getCaption()) "#")[1]
+			_newContainer = this.container caption:_containerCaption subtype:(containerToDuplicate.getSubType()) parent:(containerToDuplicate.getParent()) infoNode:undefined createRequiredOnCreate:false
+
+			--si se dice explicitamente que se mantenga el nombre, le dejamos el original
+			if keepCaption then
+			(
+				(_newContainer.getInfoNode()).custAttributes[#containerInfo].caption = containerToDuplicate.getCaption()
+				_replaces = dotNetObject "System.Collections.Hashtable"
+				_replaces.add "type" ((containerToDuplicate.getInfoNode()).subType as string)
+				_replaces.add "name" (containerToDuplicate.getInfoNode()).caption
+				(_newContainer.getInfoNode()).name = lb.re.replaceGroupsInPattern (this.infoNodeRegExp) _replaces
+			)--if
+			------------------------------------------------
+			
+			------------------------------------------------
+			--duplica los hijos de forma recursiva con el nombre del original
+			_newChildren = for _ch in (containerToDuplicate.getChildren()) collect (this.duplicateContainer _ch keepCaption:true)
+			for _ch in _newChildren where _ch != undefined do _ch.setParent _newContainer
+			------------------------------------------------
+			
+			------------------------------------------------
+			--duplica los overrides del contenedor con el nombre del original
+			_newOverrides = for _ov in (containerToDuplicate.getOverrides()) collect (lb.overrides.duplicateOverride _ov keepCaption:true)
+			for _ov in _newOverrides where _ov != undefined do
+			(
+				_ov.setParent (_newContainer.getInfoNode())
+				_ov.setParentContainer _newContainer
+			)--for
+			_newContainer.setOverrides _newOverrides
+			------------------------------------------------
+			
+			------------------------------------------------
+			--duplica los nodeSets del contenedor
+			if (containerToDuplicate.getNodeSetNames()).count != 0 then _newContainer.setNodeSets (containerToDuplicate.getNodeSets()) nodesetStates:(containerToDuplicate.getNodeSetEnabledStates())
+			------------------------------------------------
+			
+			------------------------------------------------
+			--duplica las luces del contenedor
+			if (containerToDuplicate.getLightNames()).count != 0 then _newContainer.setLightNodes (containerToDuplicate.getLightNodes())
+			------------------------------------------------
+
+			------------------------------------------------
+			--duplica los nodos del contenedor
+			if (containerToDuplicate.getNodesNames()).count != 0 then _newContainer.setNodes (containerToDuplicate.getNodes())
+			------------------------------------------------
+
+			------------------------------------------------
+			--setea el mismo estado
+			_newContainer.setEnabledState(containerToDuplicate.getEnabledState())
+			------------------------------------------------
+
+			_newContainer
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | placeInScene | Recoloca los nodos de los containers en la escena.
+		------------------------------------------------
+		fn placeInScene _hierarchyInit:undefined _initPosition:[0,0,-30] _level:0 =
+		(
+			_increment = 5
+			
+			--si no se le ha pasado un inicio de jerarquía trabaja con los nodos obtenidos de la escena
+			if not isValidNode _hierarchyInit then
+			(	
+				_infoNodes = lb.passManager.getAllInfoNodes()
+				_additiveIncrement = 0	
+				
+				--recorre todos los padres de jerarquía hacia abajo y va colocando sus hijos bajo el
+				for _inode in _infoNodes where _inode.parent == undefined do
+				(	
+					_inode.pos = _initPosition + [0,0,_additiveIncrement]
+					
+					_childrenPosCount = this.placeInScene _hierarchyInit:_inode _initPosition:(_initPosition + [5,0,_additiveIncrement]) _level:0
+					
+					_additiveIncrement -=  (_increment*_childrenPosCount)										
+				)--for			
+			)
+			else
+			(
+				_infoNodes = lb.passManager.getAllInfoNodes()				
+				_additiveIncrement = 0
+				_childrenPosCount = 0
+				
+				_hierarchyInit.pos = _initPosition + [0,0,_additiveIncrement]
+				
+				--recorre todos los padres de jerarquía hacia abajo y va colocando sus hijos bajo el
+				for _inode in _hierarchyInit.children where findItem _infoNodes _inode != 0 do
+				(
+					_childrenCount = this.placeInScene _hierarchyInit:_inode _initPosition:(_initPosition + [5,0,_additiveIncrement]) _level:(_level + 1)
+					_childrenPosCount += _childrenCount
+					
+					_additiveIncrement -=  (_increment*_childrenCount)
+				)--for			
+				
+				--#(#passTree, #overrides, #passGroup, #pass, #lightSet, #ObjectSet, #hiddenObjectSet, #lodSet)
+				 case _hierarchyInit.custAttributes[#containerInfo].subType of
+				(
+					"passTree":		_hierarchyInit.wirecolor = color 135 185 245
+					"passGroup":	_hierarchyInit.wirecolor = color 135 185 245
+					"pass":			_hierarchyInit.wirecolor = color 135 185 245
+					"settings":		_hierarchyInit.wirecolor = color 255 70 105
+					"overrides":	_hierarchyInit.wirecolor = color 255 70 105
+					"lightSet":		_hierarchyInit.wirecolor = color 255 185 70
+					"ObjectSet":	_hierarchyInit.wirecolor = color 65 200 100
+					"hiddenObjectSet":_hierarchyInit.wirecolor = color 55 190 90
+					"lodSet":		_hierarchyInit.wirecolor = color 55 190 90
+					"flatColorObjectSet":		_hierarchyInit.wirecolor = color 55 190 90
+					default:		_hierarchyInit.wirecolor = color 112 255 0
+				)
+				
+				if _childrenPosCount == 0 then _childrenPosCount = 1
+				if _hierarchyInit.children.count != 0 then _childrenPosCount += 0.2
+				
+				_childrenPosCount
+			)
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | removeAll | Elimina todos los containers de la escena.
+		------------------------------------------------
+		fn removeAll =
+		(
+			--obtiene los containers y los elimina.
+			delete (this.getAllInfoNodes())			
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | removeContainer | Elimina el container pasado por parametro. Devuelve TRUE si lo consigue eliminar y FALSE si no.
+		--@gets: container | containerToRemove | Container que se quiere eliminar.
+		--@opt: boolean | placeInSceneNodes | false | Indica si recolocar los nodos en la escena tras el emparentamiento.
+		------------------------------------------------
+		fn removeContainer containerToRemove placeInSceneNodes:false =
+		(
+			containerToRemove.remove() --elimina el container y todos sus subcontainers
+			if placeInSceneNodes then this.placeInScene() --recoloca los nodos en la escena.
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | removeByCaption | Elimina todos los containers segun el nombre para mostrar indicado.
+		--@gets: string | caption | Nombre para mostrar del container que se quiere eliminar.
+		--@opt: boolean | enumerated | false | Indica si eliminar todos los containers derivados del que se solicita mediante su numeracion.
+		--@opt: container | containerTree | undefined | Container raiz del arbol de containers donde empezar a buscar.
+		--@opt: boolean | placeInSceneNodes | false | Indica si recolocar los nodos en la escena tras el emparentamiento.
+		------------------------------------------------
+		fn removeByCaption caption enumerated:false containerTree:undefined placeInSceneNodes:false =
+		(
+			--obtiene los containers adecuados y los elimina
+			_containersToRemove = this.getByCaption caption containerTree:containerTree enumerated:enumerated
+			for _p in _containersToRemove do _p.remove()
+			
+			if placeInSceneNodes then this.placeInScene() --recoloca los nodos en la escena.
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | removeBySubType | Elimina todos los containers segun el subtipo indicado.
+		--@gets: string | subType | subTipo del container que se quiere eliminar.
+		--@opt: container | containerTree | undefined | Container raiz del arbol de containers donde empezar a buscar.
+		--@opt: boolean | placeInSceneNodes | false | Indica si recolocar los nodos en la escena tras el emparentamiento.
+		------------------------------------------------
+		fn removeBySubType subType containerTree:undefined placeInSceneNodes:false =
+		(
+			--obtiene los containers adecuados y los elimina
+			_containersToRemove = this.getBySubType subType containerTree:containerTree
+			for _p in _containersToRemove do _p.remove()
+			
+			if placeInSceneNodes then this.placeInScene() --recoloca los nodos en la escena.
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | removeByUiObj | Elimina todos los containers segun el objeto de interface indicado.
+		--@gets: dotNetObject | uiObj | Objeto de interface que representa el container que se quiere eliminar.
+		--@opt: container | containerTree | undefined | Container raiz del arbol de containers donde empezar a buscar.
+		--@opt: boolean | placeInSceneNodes | false | Indica si recolocar los nodos en la escena tras el emparentamiento.
+		------------------------------------------------
+		fn removeByUiObj uiObj containerTree:undefined placeInSceneNodes:false =
+		(
+			--obtiene los containers adecuados y los elimina
+			_containersToRemove = this.getByUiObj uiObj containerTree:containerTree
+			for _p in _containersToRemove do _p.remove()
+			
+			if placeInSceneNodes then this.placeInScene() --recoloca los nodos en la escena.
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | loadContainersFromFile | Carga los containers del archivo que se le indique y devuelve TRUE si lo consigue. FALSE si no.
+		--@gets: string | file | Path completo del archivo del cual se quieren cargar los containers.
+		--@opts: array{string} | captions | #() | Nombres de los containers a cargar.
+		--@opts: boolean | overWriteDuplicated | true | Indica si sobrescribir los duplicados.
+		------------------------------------------------
+		fn loadContainersFromFile file captions:#() overWriteDuplicated:true =
+		(
+			_success = false
+			
+			--si el archivo existe los intenta cargar
+			if doesFileExist file then
+			(
+				_nodesToMerge = (if captions.count != 0 then captions else (this.getFileContainerCaptions file))
+				_success = mergeMAXFile file _nodesToMerge (if overWriteDuplicated then #deleteOldDups else #skipDups) quiet:true
+				
+				--si ha cargado containers en la escena los limpia para que no contengan incoherencias
+				if _success then
+				(
+					_containerTrees = this.getContainerTrees()
+					for _containerTree in _containerTrees do _containerTree.purge purgeDescendants:true
+				)
+			)
+			
+			_success
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | restoreRendererSceneSettingsBackup | Devuelve TRUE si consigue restaurar las propiedades del motor de render indicado. FALSE si no.
+		--@gets: classOf | rendererClassOf | Tipo del motor de render del que se quieren restaurar sus propiedades.
+		--@gets: container | passTreeRoot | Contenedor raiz de un arbol de pases del que obtener las propiedades a restaurar.
+		------------------------------------------------
+		fn restoreRendererSceneSettingsBackup rendererClassOf passTreeRoot =
+		(
+			_success = false
+			
+			if classOf renderers.current == rendererClassOf then --solo si el render aplicado es del mismo tipo que el solicitado
+			(
+				_overrides = passTreeRoot.getOverrides() --obtiene los overrides del arbol de pases
+				_backupNode = passTreeRoot.getSettingsBackupNode() --obtiene el nodo de backup de settings del arbol
+				_rendererBakupOverride = undefined
+				
+				--dependiendo de la clase de motor de render solicitado necesita restaurar desde un overrideo u otro segun el tipo
+				case rendererClassOf of
+				(
+					Default_Scanline_Renderer:
+					(
+						for _ov in _overrides where (_ov.getSubType()) == "scanlineGeneralBackup" do
+							_rendererBakupOverride = _ov
+					)--Default_Scanline_Renderer
+					
+					mental_ray_renderer:
+					(
+						for _ov in _overrides where (_ov.getSubType()) == "mentalGeneralBackup" do
+							_rendererBakupOverride = _ov
+					)--mental_ray_renderer
+				)--case
+				
+				--si tiene de donde hacerlo restaura las propiedades
+				if (_rendererBakupOverride != undefined) and (_backupNode != undefined) then
+				(
+					_success = _rendererBakupOverride.restoreBackup _backupNode
+				)--if
+			)--if
+			
+			_success
+		),
+
+		------------------------------------------------
+		------------------------------------------------
+		fn fixInfoNodesNames =
+		(
+			for _node in this.getAllInfoNodes() where not (lb.re.matchObj _node.name this.infoNodeRegExp).success do
+			(
+				_replaces = dotNetObject "System.Collections.Hashtable"
+				_replaces.add "type" (_node.subType as string)
+				_replaces.add "name" _node.caption
+				_node.name = (lb.re.replaceGroupsInPattern (this.infoNodeRegExp) _replaces)
+			)
+		),
+		------------------------------------------------
+
+		------------------------------------------------
+		--@fn: undefined | overrideCollector | Recorre los overrides del passtree para un nivel determinado y devuelve el la información del custom Attribute
+		--@gets: string | overridetypekey | La clave de texto que identifica el subtype del override
+		--@gets: integer | level | el depth level en el passtree: 1-Overrides Generales 2-Overrides de passGroup 3-Overrides de Pass
+		--@gets: (opt) string | captionPattern | nombre del pase del que queremos obtener el CATBone
+		--gets: (opt) boolean | returnAllOverrides | si esta a true devuelve el override acumulado hasta el elemento. de lo contrario solo devuelve el pase/override si existe
+		--@returns: (si captionPattern != undefined struct | CustomAttribute | el customAttribute con los parametros de información del pase.
+		--@returns: (si captionPattern == undefined array | CustomAttribute | una array con todos los customAttributes de los overrides del tipo especificado para el nivel. CustomAttribute[1] - Info del custAttribute CustomAttribute[2] - El nombre del container del customAttribute CustomAttribute[3] - Booleano si el override existe en el contexto (true) o si es una referencia = False
+		------------------------------------------------
+		fn overrideCollector overridetypekey level captionPattern:undefined returnAllOverrides:false= 
+		(
+			_caOverride = undefined
+			--Construimos la clave de identificación del custAttribute en función del subtype
+			_overrideInfoKey = ("override"+overridetypekey+"Info")
+			--Obtenemos el passTree
+			_passTrees = lb.passManager.getContainerTrees() 
+			for _passtree in _passTrees do 
+			(
+				--Obtenemos los overrides que cuelgan del passtree 
+				for _ch in _passTree.getChildren() where (_ch.getSubType()) == #overrides do
+				(	
+					_overrides = _ch.getOverrides()
+
+					for _ov in _overrides do
+					(
+						--si el override es del tipo especificado lo guardamos en la variable.
+						if (_ov.getSubtype() == overridetypekey)  then
+						(
+							_caOverride = _ov.customOverride.infoNode.custAttributes[_overrideInfoKey]
+						)
+					)
+				)
+				--Si se trata del nivel base devolvemos el custAttribute.
+				if level == 1 then return _caOverride
+				else 
+				(
+					_caPGOverride = _caOverride
+					if level == 2 then 
+					(
+						--Si especificamos un pass group para buscar devolveremos solo la iformación de este pass group 
+						if captionPattern != undefined then 
+						(
+							for _passGroup in _passTree.getChildren() where ((_passGroup.getSubType()) == #passGroup) and (_passGroup.getEnabledState()) and (MatchPattern (_passGroup.getCaption()) pattern:(captionPattern) ) do
+							(
+								for _over in _passGroup.getChildren() where ((_over.getSubType()) == #overrides) and (_over.getEnabledState()) do
+								(
+									_overrides = _over.getOverrides()
+					
+									for _ov in _overrides where (_ov.getEnabledState()) do 
+									(
+										if (_ov.getSubtype() == overridetypekey) and (_ov.getEnabledState()) then
+										(
+											_caPGOverride = _ov.customOverride.infoNode.custAttributes[_overrideInfoKey]
+										)
+									)
+								)
+							)
+							return _caPGOverride
+						)
+						else 
+						(	
+							--En el caso que no especifiquemos un passGroup deberemos recoger en la array todos los overrides a nivel de pass group así como el caption del pase. 
+							_caPGOverrideArray = #()
+							for _passGroup in _passTree.getChildren() where ((_passGroup.getSubType()) == #passGroup) and (_passGroup.getEnabledState())  do
+							(
+								_passgroupElements = 0
+								for _over in _passGroup.getChildren() where ((_over.getSubType()) == #overrides) and (_over.getEnabledState()) do
+								(
+									_overrides = _over.getOverrides()
+
+									for _ov in _overrides where (_ov.getEnabledState()) do 
+									(
+										if (_ov.getSubtype() == overridetypekey) and (_ov.getEnabledState()) then
+										(
+											_caPGOverrideInfo = #()
+											_caPGOverride = _ov.customOverride.infoNode.custAttributes[_overrideInfoKey]
+											--Generación del par de claves Info,Nombre passGroup
+											append _caPGOverrideInfo _caPGOverride
+											append _caPGOverrideInfo _passGroup
+											append _caPGOverrideInfo true
+											append _caPGOverrideArray _caPGOverrideInfo
+											_passgroupElements += 1
+										)
+									)
+								)
+								if returnAllOverrides and _passgroupElements == 0 then 
+								(
+									_caPGOverrideInfo = #()
+									_caPGOverride = _caOverride
+									--Generación del par de claves Info,Nombre passGroup
+									append _caPGOverrideInfo _caPGOverride
+									append _caPGOverrideInfo _passGroup
+									append _caPGOverrideInfo false
+									append _caPGOverrideArray _caPGOverrideInfo
+								)
+							)
+							return _caPGOverrideArray
+						)
+					)
+					else 
+					(
+						_caPassOverride = _caPGOverride
+						if level == 3 then 
+						(
+							_caPassOverrideArray = #()
+							for _passGroup in _passTree.getChildren() where ((_passGroup.getSubType()) == #passGroup) and (_passGroup.getEnabledState()) do
+							(
+								--Si especificamos un pass para buscar devolveremos solo la iformación de este pase 
+								if captionPattern != undefined then 
+								(
+									for _pass in _passGroup.getChildren() where ((_pass.getSubType()) == #pass) and (_pass.getEnabledState()) and (MatchPattern (_pass.getCaption()) pattern:(captionPattern) )do
+									(
+										for _over in _pass.getChildren() where ((_over.getSubType()) == #overrides) and (_over.getEnabledState()) do
+										(
+											_overrides = _over.getOverrides()
+											
+											for _ov in _overrides do 
+											(
+												if (_ov.getSubtype() == overridetypekey) and (_ov.getEnabledState()) then
+												(
+													_caPassOverride = _ov.customOverride.infoNode.custAttributes[_overrideInfoKey]
+												)
+											)
+										)
+									)
+									return _caPassOverride
+								)
+								else 
+								(
+									
+									--En el caso que no especifiquemos un pase deberemos recoger en la array todos los overrides a nivel de pass así como el caption del pase. 
+									for _pass in _passGroup.getChildren() where ((_pass.getSubType()) == #pass) and (_pass.getEnabledState()) do
+									(
+										_passElements = 0
+										for _over in _pass.getChildren() where ((_over.getSubType()) == #overrides) and (_over.getEnabledState()) do
+										(
+											_overrides = _over.getOverrides()
+											
+											for _ov in _overrides do 
+											(
+												if (_ov.getSubtype() == overridetypekey) and (_ov.getEnabledState()) then
+												(
+													_caPassOverrideInfo = #()
+													_caPassOverride = _ov.customOverride.infoNode.custAttributes[_overrideInfoKey]
+													--Generación del par de claves Info,Nombre pass
+													append _caPassOverrideInfo _caPassOverride
+													append _caPassOverrideInfo _pass
+													append _caPassOverrideInfo true
+													append _caPassOverrideArray _caPassOverrideInfo
+													_passElements += 1
+												)
+											)
+										)
+										if returnAllOverrides and _passElements == 0 then 
+										(
+											_caPassOverrideInfo = #()
+											_caPassOverride = _caPGOverride
+											--Generación del par de claves Info,Nombre pass
+											append _caPassOverrideInfo _caPassOverride
+											append _caPassOverrideInfo _pass
+											append _caPassOverrideInfo false
+											append _caPassOverrideArray _caPassOverrideInfo
+										)
+									)
+									
+								)
+							)
+							return _caPassOverrideArray
+						)
+					)--if level 2
+				)--if level 1
+			)--for passtree
+		)--fn
+		,
+		------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+			
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addLibrary this --añade la libreria a la principal
+		)
+		
+	)--lib_passManager
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------	
+		
+	lib_passManager() --crea la libreria
+	
+	ok
+)

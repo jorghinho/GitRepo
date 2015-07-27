@@ -1,0 +1,938 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--Descripcion: libreria de funciones de controladores.
+------------------------------------------------------------------------------------------------------------------------------------------------
+(	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: controller | Contiene la libreria de funciones comunes de controladores.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct lib_controller
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #controller,					--@var: category | Categoria de la libreria.
+		className = lb.getFileLibName (getThisScriptFilename() as string),	--@var: className | Nombre de la libreria.
+		description = "Libreria de funciones comunes de controladores",	--@var: description | Descripcion de la libreria.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		listControllers 			= #(position_list, rotation_list, scale_list, float_list, point3_list),
+		transformControllers	= #(link_constraint, prs, transform_script, xref_controller),
+		floatControllers 			= #(audioFloat, bezier_Float, boolean_float, float_expression, float_limit, float_list, float_motion_capture, float_reactor, float_script, linear_float, linkTimeControl, noise_float, on_off, slaveFloat, tcb_float, waveForm_float, float_ListDummyEntry),
+		positionControllers 	= #(attachment, audioPosition, bezier_position, linear_position, noise_position, path_constraint, position_constraint, position_expression, position_list, position_motion_capture, position_reactor, position_script, position_xyz, slavePos, SpringPositionController, surface_position, tcb_position, position_ListDummyEntry),
+		rotationControllers 	= #(audioRotation, euler_xyz, linear_rotation, lookAt_constraint, noise_rotation, orientation_constraint, rotation_list, rotation_motion_capture, rotation_reactor, rotation_script, slaveRotation, tcb_rotation, rotation_ListDummyEntry),
+		scaleControllers 		= #(audioScale, bezier_scale, linear_scale, noise_scale, scale_expression, scale_list, scale_motion_capture, scale_reactor, scale_script, scaleXYZ, slaveScale, tcb_scale, scale_ListDummyEntry),
+		point3Controllers		=	#(audioPoint3, bezier_color, bezier_point3, color_rgb, noise_point3, point3_expression, point3_list, point3_motion_capture, point3_reactor, point3_script, point3_xyz, slave_point3, tcb_point3),
+		point4Controllers		=	#(bezier_point4, bezier_rgba, color_rgba,  point4_list, point4_script, point4_wire, point4_xyzw, tcb_point4),
+		constraintControllers	=	#(link_constraint, position_constraint, path_constraint, orientation_constraint, lookAt_constraint),
+		nonListableControllers= #(position_listDummyEntry, rotation_listDummyEntry, scale_listDummyEntry, float_listDummyEntry),
+		
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		------------------------------------------------
+		--@fn: undefined | getControllerName |  Obtenemos el nombre del controlador que le pasamos recorriendo los subAnims hasta encontrar el correcto.. Es recursiva.
+		--@gets: controller | contr | Controlador que se va a abuscar su nombre.
+		------------------------------------------------
+		fn getControllerName contr _subAnim:undefined =
+		(
+			_name = undefined
+			
+			if _subAnim == undefined then
+			(
+				_refNode = (refs.dependentNodes contr inmediateOnly:true)[1]
+				
+				if _refNode.numsubs != 0 then
+					for i=1 to _refNode.numSubs where _name == undefined do
+						_name = getControllerName contr _subAnim:_refNode[i]
+			)
+			else
+				if _subAnim.controller != undefined then
+					if contr == _subAnim.controller then
+						_name = _subAnim.name
+					else
+						for i=1 to _subAnim.numSubs where _name == undefined do
+							_name = getControllerName contr _subAnim:_subAnim[i]
+
+			_name
+		),--getControllerName
+
+		------------------------------------------------
+		--@fn: integer | getControllerIndex | Devuelve el indice que ocupa en un listcontroller indicado el controlador del tipo solicitado. Devuelve 0 si no lo encuentra
+		--@gets: controller | listController | List controller en el que buscar.
+		--@gets: name | controllerType | Indica que tipo de controlador se busca, #frozen o #zero. Tambien se puede usar un entero en cuyo caso devuelve ese mismo entero si el listController tiene un subcontrolador en ese indice.
+		------------------------------------------------
+		fn getControllerIndex listController controllerType =
+		(
+			contIndex = 0
+			
+			-- Si buscamos un número de controlador comprobamos si existe
+			if classof controllerType == integer then
+			(
+				-- Si es un controlador de tipo LIST y tiene tantos subcontroladores o más que el número que se busca, devolvemos su índice
+				if (try (listController.count; true) catch false) and (listController.count >= controllerType) then	contIndex = controllerType
+			)
+			else	-- Si buscamos un controlador Frozen o Zero lo buscamos por nombre
+			(
+				-- Solo buscamos si es un controlador de tipo LIST
+				if (try (listController.count; true) catch false) then
+				(
+					contType = controllerType as string
+					
+					i = 1
+					found = false
+					while i <= listController.count and not found do
+					(
+						if (findstring (toLower listController[i].name) (toLower contType as string) != undefined) then
+						(
+							contIndex = i
+							found = true
+						)
+						i += 1
+					)
+				)
+			)
+			
+			contIndex
+		),
+
+		---------------------------------------------------------------------------------------------------
+		-- devuelve un array con los controladores de un objeto (es recursiva)
+		---------------------------------------------------------------------------------------------------
+		fn getObjControllers obj onlyKeyable:false subA:"" =
+		(
+			controllers = #()
+			
+			if (obj.numsubs) > 0 then --si tiene mas subanims sigue buscando en profundidad dentro de ellos
+				for i=1 to obj.numSubs do
+					for ct in (getObjControllers obj[i] onlyKeyable:onlyKeyable subA:(subA + "[" + i as string + "]")) do
+						appendIfunique controllers ct
+			else if obj.controller != undefined and ((onlyKeyable and obj.controller.keyable) or not onlyKeyable) then
+				if obj.name != "Available" then
+					appendIfunique controllers #(obj, subA)
+				
+			makeUniqueArray controllers
+		),
+
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+
+		------------------------------------------------
+		--@fn: undefined | setControllerKeyable | Hace animable o no, el controlador pasado por parametro segun se le indique. Es recursiva.
+		--@gets: controller | controller | Controlador que hacer animable o no animable. Tambien funciona si se le pasa un objeto.
+		--@gets: boolean | option | Indica si hacer el controlador keyable o no keyable. TRUE = keyable.
+		------------------------------------------------
+		fn setControllerKeyable controller val =
+		(
+			--para evitar posibles casos de pistas que vengan mal definidas, solo trata aquellas que tengan datos.
+			if controller != undefined then
+			(
+				if controller.numSubs > 0 then
+					for i = 1 to controller.numSubs do this.setControllerKeyable controller[i] val
+				else
+				(
+					if findstring (controller as string) "Weight__" != undefined then controller.controller = bezier_float()
+					controller.controller.keyable = val
+				)
+			)
+		),
+
+		---------------------------------------------------------------------------------------------------
+		-- hace keyable o unkeyable el controlador pasado por parametro
+		--necesita TRK que es el track
+		--necesita STATE, que es True o False
+		---------------------------------------------------------------------------------------------------
+		fn setTrackKeyableState trk state =
+		(
+			success = true
+			
+			if trk.controller != undefined then
+			(
+				if classOf trk.controller != float_limit then 
+					trk.controller.keyable = state
+				else
+					trk.controller[1].controller.keyable = state
+			)
+			else
+				success = false
+			
+			success
+		),
+
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		------------------------------------------------
+		--@fn: boolean | isTransformFrozen | Devuelve TRUE si el nodo pasado esta freezeado y FALSE si no.
+		--@gets: node | obj | Nodo del que comprobar si tiene freeze transform hecho.
+		--@gets: name | transformType | Indica que tipo de transformación comprobar, #position, #rotation, #scale o #all
+		------------------------------------------------
+		fn isTransformFrozen obj transformType =
+		(
+			_isFrozen = false --flag total de comprobacion
+			
+			--flags parciales para cada transformacion
+			_isPosFrozen = false
+			_isRotFrozen = false
+			_isScaleFrozen = false
+				
+			--variables temporales para almacenar los controladores de cada transformacion
+			_p = if ((transformType == #position or transformType == #all) and classof obj.position.controller == position_list) then _p = obj.position.controller else undefined
+			_r = if ((transformType == #rotation or transformType == #all) and classof obj.rotation.controller == rotation_list) then _r = obj.rotation.controller else undefined
+			_s = if ((transformType == #scale or transformType == #all) and classof obj.scale.controller == scale_list) then _s = obj.scale.controller else undefined
+			
+			--mira si esta freezeada cada parte
+			if (_p != undefined) then for i=1 to _p.count where not _isPosFrozen and (findstring (toLower _p[i].name) "zero" != undefined) do _isPosFrozen = true
+			if (_r != undefined) then for i=1 to _r.count where not _isRotFrozen and (findstring (toLower _r[i].name) "zero" != undefined) do _isRotFrozen = true
+			if (_s != undefined) then for i=1 to _s.count where not _isScaleFrozen and (findstring (toLower _s[i].name) "zero" != undefined) do _isScaleFrozen = true
+			
+			
+			case transformType of
+			(
+				#position: _isFrozen = _isPosFrozen
+				#rotation: _isFrozen = _isRotFrozen
+				#scale: _isFrozen = _isScaleFrozen
+				#all: _isFrozen = (_isPosFrozen  and _isRotFrozen and _isScaleFrozen)
+			)--case
+				
+			_isFrozen
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | freezeTransform | Congela las transformaciones indicadas del objeto pasado por parametro.
+		--@gets: node | obj | Nodo del que congelar las transformaciones.
+		--@gets: name | transformType | Indica que tipo de transformación congelar, #position, #rotation, #scale o #all.
+		--@opt: boolean | keepPos | false | Indica si conservar el controlador original con su animacion.
+		--@opt: boolean | keepRot | false | Indica si conservar el controlador original con su animacion.
+		--@opt: boolean | keepSca | false | Indica si conservar el controlador original con su animacion.
+		------------------------------------------------
+		mapped fn freezeTransform obj transformType keepPos:false keepRot:false keepSca:false =
+		(
+			c = obj	 	-- capturamos el controlador general del objeto
+			
+			-- Inhabilitamos la solapa Motion del Command Panel para evitar parpadeos
+			--suspendEditing()
+			
+			-- Miraremos si hay attachObjectToFace en el objeto
+			_maintainAttach = false
+			_attachProControllers = lb.attachObjectToFaceFunctions.getAttachProControllers obj
+			
+			if transformType == #rotation  or transformType == #all then
+			(
+				--Antes de nada si hay una rotación de attachObjectToFace la eliminaremos.
+				if keepRot and _attachProControllers[1] != undefined and _attachProControllers[2] != undefined and _attachProControllers[3] != undefined then
+				(
+					_maintainAttach = true
+					for i=obj.rotation.controller.count to 1 by -1 do
+						if obj.rotation.controller[i].controller == _attachProControllers[2] then
+							obj.rotation.controller.delete i 
+				)
+				--------------------------------------------------------------------------------------
+				--si la pieza tiene animacion, almacena el controlador actual (si estaba freezeado guardaremos el zero y sino el controlador de rotación).
+				_currentRot = undefined
+				
+				if classof c.rotation.controller == rotation_list and c.rotation.controller["Zero_Euler_XYZ"] != undefined and c.rotation.controller["Zero_Euler_XYZ"].controller.keys.count > 0 then
+					_currentRot = c.rotation.controller["Zero_Euler_XYZ"].controller
+				if classof c.rotation.controller != rotation_list and c.rotation.controller.keys.count > 0 then
+					_currentRot = c.rotation.controller
+				--------------------------------------------------------------------------------------
+				
+				if not keepRot or _currentRot == undefined then --si no hay que guardar la animacion, o no hay animacion
+				(
+					_posBckp = c.position
+					_rotBckp = c.rotation
+					c.rotation.controller = Euler_XYZ()
+					deleteKeys c.rotation.controller
+					c.rotation = _rotBckp
+					c.position = _posBckp
+					
+					c.rotation.controller = rotation_list()
+					c.rotation.controller.setname 1 "Frozen rotation"
+					c.rotation.controller.available.controller = euler_xyz()
+					index = c.rotation.controller.count
+					c.rotation.controller.setname index "Zero Euler XYZ"
+					c.rotation.controller.setactive index
+					
+					setControllerKeyable c.rotation.controller false
+					setControllerKeyable c.rotation.controller[index] true
+				)
+				else --si hay que guardar la animacion y hay claves de animacion
+				(
+					c.rotation.controller = Euler_XYZ()
+					
+					c.rotation.controller = rotation_list()
+					c.rotation.controller.setname 1 "Frozen rotation"
+					c.rotation.controller.available.controller = copy _currentRot
+					deleteKeys c.rotation.controller[1].controller
+					c.rotation.controller[1].controller.value = quat 1
+					index = c.rotation.controller.count
+					c.rotation.controller.setname index "Zero Euler XYZ"
+					c.rotation.controller.setactive index
+					
+					setControllerKeyable c.rotation.controller false
+					setControllerKeyable c.rotation.controller[index] true
+				)
+			)
+			
+			if transformType == #position or transformType == #all then 
+			(
+				--Antes de nada si hay una rotación de attachObjectToFace la eliminaremos.
+				if keepPos and _attachProControllers[1] != undefined and _attachProControllers[2] != undefined and _attachProControllers[3] != undefined then
+				(
+					_maintainAttach = true
+					for i=obj.position.controller.count to 1 by -1 do
+						if obj.position.controller[i].controller == _attachProControllers[1] then
+							obj.position.controller.delete i 
+				)
+				
+				--------------------------------------------------------------------------------------
+				--si la pieza tiene animacion, almacena el controlador actual.
+				_currentPos = undefined
+				if classof c.position.controller == position_list and c.position.controller["Zero_Pos_XYZ"] != undefined and c.position.controller["Zero_Pos_XYZ"].controller.keys.count > 0 then
+					_currentPos = c.position.controller["Zero_Pos_XYZ"].controller
+				if classof c.position.controller != position_list and c.position.controller.keys.count > 0 then
+					_currentPos = c.position.controller
+				--------------------------------------------------------------------------------------
+				
+				if not keepPos or _currentPos == undefined then --si no hay que guardar la animacion, o no hay animacion
+				(
+					_posBckp = c.position
+					c.position.controller = Position_XYZ()
+					deleteKeys c.position.controller
+					c.position = _posBckp
+					
+					c.position.controller = position_list()
+					c.position.controller.setname 1 "Frozen position"
+					c.position.controller.available.controller = Position_XYZ()
+					index = c.position.controller.count
+					c.position.controller.setname index "Zero Pos XYZ"
+					c.position.controller.setactive index
+					
+					setControllerKeyable c.position.controller false
+					setControllerKeyable c.position.controller[index] true
+				)
+				else --si hay que guardar la animacion y hay claves de animacion
+				(
+					c.position.controller = Position_XYZ()
+					
+					c.position.controller = position_list()
+					c.position.controller.setname 1 "Frozen position"
+					c.position.controller.available.controller = copy _currentPos
+					deleteKeys c.position.controller[1].controller
+					c.position.controller[1].controller.value = [0,0,0]
+					index = c.position.controller.count
+					c.position.controller.setname index "Zero Pos XYZ"
+					c.position.controller.setactive index
+					
+					setControllerKeyable c.position.controller false
+					setControllerKeyable c.position.controller[index] true
+				)
+			)
+			
+			if transformType == #scale or transformType == #all then
+			(
+				--------------------------------------------------------------------------------------
+				--si la pieza tiene animacion, almacena el controlador actual.
+				_currentScale = undefined
+				if classof c.scale.controller == scale_list and c.scale.controller["Zero_Scale_XYZ"] != undefined and c.scale.controller["Zero_Scale_XYZ"].controller.keys.count > 0 then
+					_currentScale = c.scale.controller["Zero_Scale_XYZ"].controller
+				if classof c.scale.controller != scale_list and c.scale.controller.keys.count > 0 then
+				(
+					c.scale.controller = ScaleXYZ()
+					_currentScale = c.scale.controller
+				)
+				--------------------------------------------------------------------------------------
+				
+				if not keepSca or _currentScale == undefined then --si no hay que guardar la animacion, o no hay animacion
+				(
+					_scaleBckp = c.scale
+					c.scale.controller = bezier_scale()
+					deleteKeys c.scale.controller
+					--c.scale = _scaleBckp --ESTA COMENTADO PORQUE FASTIDIA EL AUTORIG
+					
+					c.scale.controller = scale_list()
+					c.scale.controller.setname 1 "Frozen scale"
+					c.scale.controller.available.controller = ScaleXYZ()
+					index = c.scale.controller.count
+					c.scale.controller.setname index "Zero Scale XYZ"
+					c.scale.controller.setactive index
+					
+					setControllerKeyable c.scale.controller false
+					setControllerKeyable c.scale.controller[index] true
+				)
+				else --si hay que guardar la animacion y hay claves de animacion
+				(
+					c.scale.controller = bezier_scale()
+					
+					c.scale.controller = scale_list()
+					c.scale.controller.setname 1 "Frozen scale"
+					deleteKeys c.scale.controller[1].controller
+					c.scale.controller[1].controller.value = [1,1,1]
+					c.scale.controller.available.controller = copy _currentScale
+					index = c.scale.controller.count
+					c.scale.controller.setname index "Zero Scale XYZ"
+					c.scale.controller.setactive index
+					
+					setControllerKeyable c.scale.controller false
+					setControllerKeyable c.scale.controller[index] true
+				)
+			)
+			
+			--Ahora miraremos si hemos decidido mantener los controladores de attachobjectToFace
+			if _maintainAttach then
+			(
+				--Restauraremos los controles de attachObjectToFace en posición rotación y escala.
+				if transformType == #all or transformType == #position then
+				(
+					c.position.controller.available.controller = copy _attachProControllers[1]
+					c.position.controller.setname c.position.controller.count "attachProPos"
+			-- 			c.position.controller.setActive c.position.controller.count
+					
+					--Ahora copiaremos uno a uno los valores del custom attribute porque no se salvan por sí sólos.
+					c.position.controller[c.position.controller.count].custAttributes[#attachProInfo].CA_description = _attachProControllers[1].custAttributes[#attachProInfo].CA_description
+					c.position.controller[c.position.controller.count].custAttributes[#attachProInfo].CA_version = _attachProControllers[1].custAttributes[#attachProInfo].CA_version
+					c.position.controller[c.position.controller.count].custAttributes[#attachProInfo].targetObj = _attachProControllers[1].custAttributes[#attachProInfo].targetObj
+					c.position.controller[c.position.controller.count].custAttributes[#attachProInfo].face = _attachProControllers[1].custAttributes[#attachProInfo].face
+					c.position.controller[c.position.controller.count].custAttributes[#attachProInfo].barCoords = _attachProControllers[1].custAttributes[#attachProInfo].barCoords
+					c.position.controller[c.position.controller.count].custAttributes[#attachProInfo].initialOffset = _attachProControllers[1].custAttributes[#attachProInfo].initialOffset
+					c.position.controller[c.position.controller.count].custAttributes[#attachProInfo].keepOffset = _attachProControllers[1].custAttributes[#attachProInfo].keepOffset
+					c.position.controller[c.position.controller.count].custAttributes[#attachProInfo].inheritRotation = _attachProControllers[1].custAttributes[#attachProInfo].inheritRotation
+					c.position.controller[c.position.controller.count].custAttributes[#attachProInfo].alignToFace = _attachProControllers[1].custAttributes[#attachProInfo].alignToFace
+					c.position.controller[c.position.controller.count].custAttributes[#attachProInfo].xAxis = _attachProControllers[1].custAttributes[#attachProInfo].xAxis
+					c.position.controller[c.position.controller.count].custAttributes[#attachProInfo].flipAxis = _attachProControllers[1].custAttributes[#attachProInfo].flipAxis
+				)
+				
+				--Restauraremos los controles de attachObjectToFace en posición rotación y escala.
+				if transformType == #all or transformType == #rotation then
+				(
+					c.rotation.controller.available.controller = copy _attachProControllers[2]
+					c.rotation.controller.setname c.rotation.controller.count "attachProRot"
+			-- 			c.rotation.controller.setActive c.rotation.controller.count
+				)
+			)
+			
+			-- Rehabilitamos la solapa Motion del Command Panel
+			--resumeEditing()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | unFreezeTransform | Descongela las transformaciones indicadas del objeto pasado por parametro.
+		--@gets: node | obj | Nodo del que descongelar las transformaciones.
+		--@gets: name | transformType | Indica que tipo de transformación descongelar, #position, #rotation, #scale o #all.
+		--@opt: boolean | keepPos | false | Indica si conservar el controlador original con su animacion.
+		--@opt: boolean | keepRot | false | Indica si conservar el controlador original con su animacion.
+		--@opt: boolean | keepSca | false | Indica si conservar el controlador original con su animacion.
+		------------------------------------------------
+		mapped fn unFreezeTransform obj transformType keepPos:false keepRot:false keepSca:false =
+		(
+			-- Inhabilitamos la solapa Motion del Command Panel para evitar parpadeos
+			--suspendEditing()
+			
+			-- Miraremos si hay attachObjectToFace en el objeto
+			_attachProControllers = deepcopy (lb.attachObjectToFaceFunctions.getAttachProControllers obj)
+			_maintainAttach = false
+			
+			--Guardamos las transformaciones del objeto
+			_currentTransforms = obj.transform
+			
+			-----------------------------------POSITION---------------------------------------
+			if transformType == #position or transformType == #all then 
+			(
+				--Antes de nada si hay una posicion de attachObjectToFace la eliminaremos si hay keep de position (para luego volverla a cargar)
+				if keepPos and _attachProControllers[1] != undefined and _attachProControllers[2] != undefined and _attachProControllers[3] != undefined then
+				(
+					_maintainAttach = true
+					for i=obj.position.controller.count to 1 by -1 do
+						if obj.position.controller[i].controller == _attachProControllers[1] then
+							obj.position.controller.delete i 
+				)
+				
+				--Creamos una variable para poner el controlador que quedará al final del unfreeze, por defecto está vacío.
+				--pero si tenemos el keepPos activado entonces lo rellenaremos con el resultante del colapsado de todas las 
+				--capas con sus animaciones, para luego aplicarlo al objeto.
+				_currentPosController = position_xyz()
+				if keepPos then
+				(
+					--Si tenemos una lista, colapsaremos los controladores y guardaremos el resultante.
+					if classof obj.position.controller == position_list then
+					(
+						lb.animation.collapseObjectControllers obj #position
+						_currentPosController = copy obj.position.controller[1]
+			-- 				print "<test>"
+			-- 				print _currentPosController.value As String
+			-- 				print "<test>"
+					)
+				)
+				
+				--Llegados a este punto, si teniamos una lista, el controlador resultante estará en _currentPosController, mientras
+				--que si no estaba freezeado inicialmente, entonces no se aplicará controlador ninguno.
+				if classof obj.position.controller != position_xyz then obj.position.controller = _currentPosController
+			)
+			
+			
+			
+			--------------------------------------SCALE---------------------------------------
+			if transformType == #scale or transformType == #all then
+			(
+				--Creamos una variable para poner el controlador que quedará al final del unfreeze, por defecto está vacío.
+				--pero si tenemos el keepSca activado entonces lo rellenaremos con el resultante del colapsado de todas las 
+				--capas con sus animaciones, para luego aplicarlo al objeto.
+				_currentScaController = bezier_Scale()
+				if keepSca then
+				(
+					--Si tenemos una lista, colapsaremos los controladores y guardaremos el resultante.
+					if classof obj.scale.controller == scale_list then
+					(
+						lb.animation.collapseObjectControllers obj #scale
+						_currentScaController = copy obj.scale.controller[1]
+					)
+				)
+				--Llegados a este punto, si teniamos una lista, el controlador resultante estará en _currentPosController, mientras
+				--que si no estaba freezeado inicialmente, entonces no se aplicará controlador ninguno.
+				if classof obj.scale.controller != bezier_Scale then obj.scale.controller = _currentScaController
+			)
+			
+			
+			
+			-----------------------------------ROTATION---------------------------------------
+			if transformType == #rotation or transformType == #all then
+			(
+				--Antes de nada si hay una rotación de attachObjectToFace  la eliminaremos si hay keep de rotation (para luego volverla a cargar).
+				if keepRot and _attachProControllers[1] != undefined and _attachProControllers[2] != undefined and _attachProControllers[3] != undefined then
+				(
+					_maintainAttach = true
+					for i=obj.rotation.controller.count to 1 by -1 do
+						if obj.rotation.controller[i].controller == _attachProControllers[2] then
+							obj.rotation.controller.delete i 
+				)
+				
+				--Creamos una variable para poner el controlador que quedará al final del unfreeze, por defecto está vacío.
+				--pero si tenemos el keepPos activado entonces lo rellenaremos con el resultante del colapsado de todas las 
+				--capas con sus animaciones, para luego aplicarlo al objeto.
+				_currentRotController = euler_xyz()
+				if keepRot then
+				(
+					--Una vez colapsemos en teoría tendremos un position_list con un sólo elemento.
+					if classof obj.rotation.controller == rotation_list then
+					(
+						lb.animation.collapseObjectControllers obj #rotation
+						_currentRotController = copy obj.rotation.controller[1]
+					)
+				)
+				
+				if classof obj.rotation.controller != euler_xyz then obj.rotation.controller = _currentRotController
+			)
+			
+			--Ahora miraremos si hemos decidido mantener los controladores de attachObjectToFace
+			if _maintainAttach then
+			(
+				--Restauraremos los controles de attachObjectToFace en posición rotación y escala.
+				if transformType == #all or transformType == #position then
+				(
+					--Al unfreezear hay que crear el positionlist otra vez.
+					obj.position.controller = position_list()
+					
+					obj.position.controller.available.controller = copy _attachProControllers[1]
+					obj.position.controller.setname obj.position.controller.count "attachProPos"
+			-- 			c.position.controller.setActive c.position.controller.count
+					
+					--Ahora copiaremos uno a uno los valores del custom attribute porque no se salvan por sí sólos.
+					obj.position.controller[obj.position.controller.count].custAttributes[#attachProInfo].CA_description = _attachProControllers[1].custAttributes[#attachProInfo].CA_description
+					obj.position.controller[obj.position.controller.count].custAttributes[#attachProInfo].CA_version = _attachProControllers[1].custAttributes[#attachProInfo].CA_version
+					obj.position.controller[obj.position.controller.count].custAttributes[#attachProInfo].targetObj = _attachProControllers[1].custAttributes[#attachProInfo].targetObj
+					obj.position.controller[obj.position.controller.count].custAttributes[#attachProInfo].face = _attachProControllers[1].custAttributes[#attachProInfo].face
+					obj.position.controller[obj.position.controller.count].custAttributes[#attachProInfo].barCoords = _attachProControllers[1].custAttributes[#attachProInfo].barCoords
+					obj.position.controller[obj.position.controller.count].custAttributes[#attachProInfo].initialOffset = _attachProControllers[1].custAttributes[#attachProInfo].initialOffset
+					obj.position.controller[obj.position.controller.count].custAttributes[#attachProInfo].keepOffset = _attachProControllers[1].custAttributes[#attachProInfo].keepOffset
+					obj.position.controller[obj.position.controller.count].custAttributes[#attachProInfo].inheritRotation = _attachProControllers[1].custAttributes[#attachProInfo].inheritRotation
+					obj.position.controller[obj.position.controller.count].custAttributes[#attachProInfo].alignToFace = _attachProControllers[1].custAttributes[#attachProInfo].alignToFace
+					obj.position.controller[obj.position.controller.count].custAttributes[#attachProInfo].xAxis = _attachProControllers[1].custAttributes[#attachProInfo].xAxis
+					obj.position.controller[obj.position.controller.count].custAttributes[#attachProInfo].flipAxis = _attachProControllers[1].custAttributes[#attachProInfo].flipAxis
+				)
+				
+				--Restauraremos los controles de attachObjectToFace en posición rotación y escala.
+				if transformType == #all or transformType == #rotation then
+				(
+					--Al unfreezear hay que crear el positionlist otra vez.
+					obj.rotation.controller = rotation_list()
+					obj.rotation.controller.available.controller = copy _attachProControllers[2]
+					obj.rotation.controller.setname obj.rotation.controller.count "attachProRot"
+			-- 			c.rotation.controller.setActive c.rotation.controller.count
+				)
+			)
+			
+			if transformType == #all and not keepRot and not keepPos and not keepSca then
+				obj.transform = _currentTransforms
+			
+			-- Rehabilitamos la solapa Motion del Command Panel
+			--resumeEditing()	
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | transformToZero | Pone a cero la transformacion indicada del objeto indicado
+		--@gets: node | obj | Nodo que devolver a su transformacion original.
+		--@gets: name | transformType | Indica que tipo de transformación resetear, #position, #rotation, #scale o #all.
+		------------------------------------------------
+		fn transformToZero obj transformType =
+		(
+			-- Inhabilitamos la solapa Motion del Command Panel para evitar parpadeos
+			--suspendEditing()
+			
+			if transformType == #position or transformType == #all then 
+				if this.isTransformFrozen obj #position  then 
+					for i = 1 to obj.position.controller.count do
+						if findstring (toLower obj.position.controller[i].name) "zero" != undefined then obj.position.controller[i].value = [0,0,0]
+			
+			
+			if transformType == #scale or transformType == #all then
+				if this.isTransformFrozen obj #scale  then
+				(			
+					for i = 1 to obj.scale.controller.count do
+						if findstring (toLower obj.scale.controller[i].name) "zero" != undefined then obj.scale.controller[i].value = [1,1,1]
+				)
+				else
+					obj.scale = [1,1,1]
+			
+			if transformType == #rotation  or transformType == #all then
+				if this.isTransformFrozen obj #rotation  then 
+					for i = 1 to obj.rotation.controller.count do
+						if findstring (toLower obj.rotation.controller[i].name) "zero" != undefined then
+						(
+							c = obj.rotation.controller[i].controller
+							
+							case (classof c) of
+							(
+								euler_xyz:(c.x_rotation = 0 ; c.y_rotation = 0 ; c.z_rotation = 0)	-- asignamos por componentes el valor porque c = quat 1 puede devolver 360º de rotación.
+								tcb_rotation: c.value = quat 1
+							)
+							--obj.rotation.controller[i].value = quat 1
+						)
+			
+			-- Rehabilitamos la solapa Motion del Command Panel
+			--resumeEditing()	
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | isPoseFrozen | Verifica si tiene freezePose hecho o no, verificando la propiedad skinPos/Rot/ScaleEnabled.
+		--@gets: node | obj | Nodo que verificar.
+		--@gets: name | transformType | Indica que tipo de transformación verificar, #position, #rotation, #scale o #all.
+		------------------------------------------------
+		fn isPoseFrozen obj transformType =
+		(
+			_result = false
+			
+			if transformType == #position then
+				_result = not obj.skinPosEnabled
+					
+			if transformType == #rotation then
+				_result = not obj.skinRotEnabled
+
+			if transformType == #scale then
+				_result = not obj.skinScaleEnabled
+					
+			if transformType == #all then
+				_result = ((not obj.skinPosEnabled) or (not obj.skinRotEnabled) or (not obj.skinScaleEnabled))	
+				
+			_result
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | freezePose | Congela la transformacion indicada en el objeto indicado mediante la tecnica freeze pose. Establece skinPos/Rot/ScaleEnabled en false.
+		--@gets: node | obj | Nodo que congelar.
+		--@gets: name | transformType | Indica que tipo de transformación congelar, #position, #rotation, #scale o #all.
+		------------------------------------------------
+		mapped fn freezePose obj transformType =
+		(
+			if transformType == #position or transformType == #all then 
+			(	
+				unFreezeTransform obj #position
+				obj.skinPosEnabled = false
+				obj.skinPos = (if obj.parent == undefined then obj.pos else (in coordsys obj.parent obj.pos))
+			)
+				
+			-- guarda en una variable la rotación del objeto en coordenadas gimbal y las convierte a eulerAngles
+			-- se guardan la rotacion anterior convertida en la propiedad .skinRot del objeto
+			if transformType == #rotation or transformType == #all then 
+			(	
+				unFreezeTransform obj #rotation
+				obj.skinRotEnabled = false
+				eu = in coordsys gimbal (obj.rotation as eulerangles)
+				obj.skinRot = (if obj.parent == undefined then [eu.x, eu.y, eu.z] else (in coordsys obj.parent [eu.x, eu.y, eu.z]))
+			)
+			
+			if transformType == #scale or transformType == #all then 
+			(	
+				unFreezeTransform obj #scale
+				obj.skinScaleEnabled = false
+				
+				--esto se guarda respecto a la escala del padre porque el padre o alguien en su jerarquia hacia atras puede tener una escala diferente a 1
+				--tiene que guardar nada mas la variacion de su escala respecto a su padre
+				obj.skinScale =(if obj.parent == undefined then obj.scale else (in coordsys obj.parent obj.scale))
+			)
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | freezePose | Descongela la transformacion indicada en el objeto indicado mediante la tecnica freeze pose. Establece skinPos/Rot/ScaleEnabled en true.
+		--@gets: node | obj | Nodo que descongelar.
+		--@gets: name | transformType | Indica que tipo de transformación descongelar, #position, #rotation, #scale o #all.
+		------------------------------------------------
+		mapped fn unFreezePose obj transformType =
+		(
+			if transformType == #position or transformType == #all then obj.skinPosEnabled = true
+			if transformType == #rotation or transformType == #all then obj.skinRotEnabled = true
+			if transformType == #scale or transformType == #all then obj.skinScaleEnabled = true
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | freezePose | Restablece la transformacion indicada en el objeto indicado mediante la tecnica freeze pose (skinPos/rot/scale).
+		--@gets: node | obj | Nodo que restablecer.
+		--@gets: name | transformType | Indica que tipo de transformación restablecer, #position, #rotation, #scale o #all.
+		------------------------------------------------
+		fn poseToZero obj transformType =
+		(
+			if (transformType == #position or transformType == #all) and not obj.skinPosEnabled then
+				obj.pos = (if obj.parent == undefined then obj.skinPos else (obj.skinPos * obj.parent.transform))
+			
+			-- restaura la rotacion del objeto, primero rota el objeto reestableciendo la orientacion con el mundo y después rota el objeto con los valores guardados en el skinRot
+			if (transformType == #rotation  or transformType == #all) and not obj.skinRotEnabled then
+			(
+				if obj.parent == undefined then 
+				(
+					rotate obj (inverse obj.rotation)
+					rotate obj (inverse ((eulerangles obj.skinrot.x obj.skinrot.y obj.skinrot.z) as quat))
+				)
+				else
+				(
+					in coordsys obj.parent rotate obj (inverse obj.rotation)
+					in coordsys obj.parent rotate obj (inverse ((eulerangles obj.skinrot.x obj.skinrot.y obj.skinrot.z) as quat))
+				)
+			)
+			
+			if (transformType == #scale  or transformType == #all) and not obj.skinScaleEnabled then
+			(
+				/*--antes estaba puesto que restaurara su escala almacenada respecto a su padre en caso de tenerlo
+				--esto no funcionaba porque si su escala respecto a su padre era por ejemplo [1,1,1] pero su padre estaba escalado a [2,2,2], no dejaba su escala a [2,2,2] sino a  [1,1,1]
+				obj.scale = (if obj.parent == undefined then obj.skinScale else (in coordsys obj.parent obj.skinScale))
+				
+				--esto tampoco funciona por lo mismo de antes, no tiene en cuenta la escala de sus ancestros
+				obj.scale = obj.skinScale
+				
+				--esto funciona porque multiplica la escala de todos sus ancestros  y luego la multiplica con la almacenada en skinscale
+				_hierarchyScaleMultiplication = [1,1,1]
+				_parent = obj.parent
+				while isValidNode _parent do
+				(
+					_hierarchyScaleMultiplication = _hierarchyScaleMultiplication*_parent.scale
+					_parent = _parent.parent
+				)
+				obj.scale = obj.skinScale*_hierarchyScaleMultiplication*/
+				
+				--esta forma es la mas optima ya que asume que el padre ya tiene la escala heredada de todos sus ancestros
+				--con lo cual con multiplicar la escala almacenada en skinscale y la de su padre es suficiente
+				obj.scale = (if obj.parent == undefined then obj.skinScale else (obj.skinScale*obj.parent.scale))
+			)
+		),
+
+		------------------------------------------------
+		--@fn: boolean | setActiveController | Devuelve TRUE si consigue poner activo en el objeto indicado el cotrolador indicado.
+		--@gets: node | obj | Nodo en el que poner activo el controlador indicado.
+		--@gets: name | transformType | Indica que tipo de transformación restablecer, #position, #rotation, #scale o #all.
+		--@gets: name | controllerType | Indica que tipo de controlador se quiere dejar activo, #frozen o #zero.
+		------------------------------------------------
+		mapped fn setActiveController obj transformType controllerType =
+		(
+			_success = false
+			
+			if transformType == #position or transformType == #pos or transformType == #all then 
+			(
+				_index = this.getControllerIndex obj.position.controller controllerType
+				if _index != 0 then (obj.position.controller.active = _index; _success = true)
+			)--if
+			
+			if transformType == #scale or transformType == #all then
+			(
+				_index = this.getControllerIndex obj.scale.controller controllerType
+				if _index != 0 then (obj.scale.controller.active = _index; _success = true)
+			)--if
+			
+			if transformType == #rotation  or transformType == #all then
+			(
+				_index = this.getControllerIndex obj.rotation.controller controllerType
+				if _index != 0 then (obj.rotation.controller.active = _index; _success = true)
+			)--if
+			
+			_success
+		),
+
+		---------------------------------------------------------------------------
+		-- verifica si la transformación actual del objeto coincide es Zero Pos/Rot/Scale
+		---------------------------------------------------------------------------
+		fn isNodeInZeroTransform obj transformType tolerance:0 =
+		(
+			_result = true
+			if this.isTransformFrozen obj transformType then
+			(
+				if transformType == #position or transformType == #all then
+				(
+					_result = not (abs((distance obj.position.controller[#Zero_Pos_XYZ].controller.value [0.0,0.0,0.0])) > tolerance)
+				)
+				else if transformType == #rotation or transformType == #all then
+				(
+					_result = _result and not (abs((distance [(obj.rotation.controller[#Zero_Euler_XYZ].controller.value As EulerAngles).x,\
+						(obj.rotation.controller[#Zero_Euler_XYZ].controller.value As EulerAngles).y,\
+						(obj.rotation.controller[#Zero_Euler_XYZ].controller.value As EulerAngles).z] [0.0,0.0,0.0])) > tolerance)
+				)
+				else if transformType == #scale or transformType == #all then
+				(
+					_result = _result and not (abs((distance obj.scale.controller[#Zero_Scale_XYZ].controller.value [1.0,1.0,1.0])) > tolerance)
+				)
+				else 
+				(
+					_result = false
+				)
+			)
+			else
+			(
+				_result = true
+			)
+			
+			_result
+		),
+
+		---------------------------------------------------------------------------
+		-- verifica si la transformación actual del objeto coincide con Zero skinPos/Rot/Scale
+		---------------------------------------------------------------------------
+		fn isNodeInZeroPose obj transformType tolerance:0.005 =
+		(
+			_result = true
+			_parent = (if obj.parent != undefined then obj.parent else #world)
+			
+			if this.isPoseFrozen obj transformType then
+			(
+				if (transformType == #position) or (transformType == #all) then
+					_result = (length ((in coordsys _parent obj.pos) - obj.skinPos) <= tolerance)
+				
+				if _result and ((transformType == #rotation) or (transformType == #all)) then
+				(
+					_rotDifference = ((in coordsys _parent obj.rotation) - (inverse ((eulerAngles obj.skinRot.x obj.skinRot.y obj.skinRot.z) as quat))) as eulerAngles
+					_result = (length [_rotDifference.x, _rotDifference.y, _rotDifference.z] <= tolerance)
+				)				
+				
+				if _result and ((transformType == #scale) or (transformType == #all)) then
+					_result = (length ((in coordsys _parent obj.scale) - obj.skinScale) <= tolerance)
+				
+			)
+			else
+				_result = false
+			
+			_result
+		),
+
+		---------------------------------------------------------------------------------------------------
+		-- crea un controlador nuevo a la pista T. Si no se indica el nuevo controlador
+		-- NEWCONTROLLER se intenta crear uno automáticamente. Devuelve
+		-- TRUE o FALSE indicando si ha conseguido crear el controlador
+		---------------------------------------------------------------------------------------------------
+		fn createTrackController t newController:undefined =
+		(
+			creado = false
+			
+			if newController != undefined then
+				try
+				(
+					t.controller = newController
+					creado = true
+				)
+				catch()
+			else
+				case (classof t.value) of
+				(
+					BooleanClass: 	(t.controller = boolean_float()	; creado = true)
+					Float: 			(t.controller = bezier_float()	; creado = true)
+					Integer:		 	(t.controller = bezier_float()	; creado = true)
+					Color:			(try (t.controller = bezier_color() ; creado = true) catch t.controller = bezier_point4(); creado = true)
+					undefined: 		try (t.controller = bezier_color() ; creado = true) catch()
+				)
+				
+			creado
+		),
+
+		---------------------------------------------------------------------------------------------------
+		-- copia las claves del CONTROLLER1 a CONTROLLER2.
+		-- PRESERVEKEYS indica si hay que conservar las claves antiguas
+		---------------------------------------------------------------------------------------------------
+		fn copyPasteAnimation sourceController targetController preserveKeys:false negative:false = 
+		(
+			_auxCont = copy sourceController
+			
+			if not preserveKeys then
+				deleteKeys targetController #allKeys	-- eliminamos las keys que tuviera previamente el controlador
+			
+			for i = 1 to _auxCont.keys.count do			-- copiamos todas las claves a la pista destino
+				try 
+				(
+					k = copy _auxCont.keys[i]
+					if negative then k.value = -k.value
+					appendKey targetController.keys k 
+				)
+				catch()	-- A veces los controladores tienen tipos de clave incompatibles. Por eso el TRY
+		),
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+			
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addLibrary this --añade la libreria a la principal
+		)
+		
+	)--lib_controller
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	
+	lib_controller() --crea la libreria
+)

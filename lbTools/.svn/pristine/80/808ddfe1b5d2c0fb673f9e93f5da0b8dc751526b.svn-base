@@ -1,0 +1,400 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--Descripcion: solución de animación de spine en fk.
+------------------------------------------------------------------------------------------------------------------------------------------------
+(	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: strRigNodes | Contiene las piezas de anim de la solución.
+	------------------------------------------------------------------------------------------------------------------------------------------------	
+	struct strAnimNodes
+	(
+		rootSolutionHLP					= undefined,				-- 	 Nodo de anim padre de la solución.
+		rootStructureHLP				= undefined,				-- 	 Nodo de anim estrucutura de la solución.
+		root							= undefined,				--  	Nodo de anim del root.
+		pelvis							= undefined					--  	Nodo de anim de la pelvis.
+		
+	)	
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: rs_fkSpine | Contiene la solución de animación
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct rsa_stdRoot_simple
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),																--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),													--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #root,																	--@var: category | Categoria de la solución. Puede valer, #arm, #leg, #spine...
+		subCategory = #anim,																--@var: subCategory | Subcategoria de la solución, indica el tipo de esqueleto. Puede valer #skin, #anim, #AnimEdit
+		conectionId = #anthropomorphic,														--@var: conectionId | Tipo de conexion que lleva la solución, para saber si puede conectarse con otras soluciones. Puede valer, #anthropomorphic, #quadruped, ...
+		index = 10,																			--@var: index | Indice para ordenar
+
+		solName = lb.rig.solutions.getFileSolutionName (getThisScriptFilename() as string),	--@var: solName | Nombre de la solución.
+		description = "Solución animación de spine de fk",									--@var: description | Descripcion de la libreria.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		solutionParameters = lb.rig.solutions.params, 										--@var | self | Almacena el ca especifico de la solución.
+		
+		self = undefined,																	--@var | self | Almacena la definición del struct.
+		selfFile = "",																		--@var | selfFile | Almacena la ruta del propio archivo de script que contiene la definición.
+		
+		side							= lb.nc.NC_locationMiddle,
+		
+		animNodes 						= strAnimNodes(),			--	Nodos de la cadena de hueso de anim.
+		
+		rigNodesAll 					= #(),						--	Nodos de todos los objetos de la cadena de anim.
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------------------------------------------------------------
+		-- Función para rellenar los arrays y nodos de la solución "strRigSolutionArmFkIk". Busca en la escena todos los huesos de tipo anim
+		-- para ir rellenando los nodos de anim, FK, IK, y sus variables dependientes de cada uno.
+		------------------------------------------------------------------------------------------------------------------------------------------------------
+		fn fillStructNodes =
+		(
+			-- Recorremos las cadenas almacenadas de anim, Fk, Ik, para almacenarlas en los structs de las cadenas.
+			for o in objects do
+			(
+				_filterParts = filterString o.name "_"
+				
+				-- Filtramos para obtener solo las piezas de tipo anim
+				if _filterParts[3] == lb.nc.NC_classAnim then
+				(
+					-- Recorremos los structs y determinanos si es el lado dercho o el izquierdo
+					-- para más adelante capturar los nodos de cada cadena e ir rellenando las variables.
+					if _filterParts[4] == this.side then
+					(
+						case _filterParts[5] of
+						(
+							"root": this.animNodes.root = o
+							"pelvis": this.animNodes.pelvis = o
+						)
+						
+						-- Captura todos los nodos de anim
+						append this.rigNodesAll o
+						
+					)
+				)--if filter 3	
+			)-- for o
+
+		), -- fn fillStructNodes
+		
+		------------------------------------------------------------------------------------------------------------------------------------------------------
+		-- Función para crear constraints, conexiones de anim y la solución en si.
+		-- SIDE: puede valer lb.nc.NC_locationLeft, lb.nc.NC_locationRight lb.nc.NC_locationMiddle
+		------------------------------------------------------------------------------------------------------------------------------------------------------
+		fn createConnection side = 
+		(			
+			----------------------------------------------------
+			--CREACIÓN DE BASE
+			----------------------------------------------------
+			-- Buscamos la base, sino existe se crea.
+			_base = lb.rig.solutions.getBaseNode()
+			_baseAnimEdit = lb.rig.solutions.getBaseNode type:#AnimEdit
+			_rootAnimEdit = lb.rig.solutions.getRootNode type:#AnimEdit
+			----------------------------------------------------
+			--CREACIÓN DE HUESOS AUXILIARES
+			----------------------------------------------------
+			(	
+				
+			)--CREACIÓN DE HUESOS AUXILIARES
+			
+			----------------------------------------------------
+			--CREACIÓN DE HELPERS AUXILIARES
+			----------------------------------------------------
+			(
+ 				--*****************/ANIM/******************** --
+				-- Creamos el armSolutión, que es de donde colgará toda la solución de la estructura y llevará almacenada la información de versión de la solución.
+				this.animNodes.rootSolutionHLP = lb.rig.createPointFromObj this.animNodes.root
+				
+				-- Cambia sus propiedas de color, nombre y tamaño y lo dejamos freezeado.
+				this.animNodes.rootSolutionHLP.name = lb.nc.replaceNamePart this.animNodes.rootSolutionHLP.name 5 "root-solution-root"
+				this.animNodes.rootSolutionHLP.name = lb.nc.replaceNamePart this.animNodes.rootSolutionHLP.name 7 (lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag)
+				this.animNodes.rootSolutionHLP.size = 12 * _baseAnimEdit.scale[1]
+				this.animNodes.rootSolutionHLP.wirecolor = red
+				
+				-- Creamos el armSolutión, que es de donde colgará toda la solución de la estructura y llevará almacenada la información de versión de la solución.
+				this.animNodes.rootStructureHLP = lb.rig.createPointFromObj this.animNodes.root
+				
+				-- Cambia sus propiedas de color, nombre y tamaño y lo dejamos freezeado.
+				this.animNodes.rootStructureHLP.name = lb.nc.replaceNamePart this.animNodes.rootStructureHLP.name 5 "rootStructure"
+				this.animNodes.rootStructureHLP.name = lb.nc.replaceNamePart this.animNodes.rootStructureHLP.name 7 (lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag)
+				this.animNodes.rootStructureHLP.size = 7 * _baseAnimEdit.scale[1]
+				this.animNodes.rootSolutionHLP.wirecolor = yellow
+				
+				-- Cambiamos el hueso a un shape
+				_rootCircle = circle radius:30 transform:this.animNodes.root.transform steps:2 render_displayRenderMesh:true 
+				convertToSplineShape _rootCircle
+				_rootCircle.render_thickness = 0.5 
+				_rootCircle.render_sides = 3
+				
+				lb.rig.snapByShape _rootAnimEdit _rootCircle
+				this.animNodes.root.baseObject = copy _rootCircle.baseObject
+
+				delete _rootCircle
+			)--CREACIÓN DE HELPERS AUXILIARES
+			
+			----------------------------------------------------
+			-- MERGEO DE SHAPES DE CONTROL
+			----------------------------------------------------
+			(
+
+			)-- MERGEO DE SHAPES DE CONTROL
+			
+			-------------------------------------------------------
+			-- CREACIÓN DE CONEXIONES
+			-------------------------------------------------------
+			(
+				--*****************/ANIM/******************** --
+				-- Freezeado de "spineSoluitonHLP", y emparentamiento a la base. 
+				this.animNodes.rootSolutionHLP.parent = _base
+				lb.controller.freezeTransform this.animNodes.rootSolutionHLP #all
+				
+				-- Añadimos constraint de rotación al point padre de la cabeza para que siga la orientación de la cabeza.
+				this.animNodes.rootStructureHLP.parent = this.animNodes.rootSolutionHLP
+				lb.controller.freezeTransform this.animNodes.rootStructureHLP #all
+			
+				-- Cambiamos el color del root, emparentamos a la base y frezeamos
+				this.animNodes.root.parent = this.animNodes.rootStructureHLP
+				this.animNodes.root.wirecolor = red
+				lb.controller.freezeTransform this.animNodes.root #all
+			)-- CREACIÓN DE CONEXIONES
+			
+			-------------------------------------------------------------------------------
+			-- CREACIÓN DE STRECHING
+			-------------------------------------------------------------------------------
+			(
+				
+			)-- CREACIÓN DE STRECHING
+			
+			
+			-------------------------------------------------------------------------------
+			-- CREACIÓN DE CUSTOMS ATTRIBUTES Y WIREPARAMETERS
+			-------------------------------------------------------------------------------
+			(
+				-- Snapeamos el root
+				
+ 				--//////////////////////-LINK CONSTRAINT-////////////////////// --
+		
+
+ 				--//////////////////////////-WIREPARAMETERS E INSTANCIAS-////////////////////////// --
+				
+
+			)-- CREACIÓN DE CUSTOMS ATTRIBUTES Y WIREPARAMETERS
+
+			-------------------------------------------------------
+			-- CREACIÓN DE POINT SCRIPT
+			-------------------------------------------------------
+			(
+			)-- CREACIÓN DE POINT SCRIPT
+			
+			----------------------------------------------------
+			--ORDENACIÓN DE EJES
+			----------------------------------------------------
+			(
+ 				--*****************/ANIM/******************** --
+				this.animNodes.root.rotation.controller[#Zero_Euler_XYZ].controller.axisOrder = 1
+				this.animNodes.pelvis.rotation.controller[#Zero_Euler_XYZ].controller.axisOrder = 4
+				
+			)--ORDENACIÓN DE EJES
+					
+			-------------------------------------------------------
+			-- CREACION DE ANIMTRACKS
+			-------------------------------------------------------
+			(
+				_sepTransform = #(#(#separator, "Separator01", false, "Transform"))
+				_sep = #(#(#separator, "Separator01", false, ""))
+					
+				--*****************/ANIM/******************** --			
+				-- Root
+				lb.animInfo.setAnimTracks this.animNodes.root (_sepTransform + (lb.rig.solutions.prepareAnimTracks this.animNodes.root.position.controller[#Zero_Pos_XYZ] #all ) + _sep + (lb.rig.solutions.prepareAnimTracks this.animNodes.root.rotation.controller[#Zero_Euler_XYZ] #all )) 
+					
+				-- Pelvis
+				lb.animInfo.setAnimTracks this.animNodes.pelvis (_sepTransform + (lb.rig.solutions.prepareAnimTracks this.animNodes.pelvis.rotation.controller[#Zero_Euler_XYZ] #all))
+					
+			)-- CREACION DE ANIMTRACKS
+			
+			-------------------------------------------------------
+			-- LOCKS DE EJES DE PIEZAS, CAPAS, Y PROPIEDADES, 
+			-------------------------------------------------------
+			(
+				-- Array para almacenar los nodos creados.
+				_chrNodes = (lb.rig.getAllChildren this.animNodes.rootSolutionHLP) + this.animNodes.rootSolutionHLP + _base
+				
+				(	
+					--*****************/CAPAS/******************** --
+					(
+						if (LayerManager.getLayer 1) == undefined then _chrLayer = lb.layer.newAssetLayer "chrName" else _chrLayer = (LayerManager.getLayer 1)
+						
+						lb.layer.activeLayer _chrLayer
+						
+						-- Renombramos los objetos a la capa chrName y los añadimos.
+						for o in _chrNodes do 
+						(
+							o.name = lb.nc.replaceNamePart o.name 2 "chrName"
+							_chrLayer.addNode o
+						)
+								
+						-- Borramos la capa antiguo del esqueleto de rig
+						LayerManager.deleteLayerByName "chr_animEdit"
+					)
+				)
+ 				
+ 				--*****************/LOCKS DE EJES DE PIEZAS/******************** --
+				-- Por defecto bloqueamos todos los ejes de todas las piezas, para después ir desbloqueando las piezas que queremos animar.
+				_Pos = #{4..9}
+				_Rot = #{1..3,7..9}
+				_PosRot = #{7..9}
+				
+				for o in _chrNodes where (getTransformLockFlags o).isEmpty do
+					setTransformLockFlags o #all
+								
+				-- Grupo de piezas que liberamos solo la rotación.
+				setTransformLockFlags this.animNodes.pelvis _Rot -- Eje x,y,z Libre
+				
+				-- Grupo de piezas que liberamos la rotación y posición.
+				setTransformLockFlags this.animNodes.root _PosRot
+				
+				-- Grupo de piezas que liberamos todas las transform.
+				setTransformLockFlags _base #none
+				
+				--*****************/VIRTUAL PARENTS/******************** --
+				(
+					lb.rig.linkVirtualParent #(this.animNodes.root) _base
+				)
+
+				--*****************/PROPIEDADES/******************** --
+				_chrNodes.showFrozenInGray = false
+				_chrNodes.renderable = false
+
+				-- Ajustamos los tamaños de los shapes.
+				lb.rig.snapByShape _baseAnimEdit _base
+				
+				clearSelection()
+			)-- LOCKS DE PIEZAS Y PROPIEDADES
+			
+			-------------------------------------------------------
+			-- SKINCONNECTION INFO, 
+			-------------------------------------------------------
+			(
+
+				
+			)
+			
+			-------------------------------------------------------
+			-- SELECTION SETS, 
+			-------------------------------------------------------
+			(		
+				_filterName = filterString this.animNodes.pelvis.name "_"
+				_selSetPelvis = _filterName[1] + "_" + _filterName[2] + "_" + _filterName[3] + "_" + _filterName[4] + "_" + _filterName[5]
+				
+				_filterName = filterString this.animNodes.root.name "_"
+				_selSetRoot = _filterName[1] + "_" + _filterName[2] + "_" + _filterName[3] + "_" + _filterName[4] + "_" + _filterName[5]
+			
+				-- Añadimos las piezas a su selection set correspondiente.
+				lb.objectsets.add #(this.animNodes.pelvis) _selSetPelvis
+				lb.objectsets.add #(this.animNodes.root) _selSetRoot
+				
+			)-- SELECTION SETS, 
+
+		), -- fn createFkIkConnection
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: boolean | create | Crea la solución. Devuelve true si lo consigo o false sino. 
+		--@gets: node | solutionRoot | Raiz de la solución de la categoria.
+		------------------------------------------------
+		fn create editRoot side:lb.nc.NC_locationMiddle =
+		(
+			-- Le pasamos el lado del brazo para crear la solución necesaria.
+			this.side = side
+			
+			undo off
+			(
+				-- Obtenemos los huesos de skin para más tarde crear las cadenas de huesos de fkIk.
+				_rootTemp = editRoot.solutionInfo.params.createBones()
+				lb.rig.solutions.createFkIkChains _rootTemp chainType:#anim
+							
+				-- Rellenamos el struct de la solución con las piezas que se han creado del duplicado.
+				this.fillStructNodes()
+				
+				this.createConnection side
+				
+				lb.rig.solutions.addSolutionInfo this.animNodes.rootSolutionHLP (lb.rig.solutions.getFileSolutionName (getThisScriptFilename() as string)) solutionParameters 1.0
+				
+				delete _rootTemp
+				gc()
+			)
+		),			
+
+		------------------------------------------------
+		--@fn: boolean | remove | Elimina la solución. Devuelve true si lo consigo o false sino. 
+		--@gets: node | solutionRoot | Padre de la solución de la categoria.
+		------------------------------------------------
+		fn remove solutionRoot =
+		(
+
+		),	
+		
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.rig.solutions.addSolution this --añade la solución a la principal
+		)
+		
+	)--rs_template
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	
+	rsa_stdRoot_simple() --crea la libreria
+)

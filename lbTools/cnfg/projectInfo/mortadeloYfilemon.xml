@@ -1,0 +1,126 @@
+<info>
+  <id>myf</id>
+  <name>Mortadelo y Filemon</name>
+  <drive>x</drive>
+
+  <resources>
+    
+    <resource>
+      <type>svn</type>
+      <name>asset</name>
+      <url>https://lbdata001/svn/myf_asset</url>
+      <localPath>x:\asset</localPath>
+      <networkPath>\\lbdata001\x\asset</networkPath>
+    </resource>
+
+    <resource>
+      <type>svn</type>
+      <name>documentation</name>
+      <url>https://lbdata001/svn/myf_documentation</url>
+      <localPath>x:\documentation</localPath>
+      <networkPath>\\lbdata001\x\documentation</networkPath>
+    </resource>
+    
+    <resource>
+      <type>share</type>
+      <name>frame</name>
+      <url>none</url>
+      <localPath>none</localPath>
+      <networkPath>\\lbdata002\x\frame</networkPath>
+    </resource>
+
+    <resource>
+      <type>share</type>
+      <name>frameR</name>
+      <url>none</url>
+      <localPath>none</localPath>
+      <networkPath>\\lbdata002\x\frameR</networkPath>
+    </resource>
+
+    <resource>
+      <type>svn</type>
+      <name>management</name>
+      <url>https://lbdata001/svn/myf_management</url>
+      <localPath>x:\management</localPath>
+      <networkPath>\\lbdata001\x\management</networkPath>
+    </resource>
+
+    <resource>
+      <type>svn</type>
+      <name>marketing</name>
+      <url>https://lbdata001/svn/myf_marketing</url>
+      <localPath>x:\marketing</localPath>
+      <networkPath>\\lbdata001\x\marketing</networkPath>
+    </resource>
+    
+    <resource>
+      <type>svn</type>
+      <name>resource</name>
+      <url>https://lbdata001/svn/myf_resource</url>
+      <localPath>x:\resource</localPath>
+      <networkPath>\\lbdata001\x\resource</networkPath>
+    </resource>
+
+    <resource>
+      <type>svn</type>
+      <name>sequence</name>
+      <url>https://lbdata001/svn/myf_sequence</url>
+      <localPath>x:\asset</localPath>
+      <networkPath>\\lbdata001\x\sequence</networkPath>
+    </resource>
+
+    <resource>
+      <type>svn</type>
+      <name>sound</name>
+      <url>https://lbdata001/svn/myf_sound</url>
+      <localPath>x:\asset</localPath>
+      <networkPath>\\lbdata001\x\sound</networkPath>
+    </resource>
+
+    <resource>
+      <type>svn</type>
+      <name>video</name>
+      <url>https://lbdata001/svn/myf_video</url>
+      <localPath>x:\video</localPath>
+      <networkPath>\\lbdata001\x\video</networkPath>
+    </resource>
+
+    <resource>
+      <type>share</type>
+      <name>simulation</name>
+      <url>none</url>
+      <localPath>none</localPath>
+      <networkPath>\\lbdata002\x\simulation</networkPath>
+    </resource>
+  
+  </resources>
+
+  <parameters>
+
+    <paramblock>
+      <type>general</type>
+      <name>common</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>1152</height>
+        <width>2048</width>
+        <aspect>1.0</aspect>
+      </size>
+      <gamma>
+        <input>1.84</input>
+        <output>1.0</output>
+      </gamma>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_600-tt1</name>
+      <size>
+        <height>1080</height>
+        <width>2048</width>
+      </size>
+    </paramblock>
+
+  </parameters>
+  
+</info>

@@ -1,0 +1,1764 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--Descripcion: solución de animación de brazo de fkIk
+------------------------------------------------------------------------------------------------------------------------------------------------
+(	
+	CA_fkIkArm = attributes fkIkSnaps 
+	(
+		-- Parametros Ca
+		parameters main rollout:rollFkIk
+		(
+			-- Controles
+			fkik type:#float ui:(snpFkIk, sldFkIk)
+			
+			--Lado de cadena
+			side type:#string
+			
+			-- Cadena de Fk
+			fkForearm type:#maxObject
+			fkUpperarm type:#maxObject
+			refElbowIK type:#maxObject
+			fkHand type:#maxObject
+			
+			-- Cadena final
+			forearm type:#maxObject
+			upperarm type:#maxObject
+			hand type:#maxObject
+			base type:#maxObject
+			
+			fkIkSHP type:#maxObject
+			ikForearm type:#maxObject
+			ikUpperarm type:#maxObject
+			ikHand type:#maxObject
+			ikHandSHP type:#maxObject
+			ikElbow type:#maxObject
+
+			--Cadena de Bb
+			bbForearm type:#maxObject
+			bbUpperarm type:#maxObject
+			bbHand type:#maxObject
+			bbBreakElbowSHP type:#maxObject
+		)
+	
+		-----------------------------------------------------------------------------------------------------------
+		-- Funciones de snap de ik a fk. Se alinea la cadena de fk (foreArm y upperArm) con la cadena de ik.
+		-----------------------------------------------------------------------------------------------------------
+		fn fkIkSnap = 
+		(
+			_armSolution = (lb.rig.solutions.getSolutions name:"fkIkArm")[1]
+			
+			if fkIkSHP.node.modifiers[#Arm_Controls].fkik.controller.value > 0 then
+				_armSolution.ikToFkSnap fkIkSHP
+			else
+				_armSolution.fkToIkSnap fkIkSHP
+		)
+		
+		-----------------------------------------------------------------------------------------------------------
+		-- Funcion que sirve para alinear las cadenas de fkIk sin cambiar el valor 
+		-----------------------------------------------------------------------------------------------------------
+		fn fkIkMatch = 
+		(
+			_armSolution = (lb.rig.solutions.getSolutions name:"fkIkArm")[1]
+			
+			-- Ik to Fk
+			if fkIkSHP.node.modifiers[#Arm_Controls].fkik.controller.value > 0 then
+				_armSolution.ikToFkSnap fkIkSHP matchChain:true
+			else -- Fk to Ik
+				_armSolution.fkToIkSnap fkIkSHP matchChain:true
+		)
+		
+		------------------------------------------------------------------------------
+		----------------------------Rollout --------------------------------------
+		------------------------------------------------------------------------------
+		rollout rollFkIk "Arm Controls"
+		(
+			spinner snpFkIk "FK_IK" range:[0,1,1]
+			slider sldFkIk "" range:[0,1,1]
+			
+			button btnFkIkSnap "Ninguno" pos:[3,80] width:155 height:30 
+			button btnFkIkMatch "Match Ik and Fk" pos:[3,120] width:155 height:30
+			
+			--------------------------------------------------
+			---------- Eventos del custAttribute-----
+			--------------------------------------------------
+			on rollFkIk open do
+			(
+				if fkIkSHP.node.modifiers[#Arm_Controls].fkik > 0 then
+					btnFkIkSnap.caption = "Ik to Fk"
+				else
+					btnFkIkSnap.caption = "Fk to Ik"
+			)
+			
+			--------------------------------------------------
+			-- Boton para hacer el snap de fkik
+			--------------------------------------------------
+			on btnFkIkSnap pressed do
+			(
+				undo "Fk/Ik Snap" on
+					fkIkSnap ()
+				completeRedraw()
+			)--on btn	
+			
+			--------------------------------------------------
+			-- Botón para hacer el match de las cadenas de fkIk
+			--------------------------------------------------
+			on btnFkIkMatch pressed do
+			(
+				undo "Match Fk and Ik" on
+					fkIkMatch()
+				completeRedraw()
+			)--on btn	
+			
+		)--rollout 
+	)--CA
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: strAnimNodes | Contiene las piezas de anim de la solución.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct strAnimNodes
+	(
+		armSolutionHLP			= undefined,				-- Helper del cual colgará toda la estructura
+		armStructureHLP			= undefined,				-- Helper del cual colgará toda la estructura
+		armSolutionParentHLP	= undefined,				-- Helper del cual colgará toda la estructura
+		clavicle 				= undefined,				-- Nodo de rig de la clavicula.
+		clavicleEnd  			= undefined,				-- Nodo de rig del hueso end de la clavicula.
+		upperarm 				= undefined,				-- Nodo de rig del upperArm.
+		forearm					= undefined,				-- Nodo de rig del forearm.
+		forearmEnd				= undefined,				-- Nodo de rig del final forearm.
+		hand 					= undefined,				-- Nodo de rig de la mano.
+		handOffsetHLP			= undefined,				-- Nodo de rig de la mano.
+		handParentHLP			= undefined,				-- Nodo de rig padre de la mano
+		fingers					= #(),						-- Nodos de los dedos de la mano.
+		fingersEnd				= #()						-- Nodos de los dedos de la mano.
+	)
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: strFkNodes | Contiene las piezas de fk de la solución.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct strFkNodes
+	(
+		upperarm				= undefined,				-- Nodo de fk del upperArm.
+		forearm 				= undefined,				-- Nodo de fk del forearm.
+		hand 					= undefined,				-- Nodo de fk de la mano.
+		refElbowIKHLP 			= undefined					-- Nodo de fk de referencia para la alineación del control de ik.
+	)
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: strIkNodes | Contiene las piezas de ik de la solución.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct strIkNodes
+	(
+		upperarm 				= undefined,				-- Nodo de ik de la mano.
+		forearm 				= undefined,				-- Nodo de ik de la forearm.
+		hand 					= undefined,				-- Nodo de ik de la mano.
+		handPosRefHLP			= undefined,				-- Nodo de ik que sirve de padre del shape de la mano.
+		ikGoalParentHLP			= undefined,				-- Nodo de rig padre de la ik.
+		fkIkSHP					= undefined,				-- Conmutador de fkIk.
+		handSHP 				= undefined,				-- Nodo de tipo shape de la mano.
+		elbowSHP 				= undefined					-- Nodo de tipo shape del codo.
+	)	
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: strBbNodes | Contiene las piezas de breakBones de la solución.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct strBbNodes
+	(
+		upperarm				= undefined,				-- Nodo de bb del upperArm.
+		forearm 				= undefined,				-- Nodo de bb del forearm.
+		breakElbowSHP 			= undefined,				-- Nodo de bb del forearm.
+		hand 					= undefined					-- Nodo de bb del forearm.
+	)	
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: rsa_fkIkArm | Contiene la solución de animación
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct rsa_fkikArm
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),					--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),		--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #arm,						--@var: category | Categoria de la solución. Puede valer, #arm, #leg, #spine...
+		subCategory = #anim,					--@var: subCategory | Subcategoria de la solución, indica el tipo de esqueleto. Puede valer #skin, #anim, #AnimEdit
+		connectionId = #anthropomorphic,		--@var: conectionId | Tipo de conexion que lleva la solución, para saber si puede conectarse con otras soluciones. Puede valer, #anthropomorphic, #quadruped, ...
+		index = 10,								--@var: index | Indice para ordenar
+
+		solName = lb.rig.solutions.getFileSolutionName (getThisScriptFilename() as string),	--@var: solName | Nombre de la solución.
+		description = "Solución de animación de pierna de fkIk",										--@var: description | Descripcion de la libreria.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		solutionParameters = lb.rig.solutions.params, 							--@var | self | Almacena el ca especifico de la solución.
+		
+		self = undefined,										--@var | self | Almacena la definición del struct.
+		selfFile = "",											--@var | selfFile | Almacena la ruta del propio archivo de script que contiene la definición.
+		
+		side						= lb.nc.NC_locationLeft,
+		
+		animNodes 					= strAnimNodes(),			--@var: animNodes | Nodos de la cadena de hueso de rig.
+		fkNodes						= strFkNodes(),				--@var: fkNodes | Nodos de la cadena de hueso de fk.
+		ikNodes						= strIkNodes(),				--@var: ikNodes | Nodos de la cadena de hueso de ik.
+		bbNodes   					= strBbNodes(),				--@var: bbNodes | Nodos de la cadena de hueso de bb.
+		
+		rigNodesAll 				= #(),						--@var: rigNodesAll | Nodos de todos los objetos de la cadena de rig.
+		fkNodesAll					= #(),						--@var: fkNodesAll | Nodos de todos los objetos de la cadena de fk.
+		ikNodesAll					= #(),						--@var: ikNodesAll | Nodos de todos los objetos de la cadena de ik.
+		bbNodesAll					= #(),						--@var: bbNodesAll | Nodos de todos los objetos de la cadena de bb.
+		
+		fkIkArmCA					= CA_fkIkArm,
+		
+		------------------------------------------------------------------------------------------------ 
+		-- CUSTOM ATTRIBUTES
+		------------------------------------------------------------------------------------------------
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		--------------------------
+		-- Funciones de snap de fk a ik. Se alinea la cadena de ik (ikhand y ikElbow) con el final de 
+		-- la cadena de huesos de fk y el punto de refenrecia del brazo para el swiverAngle de la ik.
+		-- Establecemos valor 1 del spinner de fkIk y controlamos la selección de las piezas.
+		--------------------------
+		fn fkToIkSnap fkIkNode matchChain: false =
+		(	
+			_fkIkNode = fkIkNode.node.modifiers[1]
+			_sleepTime = 0.1
+			
+			if matchChain then
+			(
+				-- Mostramos las cadenas de fkIk para la función de match y que se tenga refencia de que se han snapeado las cadenas.
+				unHide #(_fkIkNode.fkUpperarm.node, _fkIkNode.fkForearm.node, _fkIkNode.fkHand.node)
+				unHide #(_fkIkNode.ikUpperarm.node, _fkIkNode.ikForearm.node, _fkIkNode.ikHand.node)
+
+				-- Pausamos la ejecución durante 1 segundo para ver su estado original.
+				sleep _sleepTime
+			)
+			
+			_fkIkNode.ikHandSHP.node.transform = _fkIkNode.fkHand.node.transform
+			_fkIkNode.ikElbow.node.transform = _fkIkNode.refElbowIK.node.transform
+			
+			if matchChain then
+			(
+				completeRedraw()
+				
+				hide #(_fkIkNode.fkUpperarm.node, _fkIkNode.fkForearm.node, _fkIkNode.fkHand.node)
+				hide #(_fkIkNode.ikUpperarm.node, _fkIkNode.ikForearm.node, _fkIkNode.ikHand.node)
+				
+				sleep _sleepTime
+			)
+			
+			_fkIkNode.fkIkSHP.node.modifiers[#Arm_Controls].autostrech = 0.0
+			
+			if not matchChain then
+			(
+				_fkIkNode.fkIkSHP.node.modifiers[#Arm_Controls].fkik = 1.0
+				select _fkIkNode.ikHandSHP.node
+			)
+			
+			-- Resetemos la escala a 1 para evitar que se nos de la vuelta al alinearlo conla transformaciñon, ya que los objetos tiene esalas distinas.
+			-- Resetemos la escala a 1 porque al hacer la alineación se queda a 0.
+			_fkIkNode.ikElbow.node.scale.controller[#Zero_Scale_XYZ].controller.value  = [1,1,1]				
+			_fkIkNode.ikHandSHP.node.scale.controller[#Zero_Scale_XYZ].controller.value = [1,1,1]
+		),
+		
+		-----------------------------------------------------------------------------------------------------------
+		-- Funciones de snap de ik a fk. Se alinea la cadena de fk (foreArm y upperArm) con la cadena de ik.
+		-- Establecemos valor 0 del spinner de fkIk y controlamos la selección de las piezas.
+		-----------------------------------------------------------------------------------------------------------
+		fn ikToFkSnap fkIkNode matchChain: false =
+		(
+			_fkIkNode = fkIkNode.node.modifiers[1]
+			_sleepTime = 0.1
+			
+			if matchChain then
+			(
+				completeRedraw()
+				
+				-- Mostramos las cadenas de fkIk para la función de match y que se tenga refencia de que se han snapeado las cadenas.
+				unHide #(_fkIkNode.fkUpperarm.node, _fkIkNode.fkForearm.node, _fkIkNode.fkHand.node)
+				unHide #(_fkIkNode.ikUpperarm.node, _fkIkNode.ikForearm.node, _fkIkNode.ikHand.node)
+
+				-- Pausamos la ejecución durante 1 segundo para ver su estado original.
+				sleep _sleepTime
+			)
+			
+			-- Comprobamos si se ha movido el valor Z del BB, para evitar que se nos rompa la pose si se mueve en el eje que no rompe el plano de ik.			
+			if _fkIkNode.bbBreakElbowSHP.node.position.controller[#Zero_Pos_XYZ].z_position != 0 then 
+				_fkIkNode.bbBreakElbowSHP.node.position.controller[#Zero_Pos_XYZ].z_position = 0
+			
+			-- Calculamos el factor de escala respecto a la distance del upperarm y el forearm, para recolocar los huesos cuando tenemos el auotstrech activado.
+			_xScaUpperarm = ((distance _fkIkNode.bbUpperarm.node _fkIkNode.bbForearm.node)/(_fkIkNode.base.node.scale.controller[#Zero_Scale_XYZ][#X_scale].controller.value/100))/ _fkIkNode.fkUpperarm.node.length
+			_xScaForearm = ((distance _fkIkNode.bbForearm.node _fkIkNode.bbHand.node)/(_fkIkNode.base.node.scale.controller[#Zero_Scale_XYZ][#X_scale].controller.value/100))/ _fkIkNode.fkForearm.node.length
+		
+			-- Alienamos las cadenas de fk a la de ik.
+			_fkIkNode.fkUpperarm.node.transform = _fkIkNode.bbUpperarm.node.transform	
+			_fkIkNode.fkForearm.node.transform = _fkIkNode.bbForearm.node.transform
+			
+			_fkIkNode.bbBreakElbowSHP.node.position.controller[#Zero_Pos_XYZ].value = [0,0,0]
+			
+			-- Resetamos la posición para evitar offset de longitud
+			_fkIkNode.fkUpperarm.node.scale.controller[#Zero_Scale_XYZ][#X_scale][#Float_limit].controller.value = _xScaUpperarm
+			_fkIkNode.fkForearm.node.scale.controller[#Zero_Scale_XYZ][#X_scale][#Float_limit].controller.value =  _xScaForearm
+			_fkIkNode.fkHand.node.transform = _fkIkNode.ikHand.node.transform
+			
+			-- Reseteo de posición en X e Y para contrarestar la posición del transform.
+			_fkIkNode.fkForearm.node.position.controller[#Zero_Pos_XYZ][#X_Position][#Bezier_float].controller.value = 0
+			_fkIkNode.fkForearm.node.position.controller[#Zero_Pos_XYZ][#Y_Position].controller.value = 0
+			
+			_fkIkNode.fkHand.node.position.controller[#Zero_Pos_XYZ][#X_Position][#Bezier_float].controller.value = 0
+			_fkIkNode.fkHand.node.position.controller[#Zero_Pos_XYZ][#Y_Position].controller.value = 0
+			
+			-- Resteamos el offset de la mano primero recolocando el control de ik y despues poniendo a cero el controlador instanciado.
+			_fkIkNode.ikHandSHP.node.transform = _fkIkNode.fkHand.node.transform
+			_fkIkNode.hand.node.position.controller[#IKoffset_controller].value = [0,0,0]
+			
+			if matchChain then
+			(
+				completeRedraw()
+				
+				sleep _sleepTime
+
+				hide #(_fkIkNode.fkUpperarm.node, _fkIkNode.fkForearm.node, _fkIkNode.fkHand.node)
+				hide #(_fkIkNode.ikUpperarm.node, _fkIkNode.ikForearm.node, _fkIkNode.ikHand.node)
+			)
+				
+			-- Resetemos la escala a 1 para evitar que se nos de la vuelta al alinearlo conla transformaciñon, ya que los objetos tiene esalas distinas.
+			_fkIkNode.ikHandSHP.node.scale.controller[#Zero_Scale_XYZ].controller.value = [1,1,1]
+			
+			if not matchChain then
+			(
+				_fkIkNode.fkIkSHP.node.modifiers[#Arm_Controls].fkik = 0
+				
+				-- Control de selección.
+				if selection[1] != _fkIkNode.ikHandSHP.node then		
+					select selection
+				else
+					select _fkIkNode.hand.node
+				
+				if selection[1] == _fkIkNode.bbBreakElbowSHP.node then
+					select _fkIkNode.forearm.node
+
+			)
+		),
+		
+		------------------------------------------------------------------------------------------------------------------------------------------------------
+		-- Función para rellenar los arrays y nodos de la solución "strRigSolutionArmFkIk". Busca en la escena todos los huesos de tipo rig
+		-- para ir rellenando los nodos de RIG, FK, IK, y sus variables dependientes de cada uno.
+		------------------------------------------------------------------------------------------------------------------------------------------------------
+		fn fillStructNodes =
+		(
+			-- Vaciamos los arrays para evitar que se acumulen nodos invalidos.
+			this.animNodes.fingers = #()
+			this.animNodes.fingersEnd = #()
+			this.fkNodesAll = #()
+			this.ikNodesAll = #()
+			this.rigNodesAll = #()
+			this.bbNodesAll = #()
+
+			-- Recorremos las cadenas almacenadas de rig, Fk, Ik, para almacenarlas en los structs de las cadenas.
+			for o in objects do
+			(
+				_filterParts = filterString o.name "_"
+				
+				-- Filtramos para obtener solo las piezas de tipo rig
+				if _filterParts[3] == lb.nc.NC_classAnim then
+				(
+					-- Recorremos los structs y determinanos si es el lado dercho o el izquierdo
+					-- para más adelante capturar los nodos de cada cadena e ir rellenando las variables.
+					if _filterParts[4] == this.side then
+					(
+						case _filterParts[5] of
+						(
+							"clavicle": this.animNodes.clavicle = o
+							"upperarm": this.animNodes.upperarm = o
+							"forearm": this.animNodes.forearm = o
+							"hand": this.animNodes.hand = o
+							
+							-- Para  obtener todas los dedos  indexadas.
+							default:
+							(
+								if (matchpattern _filterParts[5] pattern:"finger??" != false) then
+									append this.animNodes.fingers o
+							
+								if (matchpattern _filterParts[5] pattern:"finger??End" != false) then
+									append this.animNodes.fingersEnd o
+							)
+							
+							"upperarmFk": this.fkNodes.upperarm = o
+							"forearmFk": this.fkNodes.forearm = o
+							"handFk": this.fkNodes.hand = o
+
+							"upperarmIk": this.ikNodes.upperarm = o
+							"forearmIk": this.ikNodes.forearm = o
+
+							"handIk": this.ikNodes.hand = o
+							
+							"upperarmBb": this.bbNodes.upperarm = o
+							"forearmBb": this.bbNodes.forearm = o
+
+							"handBb": this.bbNodes.hand = o
+						)
+						
+						-- Filtramos para rellenar los arrays con las piezas indicadas, ya sea de fk, ik o de rig
+						-- Captura todos los nodos de fk
+						if (findstring _filterParts[5] "fk" != undefined) then						
+							append this.fkNodesAll o
+						
+						-- Captura todos los nodos de ik
+						if (findstring _filterParts[5] "ik" != undefined) then						
+							append this.ikNodesAll o	
+						
+						-- Captura todos los nodos de bb
+						if (findstring _filterParts[5] "bb" != undefined) then						
+							append this.bbNodesAll o	
+						
+						-- Captura todos los nodos de rig
+						if (findstring _filterParts[5] "ik" == undefined) and (findstring _filterParts[5] "fk" == undefined) and (findstring _filterParts[5] "bb" == undefined) then						
+							append this.rigNodesAll o
+						
+					)
+				)--if filter 3	
+			)-- for o
+			
+			this.animNodes.fingers = lb.misc.sortNodesByName this.animNodes.fingers
+		), -- fn fillStructNodes
+		
+		------------------------------------------------------------------------------------------------------------------------------------------------------
+		-- Función para crear constraints, conexiones de rig y la solución en si.
+		-- PART: puede valer #SPINE, #ARM, #LEG, - indica la parte que queremos obtener
+		-- SIDE: puede valer lb.nc.NC_locationLeft, lb.nc.NC_locationRight lb.nc.NC_locationMiddle
+		------------------------------------------------------------------------------------------------------------------------------------------------------
+		fn createConnections side = 
+		(			
+			----------------------------------------------------
+			--CREACIÓN DE BASE
+			----------------------------------------------------
+			-- Buscamos la base, sino existe se crea.
+			_base = lb.rig.solutions.getBaseNode()
+			_baseAnimEdit = lb.rig.solutions.getBaseNode type:#AnimEdit
+			
+			----------------------------------------------------
+			--CREACIÓN DE HUESOS AUXILIARES
+			----------------------------------------------------
+			(
+				--*****************/ANIM/******************** --
+				-- Creamos el final de la cadena del hueso de la clavicula de la cadena de rig, que nos servirá para mantener la orientación del brazo con el root, aunque rotemos la clavicula.
+				this.animNodes.clavicleEnd = lb.rig.smartCreateEnd this.animNodes.clavicle
+				this.animNodes.clavicleEnd.name = lb.nc.replaceNamePart this.animNodes.clavicleEnd.name 7 (lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag)
+				
+				-- Creamos el final de la cadena del hueso del forearm de la cadena de rig, que nos servirá para mantener la orientación de la mano con la cruceta de ik.
+				this.animNodes.forearmEnd = lb.rig.smartCreateEnd this.animNodes.forearm
+				this.animNodes.forearmEnd.name = lb.nc.replaceNamePart this.animNodes.forearmEnd.name 7 (lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag)
+				
+				-- Renombramos los dedos finales
+				for _b in this.animNodes.fingersEnd do
+					_b.name = lb.nc.replaceNamePart _b.name 7 (lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag)
+				
+				
+			)--CREACIÓN DE HUESOS AUXILIARES
+			
+			----------------------------------------------------
+			--CREACIÓN DE HELPERS AUXILIARES
+			----------------------------------------------------
+			(
+				--*****************/ANIM/******************** --
+				-- Creamos el armSolutión, que es de donde colgará toda la solución de la estructura y llevará almacenada la información de versión de la solución.
+				this.animNodes.armSolutionHLP = lb.rig.createPointFromObj this.animNodes.clavicle
+				
+				-- Cambia sus propiedas de color, nombre y tamaño y lo dejamos freezeado.
+				this.animNodes.armSolutionHLP.name = lb.nc.replaceNamePart this.animNodes.armSolutionHLP.name 5 "arm-solution-root"
+				this.animNodes.armSolutionHLP.name = lb.nc.replaceNamePart this.animNodes.armSolutionHLP.name 7 (lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag)
+				this.animNodes.armSolutionHLP.size = 15 * _baseAnimEdit.scale[1]
+				this.animNodes.armSolutionHLP.cross = false
+				this.animNodes.armSolutionHLP.wirecolor = red
+			
+				-- Creamos el armSolutiónParent, que es de donde se emparentanran objetos que no van directamente emparentados al armSolution y tienen dependencia con la base.
+				-- Este point llevara un pos y rot constraint con la base, para puentear las piezas que dependen de esta misma. También situado el punto de pivote en la base.
+				this.animNodes.armSolutionParentHLP = lb.rig.createPointFromObj this.animNodes.clavicle
+				this.animNodes.armSolutionParentHLP.name = lb.nc.replaceNamePart this.animNodes.armSolutionParentHLP.name 5 "arm-solution-parent"
+				this.animNodes.armSolutionParentHLP.name = lb.nc.replaceNamePart this.animNodes.armSolutionParentHLP.name 7 (lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag)
+				this.animNodes.armSolutionParentHLP.size = 10 * _baseAnimEdit.scale[1]
+				this.animNodes.armSolutionParentHLP.cross = false
+				this.animNodes.armSolutionParentHLP.wirecolor = yellow			
+				
+				-- Creamos el armStructure, que es donde irán emparentadas las cadenas de huesos para evitar la rotación de la clavicula.
+				this.animNodes.armStructureHLP = lb.rig.createPointFromObj this.animNodes.upperArm
+					
+				-- Cambia sus propiedas de color, nombre y tamaño y lo dejamos freezeado.
+				this.animNodes.armStructureHLP.name = lb.nc.replaceNamePart this.animNodes.armStructureHLP.name 5 "armStructure"
+				this.animNodes.armStructureHLP.name = lb.nc.replaceNamePart this.animNodes.armStructureHLP.name 7 (lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag)
+				this.animNodes.armStructureHLP.size = 7 * _baseAnimEdit.scale[1]
+				
+				If side == lb.nc.NC_locationLeft then
+					this.animNodes.armStructureHLP.wirecolor = blue
+				else if side == lb.nc.NC_locationRight then
+					this.animNodes.armStructureHLP.wirecolor = green
+							
+				-- Creamos el point que será el padre de la mano de rig, para que cuando se instancia con el ik para hacer el offset, tenga las mismas coordenadas gimbal.
+				this.animNodes.handParentHLP = lb.rig.createPointFromObj this.animNodes.forearmEnd
+				this.animNodes.handParentHLP.name = lb.nc.replaceNamePart this.animNodes.handParentHLP.name 5 "handParent"
+				this.animNodes.handParentHLP.name = lb.nc.replaceNamePart this.animNodes.handParentHLP.name 7 (lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag)
+				this.animNodes.handParentHLP.size = 8 * _baseAnimEdit.scale[1]
+				
+				If side == lb.nc.NC_locationLeft then
+					this.animNodes.handParentHLP.wirecolor = blue
+				else if side == lb.nc.NC_locationRight then
+					this.animNodes.handParentHLP.wirecolor = green
+				
+				-- Creamos el point que será el padre de la mano de rig, para que cuando se instancia con el ik para hacer el offset, tenga las mismas coordenadas gimbal.
+				this.animNodes.handOffsetHLP = lb.rig.createPointFromObj this.animNodes.forearmEnd
+				this.animNodes.handOffsetHLP.name = lb.nc.replaceNamePart this.animNodes.handOffsetHLP.name 5 "handOffsetParent"
+				this.animNodes.handOffsetHLP.name = lb.nc.replaceNamePart this.animNodes.handOffsetHLP.name 7 (lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag)
+				this.animNodes.handOffsetHLP.size = 10 * _baseAnimEdit.scale[1]
+				
+				If side == lb.nc.NC_locationLeft then
+					this.animNodes.handOffsetHLP.wirecolor = blue
+				else if side == lb.nc.NC_locationRight then
+					this.animNodes.handOffsetHLP.wirecolor = green
+				
+				
+				--*****************/FK/******************** --
+				-- Creamos el point de referencia del SwivelAngle, que nos servirá cuando hagamos el snap de fk/ik a alinear el angulo del codo.
+				this.fkNodes.refElbowIKHLP = lb.rig.createPointFromObj this.animNodes.foreArm
+				this.fkNodes.refElbowIKHLP.name = lb.nc.replaceNamePart this.fkNodes.refElbowIKHLP.name 5 "refElbowIK"
+				this.fkNodes.refElbowIKHLP.name = lb.nc.replaceNamePart this.fkNodes.refElbowIKHLP.name 7 (lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag)
+				this.fkNodes.refElbowIKHLP.size = 7 * _baseAnimEdit.scale[1]
+				this.fkNodes.refElbowIKHLP.wirecolor = green
+
+
+				--*****************/IK/******************** --
+				-- Creamos el point de referencia "handPosRef" que nos servirá como virtualParent de las crucetas de ik y de referencia para la orientación. 
+				this.ikNodes.handPosRefHLP = lb.rig.createPointFromObj this.ikNodes.hand
+
+				-- Cambia sus propiedas de color, nombre y tamaño.
+				this.ikNodes.handPosRefHLP.name = lb.nc.replaceNamePart this.ikNodes.handPosRefHLP.name 5 "handPosRefIk"
+				this.ikNodes.handPosRefHLP.name = lb.nc.replaceNamePart this.ikNodes.handPosRefHLP.name 7 (lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag)
+				this.ikNodes.handPosRefHLP.size = 15 * _baseAnimEdit.scale[1]
+				this.ikNodes.handPosRefHLP.wirecolor = red
+				
+				-- Creamos el point que será el padre de la ik, para que cuando se instancia con el hueso de la mano para hacer el offset, tenga las mismas coordenadas gimbal.
+				this.ikNodes.ikGoalParentHLP = lb.rig.createPointFromObj this.animNodes.forearmEnd
+				this.ikNodes.ikGoalParentHLP.name = lb.nc.replaceNamePart this.ikNodes.ikGoalParentHLP.name 5 "ikGoalArmParentOffset"
+				this.ikNodes.ikGoalParentHLP.size = 12 * _baseAnimEdit.scale[1]
+				this.ikNodes.ikGoalParentHLP.wirecolor = red
+				
+				-- Creamos el point que será el padre del elbow, para que cuando se instancia con el hueso de la mano para hacer el offset, tenga las mismas coordenadas gimbal.
+				_elbowParent = lb.rig.createPointFromObj this.animNodes.forearmEnd
+				_elbowParent.name = lb.nc.replaceNamePart _elbowParent.name 5 "elbowParent"
+				_elbowParent.size = 12 * _baseAnimEdit.scale[1]
+				_elbowParent.wirecolor = red
+				
+			)--CREACIÓN DE HELPERS AUXILIARES
+			
+			----------------------------------------------------
+			-- MERGEO Y CREACIÍON DE SHAPES DE CONTROL
+			----------------------------------------------------
+			(
+				--*****************/IK/******************** --
+				(
+					this.ikNodes.handSHP = (lb.rig.solutions.mergeShape #arm side:side)[1]
+					this.ikNodes.handSHP.name = lb.nc.replaceNamePart this.ikNodes.handSHP.name 5 "handCross"
+					
+					-- Mergeamos los controles de los codos del swivelAngle, renombramos las piezas, y cambiamos el color segun su lado.
+					this.ikNodes.elbowSHP = (lb.rig.solutions.mergeShape #elbow)[1]
+					this.ikNodes.elbowSHP.name = lb.nc.replaceNamePart this.ikNodes.elbowSHP.name 4 side
+					this.ikNodes.elbowSHP.name = lb.nc.replaceNamePart this.ikNodes.elbowSHP.name 5 "elbow"
+
+					
+					If side == lb.nc.NC_locationLeft then
+						this.ikNodes.elbowSHP.wirecolor = blue
+					else if side == lb.nc.NC_locationRight then
+						this.ikNodes.elbowSHP.wirecolor = green
+
+					
+					-- Mergeamos el control de fkIk donde irá el customAttribute del Snap
+					this.ikNodes.fkIkSHP = (lb.rig.solutions.mergeShape #fkIk)[1]
+					this.ikNodes.fkIkSHP.length = ((distance this.animNodes.upperarm this.animNodes.hand)/3)
+					this.ikNodes.fkIkSHP.width = ((distance this.animNodes.upperarm this.animNodes.hand)/3)
+					this.ikNodes.fkIKSHP.name = lb.nc.replaceNamePart this.ikNodes.fkIKSHP.name 4 side
+					this.ikNodes.fkIKSHP.name = lb.nc.replaceNamePart this.ikNodes.fkIKSHP.name 5 "fkIkArm"
+
+
+					If side == lb.nc.NC_locationLeft then
+						this.ikNodes.fkIKSHP.wirecolor = blue
+					else if side == lb.nc.NC_locationRight then
+						this.ikNodes.fkIKSHP.wirecolor = green
+				)
+				
+				
+				--*****************/BB/******************** --
+				(
+					-- Creamos el control del rompehuesos del codo. Calculamos el radio con un factor de división para que se adapte siempre según el tamaño del personaje.
+					this.bbNodes.breakElbowSHP = (circle radius: ((distance this.animNodes.upperarm this.animNodes.hand)/6))
+					
+					-- Le establecemos un nombre con NC para poder cambiarle sus partes
+					this.bbNodes.breakElbowSHP.name = this.ikNodes.elbowSHP.name
+					
+					this.bbNodes.breakElbowSHP.name = lb.nc.replaceNamePart this.bbNodes.breakElbowSHP.name 4 side
+					this.bbNodes.breakElbowSHP.name = lb.nc.replaceNamePart this.bbNodes.breakElbowSHP.name 5 "breakElbow"
+					
+					If side == lb.nc.NC_locationLeft then
+						this.bbNodes.breakElbowSHP.wirecolor = blue
+					else if side == lb.nc.NC_locationRight then
+						this.bbNodes.breakElbowSHP.wirecolor = green
+				)
+				
+
+			)-- MERGEO DE SHAPES DE CONTROL
+			
+			-------------------------------------------------------
+			-- CREACIÓN DE CONEXIONES
+			-------------------------------------------------------
+			(
+				--*****************/FK/******************** --
+				-- Emparentamiento de upperArm de FK al "armStructureHLP" y clavicula al armSolution
+				this.fkNodes.upperArm.parent = this.animNodes.armStructureHLP
+				lb.controller.freezeTransform this.fkNodes.upperArm #all
+				
+				-- Colocamos el punto de referencia para alinear el control del swivelAngle del ik, a una distancia dependiente 
+				-- de la longitud de upperArm y el foreArm, manteniendola siempre igual, indistintamente de las proporciones.
+				lb.controller.freezeTransform this.fkNodes.refElbowIKHLP #all
+								
+				-- Añadimos un constraint de orientación para tener la rotación media entre el upperArm y foreArm, para evitar un al añadir el swivel angle del ik que provoca al no tener la rot, correcta.
+				lb.rig.addConstraint this.fkNodes.refElbowIKHLP #Rot this.fkNodes.upperArm "OC_TEMP"
+				this.fkNodes.refElbowIKHLP.rotation.controller[#OC_TEMP].appendTarget this.fkNodes.foreArm 50
+				
+				-- Nos guardamos la tranformación para que cuando colapsemos el constraint, corregir el desfase.
+				_transformBkp = this.fkNodes.refElbowIKHLP.transform
+				
+				-- Emparentamos al antebrazo de fk.
+				this.fkNodes.refElbowIKHLP.parent = this.fkNodes.forearm
+				
+				-- Freezeamos el control para dejar
+				lb.controller.freezeTransform this.fkNodes.refElbowIKHLP #all
+				
+				-- Freezeamos para dejar la nueva rotación por defecto.
+				this.fkNodes.refElbowIKHLP.transform = _transformBkp
+				
+			
+				-- Dependiendo del lado que sea le indicamos que se mueva en valor negativo o positivo en el eje y.
+				If side == lb.nc.NC_locationLeft then
+					in coordSys local move this.fkNodes.refElbowIKHLP [0,(distance this.fkNodes.upperArm this.fkNodes.hand),0]
+				else if side == lb.nc.NC_locationRight then
+					in coordSys local move this.fkNodes.refElbowIKHLP [0,-(distance this.fkNodes.upperArm this.fkNodes.hand),0]
+				
+				lb.controller.freezeTransform this.fkNodes.refElbowIKHLP #all
+				
+				--*****************/IK/******************** --			
+				-- Emparentamiento de upperArm de IK al armSolution
+				this.ikNodes.upperArm.parent = this.animNodes.armStructureHLP
+				lb.controller.freezeTransform this.ikNodes.upperArm #all
+				
+				-- Creamos el point que será el padre de la mano del codo para hacer la simetria del control que está emparentado a este objeto y manejarlo en el CBox
+				_elbowParent.transform = this.fkNodes.refElbowIKHLP.transform
+				
+				-- Invertimos el eje para hacer la simetria del control que está emparentado a este objeto y manejarlo en el CBox
+				If side == lb.nc.NC_locationRight then
+					_elbowParent.scale = [-1,-1,-1]
+
+				_elbowParent.parent = this.animNodes.armSolutionParentHLP
+				lb.controller.freezeTransform _elbowParent #all
+				
+				
+				-- Alineamos el control del swivelAngle con el elbowParent para colocarlo donde lo necesitamos. Emparentamos  y freezeamos.
+				this.ikNodes.elbowSHP.transform = _elbowParent.transform
+				this.ikNodes.elbowSHP.parent = _elbowParent
+				
+				lb.controller.freezeTransform this.ikNodes.elbowSHP #all
+				
+				-- Lo dejamos orientado con el mundo para el mantener el gimbal correcto. Emparentamos a la base y freezeamos la pieza.
+				this.ikNodes.handPosRefHLP.rotation = (quat 0 0 0 0)
+				
+				
+				-- Invertimos el eje para hacer la simetria del control que está emparentado a este objeto y manejarlo en el CBox
+				If side == lb.nc.NC_locationRight then
+					this.ikNodes.handPosRefHLP.transform = matrix3 -this.ikNodes.handPosRefHLP.transform[1] this.ikNodes.handPosRefHLP.transform[2] this.ikNodes.handPosRefHLP.transform[3] this.ikNodes.handPosRefHLP.transform[4] -- cambio de ejes de 'handPositionRef' para conseguir el efecto de simetría.
+				
+				lb.controller.freezeTransform this.ikNodes.handPosRefHLP #all
+				
+				lb.controller.setActiveController this.ikNodes.handPosRefHLP #all #frozen
+				this.ikNodes.handPosRefHLP.parent = this.animNodes.armSolutionParentHLP
+				lb.controller.setActiveController this.ikNodes.handPosRefHLP #all #zero
+
+				-- Alineamos la cruceta de ik con la muñeca de rig y emparentamos a la base. Añadimos el controlador LinkConstraint, más tarde añadiremos el CA_LinkConstraint y su virtualWorld.
+				this.ikNodes.handSHP.parent = this.ikNodes.handPosRefHLP
+				this.ikNodes.handSHP.transform = this.animNodes.hand.transform
+				
+				lb.controller.freezeTransform this.ikNodes.handSHP #all
+						
+				-- Rotamos el control de fkIk para que no se solape con la cruceta de la mano.
+				centerPivot this.ikNodes.fkIkSHP
+				
+				-- Alineamos el control de fkIk con la cruceta y lo emparentamos al hueso de la mano de rig.
+				this.ikNodes.fkIkSHP.transform = this.ikNodes.hand.transform
+				
+				in coordsys local (rotate this.ikNodes.fkIkSHP (eulerAngles 0 -45 -90))
+ 				
+				this.ikNodes.fkIkSHP.parent = this.animNodes.hand
+				lb.controller.freezeTransform this.ikNodes.fkIkSHP #all
+				
+				-- Creamos sistema de ik y asignamos control de swivelAngle.
+				_handIkGoal = IKSys.ikChain this.ikNodes.upperArm this.ikNodes.hand "IKHISolver"
+				
+				-- Renombramos, emparentamos, freezeamos y añadimos el target del swivelAngle.
+				_handIkGoal.name = this.ikNodes.hand.name
+				_handIkGoal.name = lb.nc.replaceNamePart _handIkGoal.name 5 "handIkGoal"
+				_handIkGoal.name = lb.nc.replaceNamePart _handIkGoal.name 7 (lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag)
+				
+				_handIkGoal.controller.goalSize = 15 * _baseAnimEdit.scale[1]
+				
+				_handIkGoal.controller.useVHTarget = true
+				_handIkGoal.controller.VHTarget = this.ikNodes.elbowSHP
+
+				-- Orientamos el ikGoal con su futuro padre y emparentamos.
+				_handIkGoal.transform = this.ikNodes.ikGoalParentHLP.transform
+				_handIkGoal.parent = this.ikNodes.ikGoalParentHLP
+				lb.controller.freezeTransform _handIkGoal #all
+				
+				this.ikNodes.ikGoalParentHLP.parent = this.ikNodes.handSHP
+				
+				lb.controller.freezeTransform this.ikNodes.ikGoalParentHLP #all
+				
+				-- Emparentamos el helper con el footParentHLP
+				if side == lb.nc.NC_locationRight then
+					lb.rig.flipAxis #(this.ikNodes.ikGoalParentHLP)  true true true	
+								 				
+				-- Le añadimos in OC para que siga la orientacion de la cruceta y nos sirva para luego alinear el hueso de fk de la mano con este mismo en el snap.
+				lb.rig.addConstraint this.ikNodes.hand #Rot this.ikNodes.handSHP "Zero_IK_Controller" keepInitOffset: true
+												
+				--*****************/BB/******************** --
+				-- Convertimos la cadena de bb en strechin para manipular el rompecodos.
+				_bbPoints = (lb.rig.createStretchBoneChain #(this.bbNodes.upperarm, this.bbNodes.forearm, this.bbNodes.hand))
+				_bbPoints.size = _bbPoints[1].size * _baseAnimEdit.scale[1]	
+					
+				-- Creamos un point que vaya orientado con el forearm y el uppearm al 50%, que será padre del breakKnee
+				_bElbowParent = lb.rig.createPointFromObj this.ikNodes.forearm
+				_bElbowParent.size = _bElbowParent.size * _baseAnimEdit.scale[1]
+				_bElbowParent.parent = this.ikNodes.forearm
+					
+				lb.controller.freezeTransform _bElbowParent #all
+				
+				-- Invertimos para la simetria
+				if side == lb.nc.NC_locationRight then
+					lb.rig.flipAxis #(_bElbowParent) true true true			
+					
+				lb.rig.addConstraint _bElbowParent #Rot this.ikNodes.upperarm "OC_forearm_uppearm" keepInitOffset: true
+				_bElbowParent.rotation.controller[#OC_forearm_uppearm].controller.appendTarget this.ikNodes.forearm 50
+
+				-- Alineamos el control del rompecodos y lo emparentamos con el forearm de la cadena de ik.				
+				this.bbNodes.breakElbowSHP.transform = this.fkNodes.refElbowIKHLP.transform
+				this.bbNodes.breakElbowSHP.position = _bbPoints[2].position
+				this.bbNodes.breakElbowSHP.parent = _bElbowParent
+				in coordsys local (rotate this.bbNodes.breakElbowSHP (eulerAngles 0 90 0))
+					
+				lb.controller.freezeTransform this.bbNodes.breakElbowSHP #all
+				
+					
+				-- Emparentamos points de la cadena de streching, lo cogemos por indice ya que sabemos que el 1 es el point del upperarm, 2 del forearm, y 3 del hand.
+				_bbPoints[1].parent = this.animNodes.armStructureHLP
+				lb.controller.freezeTransform _bbPoints[1] #all
+				
+				_bbPoints[2].parent = this.bbNodes.breakElbowSHP
+				lb.controller.freezeTransform _bbPoints[2] #all
+					 
+				_bbPoints[3].parent = this.ikNodes.hand
+				lb.controller.freezeTransform _bbPoints[3] #all
+				
+				-- Cambiamos los target del upnode a los huesos de ik respectivamente
+				this.bbNodes.upperarm.rotation.controller[#LookAt_Constraint].controller.pickUpNode = this.ikNodes.upperarm
+				this.bbNodes.forearm.rotation.controller[#LookAt_Constraint].controller.pickUpNode = this.ikNodes.forearm						
+				
+				--*****************/ANIM/******************** --
+				-- Freezeado de "armSolutionHLP", y emparentamiento a la base. 
+				this.animNodes.armSolutionHLP.parent = _base
+				lb.controller.freezeTransform this.animNodes.armSolutionHLP #all
+		
+				-- Freezeado de "armSolutionParentHLP",  emparentamiento al armSolutionHLP,
+				-- cambiamos su pivote al de la base y añadimos constraint de rot y pos.
+				this.animNodes.armSolutionParentHLP.parent = this.animNodes.armSolutionHLP
+				this.animNodes.armSolutionParentHLP.pivot = _base.pos
+				WorldAlignPivot this.animNodes.armSolutionParentHLP
+				lb.controller.freezeTransform this.animNodes.armSolutionParentHLP #all	
+				lb.controller.freezeTransform _elbowParent #all
+	
+				lb.rig.addConstraint this.animNodes.armSolutionParentHLP #Pos _base "PC_base" keepInitOffset: true
+				lb.rig.addConstraint this.animNodes.armSolutionParentHLP #Rot _base "OC_base" keepInitOffset: true
+					
+				-- Freezeado de "armStructureHLP", el cual llevará un orientationConstraint al root,
+				-- para que cuando se mueva la clavicula no se oriente, pero si cuando se rota el root.
+				this.animNodes.armStructureHLP.parent = this.animNodes.armSolutionHLP
+				lb.controller.freezeTransform this.animNodes.armStructureHLP #all
+				
+				lb.rig.addConstraint this.animNodes.armStructureHLP #Pos this.animNodes.clavicleEnd "PC_ClavicleEnd" keepInitOffset: true
+
+
+				-- Emparentamiento de upperArm de Rig al "armStructureHLP" y clavicula al "armSolutionHLP"
+				this.animNodes.upperArm.parent = this.animNodes.armStructureHLP
+				lb.controller.freezeTransform this.animNodes.upperArm #all
+				
+				this.animNodes.clavicle.parent = this.animNodes.armSolutionHLP
+				lb.controller.freezeTransform this.animNodes.clavicle #all
+				
+				-- Añadimos controladores de rotación para instanciarlos con la cadena de FK y constraint de orientación para conectarlos con la cadena de IK.
+				-- Controlador de FK de upperarm
+				this.animNodes.upperarm.rotation.available.controller = euler_xyz()
+				this.animNodes.upperarm.rotation.controller[#Euler_XYZ].controller = this.fkNodes.upperarm.rotation.controller[#Zero_Euler_XYZ].controller
+				this.animNodes.upperarm.rotation.controller.setName (this.animNodes.upperarm.rotation.controller.count) "Zero_FK_Controller"
+				
+				-- Controlador de Ik de upperam
+				lb.rig.addConstraint this.animNodes.upperarm #Rot this.bbNodes.upperarm "Zero_IK_Controller" keepInitOffset: true
+				
+				-- Controlador de FK de forearm
+				this.animNodes.forearm.rotation.available.controller = euler_xyz()
+				this.animNodes.forearm.rotation.controller[#Euler_XYZ].controller = this.fkNodes.forearm.rotation.controller[#Zero_Euler_XYZ].controller
+				this.animNodes.forearm.rotation.controller.setName (this.animNodes.forearm.rotation.controller.count) "Zero_FK_Controller"
+				
+				-- Controlador de IK de forearm
+				lb.rig.addConstraint this.animNodes.forearm #Rot this.bbNodes.forearm "Zero_IK_Controller" keepInitOffset: true
+			
+				-- Emparentamos el helper con la base
+				this.animNodes.handOffsetHLP.parent = this.animNodes.armSolutionParentHLP
+				lb.controller.freezeTransform this.animNodes.handOffsetHLP #all
+
+ 				-- Añadimos constraint de posición al hueso final del foreArm para que cuando se mueva no tenga doble transformación la mano.
+				lb.rig.addConstraint this.animNodes.handOffsetHLP #Pos this.animNodes.forearmEnd "PC_rigForearmEnd" keepInitOffset: true
+				
+				-- Añadimos constraint de posición al hueso final del foreArm para que cuando se mueva no tenga doble transformación la mano.
+				lb.rig.addConstraint this.animNodes.handOffsetHLP #Rot this.animNodes.forearmEnd "OC_ForearmEnd" keepInitOffset: true
+				
+				-- Añadimos constraint de posición al hueso final del foreArm para que cuando se mueva no tenga doble transformación la mano.
+				lb.rig.addConstraint this.animNodes.handOffsetHLP #Rot this.ikNodes.handSHP "Zero_IK_Controller" keepInitOffset: true
+
+				-- Emparentamos el helper con el handOffsetHLP
+				this.animNodes.handParentHLP.parent = this.animNodes.handOffsetHLP
+				lb.controller.freezeTransform this.animNodes.handParentHLP #all
+				
+				-- Emparentamos el helper con el footParentHLP
+				if side == lb.nc.NC_locationRight then
+					lb.rig.flipAxis #(this.animNodes.handParentHLP)  true true true	
+
+				
+				this.animNodes.hand.parent = this.animNodes.handParentHLP
+				
+				lb.controller.freezeTransform this.animNodes.hand #all
+							
+				-- Controlador de FK de hand
+				this.animNodes.hand.rotation.available.controller = euler_xyz()
+				this.animNodes.hand.rotation.controller[#Euler_XYZ].controller = this.fkNodes.hand.rotation.controller[#Zero_Euler_XYZ].controller
+				this.animNodes.hand.rotation.controller.setName (this.animNodes.hand.rotation.controller.count) "Zero_FK_Controller"
+				
+				-- Controlador de IK de hand
+				lb.rig.addConstraint this.animNodes.hand #Rot this.ikNodes.hand "Zero_IK_Controller" keepInitOffset: false
+
+				-- Controlador de FK de hand
+				this.animNodes.hand.position.available.controller = position_xyz()
+				this.animNodes.hand.position.controller[#position_XYZ].controller = _handIkGoal.position.controller[#Zero_Pos_XYZ].controller
+				this.animNodes.hand.position.controller.setName (this.animNodes.hand.position.controller.count) "IKoffset_controller"
+				this.animNodes.hand.position.controller.setActive (this.animNodes.hand.position.controller.count)
+
+				-- Añadimos constraint de posición al hueso final del foreArm para que cuando se mueva no tenga doble transformación la mano.
+				lb.rig.addConstraint this.animNodes.hand #Pos this.animNodes.forearmEnd "PC_ForearmEnd" keepInitOffset: true
+				
+				-- Creamos un hlp por cada huesos de la mano interior a partir del 3.
+				_herarchies = lb.rig.getHierarchiesFromNodes this.animNodes.fingers
+				_auxHLPS = #()
+				
+				-- Generación de helpers a partir de la cuarta falange, ya que sabemos siempre se va a generar desde ese punto la rotación progresiva.
+				for i = 4 to  _herarchies.count where _herarchies[i][1] != undefined do
+				(
+					-- Creación de point y cambios de propiedas
+					_auxHLP = (lb.rig.createPointFromObj _herarchies[i][1])
+					_auxHLP.wirecolor = blue
+					_auxHLP.cross = false
+					_auxHLP.size = 2.5 * _baseAnimEdit.scale[1]
+					
+					-- Emparentamiento de hueso a hlp.
+					lb.controller.setActiveController (_herarchies[i][1]) #all #frozen
+					_herarchies[i][1].parent = _auxHLP
+					lb.controller.setActiveController (_herarchies[i][1]) #all #zero
+					
+					-- Emparentamiento del helper al hueso anterior para generar jerarquia.
+					_auxHLP.parent = _herarchies[i-1][1]
+					
+					lb.controller.freezeTransform _auxHLP #all
+					
+					-- Hacemos instancia del hueso al siguiente point para hacer la rotación aditiva.
+					_auxHLP.rotation.controller.available.controller =  _herarchies[i-1][1].rotation.controller[#Zero_Euler_XYZ].controller
+					_auxHLP.rotation.controller.setName _auxHLP.rotation.controller.count ("Instance_" + (lb.nc.getNamePart _herarchies[i-1][1].name 5))
+						
+					-- Nombramos el helper correctamente.
+					_filterName = lb.nc.getNamePart _herarchies[i][1].name 5
+					_auxHLP.name = lb.nc.replaceNamePart _auxHLP.name 5 (_filterName + "-hlp-parent")
+					lb.nc.setFlags _auxHLP #(lb.nc.NC_frozenFlag, lb.nc.NC_hiddenFlag) 
+					append _auxHLPS _auxHLP
+				)
+				
+				-- Instanciamos de la 3 falange a todos los point empezando por el segundo, ya que el primero ya se ha instanciado anteriormente.
+				for i = 2 to _auxHLPS.count do
+				(					
+					_auxHLPS[i].rotation.controller.available.controller =  _herarchies[3][1].rotation.controller[#Zero_Euler_XYZ].controller
+					_auxHLPS[i].rotation.controller.setName _auxHLPS[i].rotation.controller.count ("Instance_" + (lb.nc.getNamePart _herarchies[3][1].name 5))
+				)				
+			)-- CREACIÓN DE CONEXIONES
+			
+			-------------------------------------------------------------------------------
+			--CREACIÓN DE STRECHINGS
+			-------------------------------------------------------------------------------
+			(
+				--************************* -- CONEXIONES DE STRECHING -- ************************* --				
+				(
+					-- //////////////////////////-ANIM-////////////////////////// --
+					-- Upperarm--
+					-- Bloqueamos el eje x de la escala compensando el valor que se le pasa de forma negativa en otro controlador
+					this.animNodes.upperarm.scale.controller[#Zero_Scale_XYZ].controller.x_scale.controller = float_list()
+					_fltScrpt = this.animNodes.upperarm.scale.controller[#Zero_Scale_XYZ][#X_Scale].available.controller = float_script()
+					this.animNodes.upperarm.scale.controller[#Zero_Scale_XYZ][#X_Scale].controller.setName 2 "LockScale"
+					_fltScrpt.AddObject "upperarmAnim_scaX" this.animNodes.upperarm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Bezier_float]
+					_fltScrpt.script = "1 - upperarmAnim_scaX.value"
+					this.animNodes.forearm.position.controller[#Zero_Pos_XYZ][#X_Position].controller = float_list()
+					_floatExprForearm = this.animNodes.forearm.position.controller[#Zero_Pos_XYZ][#X_Position].available.controller = Float_Expression()
+					this.animNodes.forearm.position.controller[#Zero_Pos_XYZ][#X_Position].controller.setName 2 "Strech_FltExpr_X"
+					_floatExprForearm.AddScalarConstant "upperarmAnim_length" this.animNodes.upperarm.length
+					_floatExprForearm.AddScalarTarget "upperarmAnim_scaX" this.animNodes.upperarm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Bezier_float]
+					_floatExprForearm.setExpression "(upperarmAnim_scaX * upperarmAnim_length) - upperarmAnim_length"
+					
+					if side == lb.nc.NC_locationRight then
+						_floatExprForearm.setExpression "-((upperarmAnim_scaX * upperarmAnim_length) - upperarmAnim_length)"
+					
+					--Forearm--
+					-- Bloqueamos el eje x de la escala compensando el valor que se le pasa de forma negativa en otro controlador
+					this.animNodes.forearm.scale.controller[#Zero_Scale_XYZ].controller.x_scale.controller = float_list()
+					_fltScrpt = this.animNodes.forearm.scale.controller[#Zero_Scale_XYZ][#X_Scale].available.controller = float_script()
+					this.animNodes.forearm.scale.controller[#Zero_Scale_XYZ][#X_Scale].controller.setName 2 "LockScale"
+					_fltScrpt.AddObject "forearmAnim_scaX" this.animNodes.forearm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Bezier_float]
+					_fltScrpt.script = "1 - forearmAnim_scaX.value"
+					
+					_floatExprForearmEnd = this.animNodes.forearmEnd.position.controller[#Zero_Pos_XYZ][#X_Position].controller = float_list()
+					_floatExprForearmEnd = this.animNodes.forearmEnd.position.controller[#Zero_Pos_XYZ][#X_Position].available.controller = Float_Expression()	
+					this.animNodes.forearmEnd.position.controller[#Zero_Pos_XYZ][#X_Position].controller.setName 2 "Strech_FltExpr_X"
+					_floatExprForearmEnd.AddScalarConstant "forearmAnim_length" this.animNodes.forearm.length
+					_floatExprForearmEnd.AddScalarTarget "forearmAnim_scaX" this.animNodes.forearm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Bezier_float]
+					_floatExprForearmEnd.setExpression "(forearmAnim_scaX * forearmAnim_length) - forearmAnim_length"
+					
+					if side == lb.nc.NC_locationRight then
+						_floatExprForearmEnd.setExpression "-((forearmAnim_scaX * forearmAnim_length) - forearmAnim_length)"
+					
+					-- Recorremos los dedos de 4 en cuatro a partir del cuarto dedo para crear para crear los locks en la segunda falange de cada dedo.				
+					-- Fingers
+					if side == lb.nc.NC_locationLeft then
+						lb.rig.solutions.addStrechSystem this.animNodes.fingers
+					else if side == lb.nc.NC_locationRight then
+						lb.rig.solutions.addStrechSystem this.animNodes.fingers invertSign:true
+						
+					--//////////////////////////-FK-////////////////////////// --
+					-- Upperarm--
+					-- Bloqueamos el eje x de la escala compensando el valor que se le pasa de forma negativa en otro controlador
+					this.fkNodes.upperarm.scale.controller[#Zero_Scale_XYZ].controller.x_scale.controller = float_list()
+					_fltScrptFkUppearm = this.fkNodes.upperarm.scale.controller[#Zero_Scale_XYZ][#X_Scale].available.controller = float_script()
+					this.fkNodes.upperarm.scale.controller[#Zero_Scale_XYZ][#X_Scale].controller.setName 2 "LockScale"
+					_fltScrptFkUppearm.AddObject "upperarmFk_scaX" this.fkNodes.upperarm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Bezier_float]
+					_fltScrptFkUppearm.script = "1 - upperarmFk_scaX.value"
+
+					
+					-- Creamos un floatExpressión para indicar la posición del hueso en X donde debe de estar respecto a la escala en X del hueso de rig. 
+					this.fkNodes.forearm.position.controller[#Zero_Pos_XYZ][#X_Position].controller = float_list()
+					_floatExprForearm = this.fkNodes.forearm.position.controller[#Zero_Pos_XYZ][#X_Position].available.controller = Float_Expression()
+					this.fkNodes.forearm.position.controller[#Zero_Pos_XYZ][#X_Position].controller.setName 2 "Strech_FltExpr_X"
+					
+					_floatExprForearm.AddScalarConstant "upperarmRig_length" this.fkNodes.upperarm.length
+					_floatExprForearm.AddScalarTarget "upperarmRig_scaX" this.fkNodes.upperarm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Bezier_float]
+					_floatExprForearm.setExpression "(upperarmRig_scaX * upperarmRig_length) - upperarmRig_length"
+					if side == lb.nc.NC_locationRight then
+						_floatExprForearm.setExpression "-((upperarmRig_scaX * upperarmRig_length) - upperarmRig_length)"
+					
+					--Forearm--
+					-- Bloqueamos el eje x de la escala compensando el valor que se le pasa de forma negativa en otro controlador
+					this.fkNodes.forearm.scale.controller[#Zero_Scale_XYZ].controller.x_scale.controller = float_list()
+					_fltScrptFkForearm = this.fkNodes.forearm.scale.controller[#Zero_Scale_XYZ][#X_Scale].available.controller = float_script()
+					this.fkNodes.forearm.scale.controller[#Zero_Scale_XYZ][#X_Scale].controller.setName 2 "LockScale"
+					_fltScrptFkForearm.AddObject "forearmFk_scaX" this.fkNodes.forearm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Bezier_float]
+					_fltScrptFkForearm.script = "1 - forearmFk_scaX.value"
+					
+					this.fkNodes.hand.position.controller[#Zero_Pos_XYZ][#X_Position].controller = float_list()
+					_floatExprForearmEnd = this.fkNodes.hand.position.controller[#Zero_Pos_XYZ][#X_Position].available.controller = Float_Expression()
+					this.fkNodes.hand.position.controller[#Zero_Pos_XYZ][#X_Position].controller.setName 2 "Strech_FltExpr_X"	
+					_floatExprForearmEnd.AddScalarConstant "forearmRig_length" this.fkNodes.forearm.length
+					_floatExprForearmEnd.AddScalarTarget "forearmRig_scaX" this.fkNodes.forearm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Bezier_float]
+					_floatExprForearmEnd.setExpression "(forearmRig_scaX * forearmRig_length) - forearmRig_length"
+					
+					if side == lb.nc.NC_locationRight then
+						_floatExprForearmEnd.setExpression "-((forearmRig_scaX * forearmRig_length) - forearmRig_length)"
+
+					
+					--//////////////////////////- IK -////////////////////////// --
+						-- Upperarm--
+					-- Bloqueamos el eje x de la escala compensando el valor que se le pasa de forma negativa en otro controlador
+					this.ikNodes.upperarm.scale.controller[#Zero_Scale_XYZ].controller.x_scale.controller = float_list()
+					_fltScrptIkUppearm = this.ikNodes.upperarm.scale.controller[#Zero_Scale_XYZ][#X_Scale].available.controller = float_script()
+					this.ikNodes.upperarm.scale.controller[#Zero_Scale_XYZ][#X_Scale].controller.setName 2 "LockScale"
+					_fltScrptIkUppearm.AddObject "upperarmFk_scaX" this.ikNodes.upperarm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Bezier_float]
+					_fltScrptIkUppearm.script = "1 - upperarmFk_scaX.value"
+
+					-- Creamos un floatExpressión para indicar la posición del hueso en X donde debe de estar respecto a la escala en X del hueso de rig. 
+					this.ikNodes.forearm.position.controller[#Zero_Pos_XYZ][#X_Position].controller = float_list()
+					_floatExprForearm = this.ikNodes.forearm.position.controller[#Zero_Pos_XYZ][#X_Position].available.controller = Float_Expression()
+					this.ikNodes.forearm.position.controller[#Zero_Pos_XYZ][#X_Position].controller.setName 2 "Strech_FltExpr_X"
+					
+					_floatExprForearm.AddScalarConstant "upperarmRig_length" this.ikNodes.upperarm.length
+					_floatExprForearm.AddScalarTarget "upperarmRig_scaX" this.ikNodes.upperarm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Bezier_float]
+					_floatExprForearm.setExpression "(upperarmRig_scaX * upperarmRig_length) - upperarmRig_length"
+					
+					if side == lb.nc.NC_locationRight then
+						_floatExprForearm.setExpression "-((upperarmRig_scaX * upperarmRig_length) - upperarmRig_length)"
+					
+					--Forearm--
+					-- Bloqueamos el eje x de la escala compensando el valor que se le pasa de forma negativa en otro controlador
+					this.ikNodes.forearm.scale.controller[#Zero_Scale_XYZ].controller.x_scale.controller = float_list()
+					_fltScrptIkForearm = this.ikNodes.forearm.scale.controller[#Zero_Scale_XYZ][#X_Scale].available.controller = float_script()
+					this.ikNodes.forearm.scale.controller[#Zero_Scale_XYZ][#X_Scale].controller.setName 2 "LockScale"
+					_fltScrptIkForearm.AddObject "forearmFk_scaX" this.ikNodes.forearm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Bezier_float]
+					_fltScrptIkForearm.script = "1 - forearmFk_scaX.value"
+					
+					this.ikNodes.hand.position.controller[#Zero_Pos_XYZ][#X_Position].controller = float_list()
+					_floatExprForearmEnd = this.ikNodes.hand.position.controller[#Zero_Pos_XYZ][#X_Position].available.controller = Float_Expression()
+					this.ikNodes.hand.position.controller[#Zero_Pos_XYZ][#X_Position].controller.setName 2 "Strech_FltExpr_X"	
+					_floatExprForearmEnd.AddScalarConstant "forearmRig_length" this.ikNodes.forearm.length
+					_floatExprForearmEnd.AddScalarTarget "forearmRig_scaX" this.ikNodes.forearm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Bezier_float]
+					_floatExprForearmEnd.setExpression "(forearmRig_scaX * forearmRig_length) - forearmRig_length"
+					
+					if side == lb.nc.NC_locationRight then
+						_floatExprForearmEnd.setExpression "-((forearmRig_scaX * forearmRig_length) - forearmRig_length)"
+				)
+				
+				--************************* -- CONEXIONES DE AUTOSTRECHING -- ************************* --				
+				(
+					--//////////////////////////-RIG-////////////////////////// --
+					-- Añadimos un controlador nuevo donde metermos un Flt Expr en el x con la fórmula para el autostrech
+					-- La expresion la establecemos más adelante cuando creemos el CA del autoStrech
+					_autoStrchExpr = this.animNodes.forearm.position.controller[#Zero_Pos_XYZ][#X_Position].available.controller = float_expression()
+					this.animNodes.forearm.position.controller[#Zero_Pos_XYZ][#X_Position].controller.setName 3 "AutoStrech_FltExpr_X"
+					_autoStrchExpr.AddScalarTarget  "baseSca" _base.scale.controller[#Zero_Scale_XYZ][#X_scale] -- Añadimos el eje X de la base para más adelante meterlo en la fórmula cuando se añada el spinner.
+					_autoStrchExpr.AddScalarConstant  "refLenForearm" this.bbNodes.forearm.length
+					_autoStrchExpr.AddScalarConstant  "refLenUpperarm" this.bbNodes.upperarm.length
+					_autoStrchExpr.AddScalarTarget "forearmXSca" this.animNodes.forearm.scale.controller[#Zero_Scale_XYZ][#X_scale][#Bezier_float]
+					_autoStrchExpr.AddScalarTarget "upperarmXSca" this.animNodes.upperarm.scale.controller[#Zero_Scale_XYZ][#X_scale][#Bezier_float]
+					_autoStrchExpr.AddVectorNode "refPos02" this.animNodes.armStructureHLP
+					_autoStrchExpr.AddVectorNode  "refPos01" this.ikNodes.handSHP					
+					
+					this.animNodes.forearmEnd.position.controller[#Zero_Pos_XYZ][#X_Position].available.controller = _autoStrchExpr
+					
+					--//////////////////////////- IK-////////////////////////// --
+					-- Añadimos un controlador nuevo donde metermos un Flt Expr en el x con la fórmula para el autostrech
+					-- La expresion la establecemos más adelante cuando creemos el CA del autoStrech
+					_autoStrchExpr = this.ikNodes.forearm.position.controller[#Zero_Pos_XYZ][#X_Position].available.controller = float_expression()
+					this.ikNodes.forearm.position.controller[#Zero_Pos_XYZ][#X_Position].controller.setName 3 "AutoStrech_FltExpr_X"
+					_autoStrchExpr.AddScalarTarget  "baseSca" _base.scale.controller[#Zero_Scale_XYZ][#X_scale] -- Añadimos el eje X de la base para más adelante meterlo en la fórmula cuando se añada el spinner.
+					_autoStrchExpr.AddScalarConstant  "refLenForearm" this.bbNodes.forearm.length
+					_autoStrchExpr.AddScalarConstant  "refLenUpperarm" this.bbNodes.upperarm.length
+					_autoStrchExpr.AddScalarTarget "forearmXSca" this.animNodes.forearm.scale.controller[#Zero_Scale_XYZ][#X_scale][#Bezier_float]
+					_autoStrchExpr.AddScalarTarget "upperarmXSca" this.animNodes.upperarm.scale.controller[#Zero_Scale_XYZ][#X_scale][#Bezier_float]
+					_autoStrchExpr.AddVectorNode "refPos02" this.animNodes.armStructureHLP
+					_autoStrchExpr.AddVectorNode  "refPos01" this.ikNodes.handSHP
+					
+					this.ikNodes.hand.position.controller[#Zero_Pos_XYZ][#X_Position].available.controller = _autoStrchExpr
+					
+					--//////////////////////////- FK-////////////////////////// --
+					-- Añadimos un controlador nuevo donde metermos un Flt Expr en el x con la fórmula para el autostrech
+					-- La expresion la establecemos más adelante cuando creemos el CA del autoStrech
+					_autoStrchExpr = this.fkNodes.forearm.position.controller[#Zero_Pos_XYZ][#X_Position].available.controller = float_expression()
+					this.fkNodes.forearm.position.controller[#Zero_Pos_XYZ][#X_Position].controller.setName 3 "AutoStrech_FltExpr_X"
+					_autoStrchExpr.AddScalarTarget  "baseSca" _base.scale.controller[#Zero_Scale_XYZ][#X_scale] -- Añadimos el eje X de la base para más adelante meterlo en la fórmula cuando se añada el spinner.
+					_autoStrchExpr.AddScalarConstant  "refLenForearm" this.bbNodes.forearm.length
+					_autoStrchExpr.AddScalarConstant  "refLenUpperarm" this.bbNodes.upperarm.length
+					_autoStrchExpr.AddScalarTarget "forearmXSca" this.animNodes.forearm.scale.controller[#Zero_Scale_XYZ][#X_scale][#Bezier_float]
+					_autoStrchExpr.AddScalarTarget "upperarmXSca" this.animNodes.upperarm.scale.controller[#Zero_Scale_XYZ][#X_scale][#Bezier_float]
+					_autoStrchExpr.AddVectorNode "refPos02" this.animNodes.armStructureHLP
+					_autoStrchExpr.AddVectorNode  "refPos01" this.ikNodes.handSHP
+					
+					this.fkNodes.hand.position.controller[#Zero_Pos_XYZ][#X_Position].available.controller = _autoStrchExpr
+				)
+				
+				--************************* -- CONEXIONES DE ROMPEHUESOS -- ************************* --				
+				(
+					--//////////////////////////-RIG-////////////////////////// --
+					-- Forearm
+					-- Añadimos un controlador nuevo donde metermos un Flt Expr en el x con la fórmula para el rompehuesos
+					_strechBreakBones = this.animNodes.forearm.position.controller[#Zero_Pos_XYZ][#X_Position].available.controller = float_expression()
+					this.animNodes.forearm.position.controller[#Zero_Pos_XYZ][#X_Position].controller.setName 4 "strechBreakBones_FltExpr_X"
+					_strechBreakBones.AddScalarTarget  "baseSca" _base.scale.controller[#Zero_Scale_XYZ][#X_scale] -- Añadimos el eje X de la base para más adelante meterlo en la fórmula cuando se añada el spinner.
+					_strechBreakBones.AddVectorNode "refPosBBUp" this.bbNodes.upperarm
+					_strechBreakBones.AddVectorNode  "refPosIKFor" this.ikNodes.forearm
+					_strechBreakBones.AddVectorNode  "refPosBBFor" this.bbNodes.forearm
+					_strechBreakBones.setExpression "(((length (refPosBBUp - refPosBBFor))/baseSca) - ((length (refPosBBUp - refPosIKFor))/baseSca))"
+					
+					if side == lb.nc.NC_locationRight then
+						_strechBreakBones.setExpression "-(length (refPosBBUp - refPosBBFor) - length (refPosBBUp - refPosIKFor))"
+					
+					-- ForearmEnd
+					-- Añadimos un controlador nuevo donde metermos un Flt Expr en el x con la fórmula para el rompehuesos
+					_strechBreakBones = this.animNodes.forearmEnd.position.controller[#Zero_Pos_XYZ][#X_Position].available.controller = float_expression()
+					this.animNodes.forearmEnd.position.controller[#Zero_Pos_XYZ][#X_Position].controller.setName 4 "strechBreakBones_FltExpr_X"
+					_strechBreakBones.AddScalarTarget  "baseSca" _base.scale.controller[#Zero_Scale_XYZ][#X_scale] -- Añadimos el eje X de la base para más adelante meterlo en la fórmula cuando se añada el spinner.
+					_strechBreakBones.AddVectorNode  "refPosBBFor" this.bbNodes.forearm
+					_strechBreakBones.AddVectorNode  "refPosIKFor" this.ikNodes.forearm
+					_strechBreakBones.AddVectorNode "refPosBBHand" this.bbNodes.hand
+					_strechBreakBones.setExpression "((length (refPosBBFor - refPosBBHand))/baseSca - (length (refPosIKFor - refPosBBHand))/baseSca)"
+					
+					if side == lb.nc.NC_locationRight then
+						_strechBreakBones.setExpression "-(length (refPosBBFor - refPosBBHand) - length (refPosIKFor - refPosBBHand))"
+					
+				)		
+				
+				--************************* -- LIMITES DE ESCALA -- ************************* --				
+				(
+					-- Añadimos los limites a las escalas de las piezas e instanciamos con el hueso de rig. Reasignamos el target ya que se pierde en el float expression después de la instancia.
+					--//////////////////////////- RIG -////////////////////////// --
+					this.animNodes.upperarm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Bezier_float].controller = float_limit upper_limit: 1000000 lower_limit: 0
+					this.animNodes.forearm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Bezier_float].controller = float_limit upper_limit: 1000000 lower_limit: 0
+
+					this.animNodes.upperarm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#LockScale].AddObject "upperarmAnim_scaX" this.animNodes.upperarm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Float_Limit].controller
+					this.animNodes.forearm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#LockScale].AddObject "forearmAnim_scaX" this.animNodes.forearm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Float_Limit].controller					
+					
+					-- Añadimos los limites a las escalas de las manos y actualizamos el lockScale con el nuevo controlador limitado.
+					for i = 1 to this.animNodes.fingers.count do
+					(
+						this.animNodes.fingers[i].scale.controller[#Zero_Scale_XYZ][#X_Scale][#Bezier_float].controller = float_limit upper_limit: 1000000 lower_limit: 0
+						_nameVar = this.animNodes.fingers[i].scale.controller[#Zero_Scale_XYZ][#X_Scale][#LockScale].GetName 5
+						this.animNodes.fingers[i].scale.controller[#Zero_Scale_XYZ][#X_Scale][#LockScale].AddObject _nameVar this.animNodes.fingers[i].scale.controller[#Zero_Scale_XYZ][#X_Scale][#Float_Limit].controller
+					)
+					
+					--//////////////////////////-FK-///////////////////////////// --
+					this.fkNodes.upperarm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Bezier_float].controller = float_limit upper_limit: 1000000 lower_limit: 0
+					this.fkNodes.forearm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Bezier_float].controller = float_limit upper_limit: 1000000 lower_limit: 0
+
+					this.fkNodes.upperarm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Float_Limit].controller = this.animNodes.upperarm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Float_Limit].controller
+					this.fkNodes.forearm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Float_Limit].controller = this.animNodes.forearm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Float_Limit].controller
+					
+					this.fkNodes.upperarm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#LockScale].AddObject "upperarmFk_scaX" this.fkNodes.upperarm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Float_Limit].controller
+					this.fkNodes.forearm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#LockScale].AddObject "forearmFk_scaX" this.fkNodes.forearm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Float_Limit].controller
+					
+					--//////////////////////////-IK-//////////////////////////// --
+					this.ikNodes.upperarm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Bezier_float].controller = float_limit upper_limit: 1000000 lower_limit: 0
+					this.ikNodes.forearm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Bezier_float].controller = float_limit upper_limit: 1000000 lower_limit: 0
+					
+					this.ikNodes.upperarm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Float_Limit].controller = this.animNodes.upperarm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Float_Limit].controller
+					this.ikNodes.forearm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Float_Limit].controller = this.animNodes.forearm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Float_Limit].controller
+
+					this.ikNodes.upperarm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#LockScale].AddObject "upperarmFk_scaX" this.ikNodes.upperarm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Float_Limit].controller
+					this.ikNodes.forearm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#LockScale].AddObject "forearmFk_scaX" this.ikNodes.forearm.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Float_Limit].controller
+				)	
+			)-- CREACIÓN DE STRECHINGS
+
+			-------------------------------------------------------------------------------
+			-- CREACIÓN DE CUSTOMS ATTRIBUTES Y WIREPARAMETERS
+			-------------------------------------------------------------------------------
+			(
+				--//////////////////////////-FKIK SNAP-////////////////////////// --
+				-- Creamos el modificador vacio, y añadimos el CA del FkIk Snap.
+				_emptyModFkIk = emptyModifier()
+				_emptyModFkIk.name = "Arm_Controls"
+				custAttributes.add  _emptyModFkIk (this.fkIkArmCA) #unique
+				
+				-- Creamos el modificador vacio y le añadimo el CA de fkIkArms para luego añadirlo a todas las piezas.
+				_emptyModIndFkIk = emptyModifier()
+				
+				--*****************/IK/******************** --
+				addModifier this.ikNodes.fkIkSHP _emptyModFkIk
+				custAttributes.add  this.ikNodes.fkIkSHP.modifiers[#Arm_Controls] (lb.rig.solutions.autoStrechCA) #unique
+					
+				-- Montaje de controladores de autoStrech y multiplier e instanciado de controladores de fkIk con el controlador de multiplierCurve.
+				-- Añadimos el limitController de 0 a 1.
+				this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].fkik.controller = bezier_float()
+				this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].fkik.controller = float_limit upper_limit: 1 lower_limit: 0	
+				
+				-- Añadimos un multiplier curve para poder hacer que el controlador de fkik cuando suba que no afecte al de ,
+				-- autostrech pero que si está a cero el autostrech no se pueda manipular
+				this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].autostrechIK.autostrech.controller = bezier_float()					
+				addMultiplierCurve this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].autostrechIK.autostrech.controller
+				this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].autostrechIK.autostrech.controller = float_limit upper_limit: 1 lower_limit: 0	
+
+				this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].autostrechIK.autostrech.controller[#Limited_Controller__Bezier_Float].multiplier_curve.controller = this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].fkik.controller[#Limited_Controller__Bezier_Float].controller
+					
+				-- Sobreescribimos el script del autostrech para añadir el spinner del autostrech y ponerlo en la fórmila.	
+				this.ikNodes.forearm.position.controller[#Zero_Pos_XYZ][#X_Position][#AutoStrech_FltExpr_X].controller.AddScalarTarget "spnAutoStrech" this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].autostrechIK.autostrech.controller
+			
+				this.ikNodes.forearm.position.controller[#Zero_Pos_XYZ][#X_Position][#AutoStrech_FltExpr_X].controller.setExpression "if ((length (refPos02 - refPos01))/baseSca > ((refLenForearm) + (refLenUpperarm)), ((((length (refPos02 - refPos01))/baseSca  - ((refLenForearm ) + (refLenUpperarm))) /2) * spnAutoStrech) , 0 )"
+					
+				if side == lb.nc.NC_locationRight then		
+					this.ikNodes.forearm.position.controller[#Zero_Pos_XYZ][#X_Position][#AutoStrech_FltExpr_X].controller.setExpression "if ((length (refPos02 - refPos01))/baseSca > ((refLenForearm) + (refLenUpperarm)), -((((length (refPos02 - refPos01))/baseSca  - ((refLenForearm ) + (refLenUpperarm))) /2) * spnAutoStrech) , 0 )"
+				
+				this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].side = side
+				
+				-- Rellenamos los nodos del customAttribute
+				-- Cadena de IK	
+				this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].fkIkSHP = (nodeTransformMonitor node:this.ikNodes.fkIkSHP forwardTransformChangeMsgs:false)
+				this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].ikHand = (nodeTransformMonitor node:this.ikNodes.hand forwardTransformChangeMsgs:false)
+				this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].ikHandSHP = (nodeTransformMonitor node:this.ikNodes.handSHP forwardTransformChangeMsgs:false)
+				this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].ikElbow = (nodeTransformMonitor node:this.ikNodes.elbowSHP forwardTransformChangeMsgs:false)
+				this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].ikForearm = (nodeTransformMonitor node:this.ikNodes.forearm forwardTransformChangeMsgs:false)
+				this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].ikUpperarm = (nodeTransformMonitor node:this.ikNodes.upperarm forwardTransformChangeMsgs:false)
+			
+				-- Añadimos el modificador y rellenamos el CustAttrib del IndirectFkIkSnaps
+				addModifier this.ikNodes.handSHP (copy _emptyModIndFkIk)
+				this.ikNodes.handSHP.modifiers[#Attribute_Holder].name = "Arm_Controls"
+				custAttributes.add this.ikNodes.handSHP.modifiers[#Arm_Controls] (lb.rig.solutions.indirectFkIkSnaps) #unique						
+		
+				addModifier this.ikNodes.elbowSHP (copy _emptyModIndFkIk)
+				this.ikNodes.elbowSHP.modifiers[#Attribute_Holder].name = "Arm_Controls" 
+				custAttributes.add this.ikNodes.elbowSHP.modifiers[#Arm_Controls] (lb.rig.solutions.indirectFkIkSnaps) #unique						
+					
+				this.ikNodes.handSHP.modifiers[#Arm_Controls].fkIkNode = (nodeTransformMonitor node:this.ikNodes.fkIkSHP forwardTransformChangeMsgs:false)
+				this.ikNodes.elbowSHP.modifiers[#Arm_Controls].fkIkNode = (nodeTransformMonitor node:this.ikNodes.fkIkSHP forwardTransformChangeMsgs:false)
+				
+				for _o in #(this.ikNodes.handSHP, this.ikNodes.elbowSHP) do
+				(
+					-- Ajuste de tamaño de shapes de la cruceta con un xform igualandolo con la escala de la base del esqueleto de edición de rig.
+					addModifier _o (xForm()) before: _o.modifiers.count
+					_o.modifiers[#XForm].gizmo.controller.scale = _baseAnimEdit.scale
+					maxOps.CollapseNodeTo _o 2 true 
+				)		
+				
+				if side == lb.nc.NC_locationRight then
+					this.ikNodes.handSHP.scale.controller[#Frozen_scale].controller.value == [-1,-1,-1]
+				
+				--*****************/BB/******************** --
+				addModifier this.bbNodes.breakElbowSHP (copy _emptyModIndFkIk)
+				this.bbNodes.breakElbowSHP.modifiers[#Attribute_Holder].name = "Arm_Controls" 
+				custAttributes.add this.bbNodes.breakElbowSHP.modifiers[#Arm_Controls] (lb.rig.solutions.indirectFkIkSnaps) #unique											
+				this.bbNodes.breakElbowSHP.modifiers[#Arm_Controls].fkIkNode = (nodeTransformMonitor node:this.ikNodes.fkIkSHP forwardTransformChangeMsgs:false)
+					
+				this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].bbForearm = (nodeTransformMonitor node:this.bbNodes.forearm forwardTransformChangeMsgs:false) 
+				this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].bbUpperarm = (nodeTransformMonitor node:this.bbNodes.upperarm forwardTransformChangeMsgs:false)
+				this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].bbHand = (nodeTransformMonitor node:this.bbNodes.hand forwardTransformChangeMsgs:false)
+				this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].bbBreakElbowSHP = (nodeTransformMonitor node:this.bbNodes.breakElbowSHP forwardTransformChangeMsgs:false)
+				
+				--*****************/ANIM/******************** --
+				-- Sobreescribimos el script del autostrech para añadir el spinner del autostrech y ponerlo en la formila.	
+				this.animNodes.forearm.position.controller[#Zero_Pos_XYZ][#X_Position][#AutoStrech_FltExpr_X].controller.AddScalarTarget "spnAutoStrech" this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].autostrechIK.autostrech.controller
+			
+				this.animNodes.forearm.position.controller[#Zero_Pos_XYZ][#X_Position][#AutoStrech_FltExpr_X].controller.setExpression "if (length (refPos02 - refPos01)/baseSca > ((refLenForearm) + (refLenUpperarm)), ((((length (refPos02 - refPos01))/baseSca  - ((refLenForearm ) + (refLenUpperarm))) /2) * spnAutoStrech), 0 )"
+					
+				if side == lb.nc.NC_locationRight then		
+					this.animNodes.forearm.position.controller[#Zero_Pos_XYZ][#X_Position][#AutoStrech_FltExpr_X].controller.setExpression "if (length (refPos02 - refPos01)/baseSca > ((refLenForearm) + (refLenUpperarm)), -((((length (refPos02 - refPos01))/baseSca  - ((refLenForearm ) + (refLenUpperarm))) /2) * spnAutoStrech)/baseSca , 0 )"
+				
+				-- Sobreescribimos el script del rompehuesos para añadir el spinner del ik y ponerlo en la formila.	
+				this.animNodes.forearm.position.controller[#Zero_Pos_XYZ][#X_Position][#strechBreakBones_FltExpr_X].controller.AddScalarTarget "spnFkIk" this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].fkIk.controller
+				this.animNodes.forearm.position.controller[#Zero_Pos_XYZ][#X_Position][#strechBreakBones_FltExpr_X].controller.setExpression  "((length (refPosBBUp - refPosBBFor))/baseSca - (length (refPosBBUp - refPosIKFor))/baseSca) * spnFkIk"
+					
+				if side == lb.nc.NC_locationRight then		
+					this.animNodes.forearm.position.controller[#Zero_Pos_XYZ][#X_Position][#strechBreakBones_FltExpr_X].controller.setExpression "-((length (refPosBBUp - refPosBBFor))/baseSca - (length (refPosBBUp - refPosIKFor))/baseSca) * spnFkIk"
+				
+				-- Sobreescribimos el script del rompehuesos para añadir el spinner del ik y ponerlo en la formila.	
+				this.animNodes.forearmEnd.position.controller[#Zero_Pos_XYZ][#X_Position][#strechBreakBones_FltExpr_X].controller.AddScalarTarget "spnFkIk" this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].fkIk.controller
+				this.animNodes.forearmEnd.position.controller[#Zero_Pos_XYZ][#X_Position][#strechBreakBones_FltExpr_X].controller.setExpression  "((length (refPosBBFor - refPosBBHand))/baseSca - (length (refPosIKFor - refPosBBHand))/baseSca) * spnFkIk "
+					
+				if side == lb.nc.NC_locationRight then		
+					this.animNodes.forearmEnd.position.controller[#Zero_Pos_XYZ][#X_Position][#strechBreakBones_FltExpr_X].controller.setExpression "-((length (refPosBBFor - refPosBBHand))/baseSca - (length (refPosIKFor - refPosBBHand))/baseSca) * spnFkIk "
+					
+				-- Rellenamos los nodos del customAttribute
+				-- Cadena de RIG	
+				this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].forearm = (nodeTransformMonitor node:this.animNodes.forearm forwardTransformChangeMsgs:false) 
+				this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].upperarm = (nodeTransformMonitor node:this.animNodes.upperarm forwardTransformChangeMsgs:false)
+				this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].hand = (nodeTransformMonitor node:this.animNodes.hand forwardTransformChangeMsgs:false)
+				this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].base = (nodeTransformMonitor node:_base forwardTransformChangeMsgs:false)
+				
+				--Añadimos el CA hiddenFkIk Snap.
+				for o in this.animNodes.fingers do
+				(					
+					addModifier o (copy _emptyModIndFkIk)
+					o.modifiers[#Attribute_Holder].name = "Arm_Controls"
+					custAttributes.add o.modifiers[#Arm_Controls] (lb.rig.solutions.indirectFkIkSnaps) #unique	
+					o.modifiers[#Arm_Controls].fkIkNode = (nodeTransformMonitor node:this.ikNodes.fkIkSHP forwardTransformChangeMsgs:false)
+				)
+ 				
+ 				-- Añadimos el modificador y rellenamos el CustAttrib del IndirectFkIkSnaps		
+				addModifier this.animNodes.clavicle (copy _emptyModIndFkIk)
+				this.animNodes.clavicle.modifiers[#Attribute_Holder].name = "Arm_Controls"
+				custAttributes.add this.animNodes.clavicle.modifiers[#Arm_Controls] (lb.rig.solutions.indirectFkIkSnaps) #unique						
+
+				addModifier this.animNodes.upperArm (copy _emptyModIndFkIk)
+				this.animNodes.upperArm.modifiers[#Attribute_Holder].name = "Arm_Controls"
+				custAttributes.add this.animNodes.upperArm.modifiers[#Arm_Controls] (lb.rig.solutions.indirectFkIkSnaps) #unique						
+
+				addModifier this.animNodes.foreArm (copy _emptyModIndFkIk)
+				this.animNodes.foreArm.modifiers[#Attribute_Holder].name = "Arm_Controls"
+				custAttributes.add this.animNodes.foreArm.modifiers[#Arm_Controls] (lb.rig.solutions.indirectFkIkSnaps) #unique						
+
+				addModifier this.animNodes.hand (copy _emptyModIndFkIk)
+				this.animNodes.hand.modifiers[#Attribute_Holder].name = "Arm_Controls"
+				custAttributes.add this.animNodes.hand.modifiers[#Arm_Controls] (lb.rig.solutions.indirectFkIkSnaps) #unique						
+					
+				this.animNodes.clavicle.modifiers[#Arm_Controls].fkIkNode = (nodeTransformMonitor node:this.ikNodes.fkIkSHP forwardTransformChangeMsgs:false)
+				this.animNodes.upperArm.modifiers[#Arm_Controls].fkIkNode = (nodeTransformMonitor node:this.ikNodes.fkIkSHP forwardTransformChangeMsgs:false)
+				this.animNodes.foreArm.modifiers[#Arm_Controls].fkIkNode = (nodeTransformMonitor node:this.ikNodes.fkIkSHP forwardTransformChangeMsgs:false)
+				this.animNodes.hand.modifiers[#Arm_Controls].fkIkNode = (nodeTransformMonitor node:this.ikNodes.fkIkSHP forwardTransformChangeMsgs:false)
+
+				--*****************/FK/******************** --
+				-- Sobreescribimos el script del autostrech para añadir el spinner del autostrech y ponerlo en la formila.						
+				this.fkNodes.forearm.position.controller[#Zero_Pos_XYZ][#X_Position][#AutoStrech_FltExpr_X].controller.AddScalarTarget "spnAutoStrech" this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].autostrechIK.autostrech.controller
+			
+				this.fkNodes.forearm.position.controller[#Zero_Pos_XYZ][#X_Position][#AutoStrech_FltExpr_X].controller.setExpression "if (length (refPos02 - refPos01)/baseSca > ((refLenForearm) + (refLenUpperarm)), ((((length (refPos02 - refPos01))/baseSca  - ((refLenForearm ) + (refLenUpperarm))) /2) * spnAutoStrech) , 0 )"
+					
+				if side == lb.nc.NC_locationRight then		
+					this.fkNodes.forearm.position.controller[#Zero_Pos_XYZ][#X_Position][#AutoStrech_FltExpr_X].controller.setExpression "if (length (refPos02 - refPos01) > ((refLenForearm) + (refLenUpperarm)), -((((length (refPos02 - refPos01))/baseSca  - ((refLenForearm ) + (refLenUpperarm))) /2) * spnAutoStrech) , 0 )"
+
+				-- Rellenamos los nodos del customAttribute			
+				-- Cadena de FK
+				this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].fkForearm = (nodeTransformMonitor node:this.fkNodes.forearm forwardTransformChangeMsgs:false)
+				this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].fkUpperarm = (nodeTransformMonitor node:this.fkNodes.upperarm forwardTransformChangeMsgs:false) 
+				this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].refElbowIK = (nodeTransformMonitor node:this.fkNodes.refElbowIKHLP forwardTransformChangeMsgs:false) 
+				this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].fkHand = (nodeTransformMonitor node:this.fkNodes.hand forwardTransformChangeMsgs:false)
+					
+				-- //////////////////////-POINT CONSTRAINT-////////////////////// --
+				--*****************/IK/******************** --
+				-- Añadimos el CA pointConstraint								
+				lb.links.pointConstraint.add this.ikNodes.handSHP
+				lb.links.addTarget this.ikNodes.handSHP undefined frameNo:0
+
+				-- Añadimos el CA linkConstraint
+				lb.links.pointConstraint.add this.ikNodes.elbowSHP
+				lb.links.addTarget this.ikNodes.elbowSHP undefined frameNo:0
+				
+				--*****************/BB/******************** --
+				-- Añadimos el CA pointConstraint				
+				lb.links.pointConstraint.add this.bbNodes.breakElbowSHP
+				lb.links.addTarget this.bbNodes.breakElbowSHP undefined frameNo:0
+
+				--//////////////////////////-WIREPARAMETERS E INSTANCIAS-////////////////////////// --
+				-- Conectamos el spinner de fkik con el radio del rompehuesos
+				_scaFlt = this.bbNodes.breakElbowSHP.scale.controller.available.controller = scale_expression()
+				_scaFlt.addScalarTarget "fkIk" this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].fkik.controller
+				_scaFlt.setExpression "[fkIk + 0.00001 ,fkIk + 0.00001,fkIk + 0.00001]"
+				
+				if side == lb.nc.NC_locationRight then
+					_scaFlt.setExpression "[-(fkIk + 0.00001) ,-(fkIk + 0.00001),-(fkIk + 0.00001)]"
+				
+				this.ikNodes.elbowSHP.scale.controller.available.controller = _scaFlt
+				this.ikNodes.handSHP.scale.controller.available.controller = _scaFlt
+				
+				-- Conexiones de float expression entre los controladores de rotación de fk e ik y el spinner de fkIk.
+				this.animNodes.hand.rotation.controller.weights[#Weight__Zero_IK_Controller].controller = float_expression()
+				this.animNodes.hand.rotation.controller.weights[#Weight__Zero_IK_Controller].controller.addScalarTarget "fkik" this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].fkIkSnaps[#fkik].controller
+				
+				this.animNodes.hand.rotation.controller.weights[#Weight__Zero_IK_Controller].controller.setExpression "fkik"
+				
+				this.animNodes.hand.rotation.controller.weights[#Weight__Zero_FK_Controller].controller = float_expression()
+				this.animNodes.hand.rotation.controller.weights[#Weight__Zero_FK_Controller].controller.addScalarTarget "fkik" this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].fkIkSnaps[#fkik].controller
+				this.animNodes.hand.rotation.controller.weights[#Weight__Zero_FK_Controller].controller.setExpression "1 - fkik"
+				
+				this.animNodes.handOffsetHLP.rotation.controller.weights[#Weight__Zero_IK_Controller].controller = this.animNodes.hand.rotation.controller.weights[#Weight__Zero_IK_Controller].controller
+				
+				this.animNodes.upperarm.rotation.controller.weights[#Weight__Zero_IK_Controller].controller = this.animNodes.hand.rotation.controller.weights[#Weight__Zero_IK_Controller].controller
+				this.animNodes.upperarm.rotation.controller.weights[#Weight__Zero_FK_Controller].controller = this.animNodes.hand.rotation.controller.weights[#Weight__Zero_FK_Controller].controller
+				
+				this.animNodes.forearm.rotation.controller.weights[#Weight__Zero_IK_Controller].controller = this.animNodes.hand.rotation.controller.weights[#Weight__Zero_IK_Controller].controller
+				this.animNodes.forearm.rotation.controller.weights[#Weight__Zero_FK_Controller].controller = this.animNodes.hand.rotation.controller.weights[#Weight__Zero_FK_Controller].controller
+								
+				-- Ajustamos los tamaños de los shapes.
+				lb.rig.snapByShape _baseAnimEdit _base
+			)-- CREACIÓN DE CUSTOMS ATTRIBUTES Y WIREPARAMETERS
+
+			-------------------------------------------------------
+			-- CREACIÓN DE POINT SCRIPT
+			-------------------------------------------------------
+			(
+				-- Comprobación de la existencia de Controlador de Script.
+				_pointScript = lb.rig.createPointFromObj this.animNodes.armSolutionHLP
+				_pointScript.name = lb.nc.replaceNamePart _pointScript.name 5 "armSolution-hlp-scripts"
+				_pointScript.size = 2 * _baseAnimEdit.scale[1]
+				_pointScript.wirecolor = orange
+				
+				_pointScript.parent = this.animNodes.armSolutionHLP
+				lb.controller.freezeTransform _pointScript #all
+				
+				-- Añade un controlador 'Position_Script' a 'pointScripts'.
+				_pointScript.pos.controller.available.controller = Position_Script() 
+				
+				-- Cambio del nombre del controlador.
+				_pointScript.pos.controller.setName (_pointScript.pos.controller.count) ("ARM_" + toUpper side + "_FKIK_SC")
+				
+				_scriptCtrl = _pointScript.pos.controller[_pointScript.pos.controller.count] -- almacenado del último controlador del 'pointScripts' en 'scriptCtrl'.
+				
+
+				-- Creación de variables para 'scriptCtrl'.
+				_fkIkController = this.ikNodes.fkIKSHP.modifiers[#Arm_Controls].fkik.controller -- almacenado en 'fkIkController' del controlador FKIK 
+				
+ 				-- Creación de variables dentro del pointScript
+				_scriptCtrl.addObject #fkik this.ikNodes.fkIKSHP.modifiers[#Arm_Controls].fkik.controller
+				_scriptCtrl.addObject #upperarm this.animNodes.upperArm
+				_scriptCtrl.addObject #forearm this.animNodes.foreArm
+				_scriptCtrl.addObject #hand this.animNodes.hand
+				
+				
+				-- Añadimos el texto que va ir dentro del script
+				(
+					_scriptCtrl.script =
+					"if fkik.value > 0 and upperarm.rotation.controller.active != 4 then\n" +
+ 					
+					"(\n" +
+					
+					"	-- Controlador activo para posición y rotación en Ik\n" +
+
+					"	upperarm.rotation.controller.active = 4\n" +
+					"	forearm.rotation.controller.active = 4\n" +
+					"	hand.rotation.controller.active = 4\n" +
+					
+					"\n" +
+					
+					"	-- Control de Locks para Ik\n" +
+					"	setTransformLockFlags forearm #{1..6,8..9}\n" +
+					"	setTransformLockFlags upperarm #{1..6,8..9}\n\n" +
+					"	setTransformLockFlags hand #{4..9}\n" +
+					
+					"\n" +
+					
+					"	-- Cambio de nombre del boton Fk-Ik\n" +
+					
+					")\n" +
+					"\n" +
+					
+					"if fkik.value == 0 and (upperarm.rotation.controller.active != 3) then\n" +
+					
+					"(\n" +
+					
+					"	-- Controlador activo para posición y rotación en Fk\n" +
+
+					"	upperarm.rotation.controller.active = 3\n" +
+					"	forearm.rotation.controller.active = 3\n" +
+					"	hand.rotation.controller.active = 3\n" +
+					
+					"\n" +
+					
+					"	-- Control de Locks para Fk\n" +
+					"	setTransformLockFlags forearm #{1..5,8..9}\n" +
+					"	setTransformLockFlags upperarm #{1..3,8..9}\n" +
+					"	setTransformLockFlags hand #{1..3,7..9}\n" +
+					
+					"\n" +
+					"	-- Cambio de nombre del boton Ik-Fk\n" +
+					")\n" +
+					"\n" +
+					"[ 0, 0, 0 ]"	
+				)-- script texto				
+			)-- CREACIÓN DE POINT SCRIPT
+			
+			----------------------------------------------------
+			--ORDENACIÓN DE EJES
+			----------------------------------------------------
+			(
+				--*****************/RIG/******************** --
+				this.animNodes.clavicle.rotation.controller[#Zero_Euler_XYZ].controller.axisOrder = 2
+				this.animNodes.upperArm.rotation.controller[#Zero_FK_Controller].controller.axisOrder = 2
+				this.animNodes.hand.rotation.controller[#Zero_FK_Controller].controller.axisOrder = 3
+				
+				for b in this.animNodes.fingers do
+					b.rotation.controller[#Zero_Euler_XYZ].controller.axisOrder = 4
+				
+				--*****************/IK/******************** --
+				this.ikNodes.handSHP.transform.controller[#Rotation].controller[#Zero_Euler_XYZ].controller.axisorder = 3
+			)--ORDENACIÓN DE EJES
+
+		
+			-------------------------------------------------------
+			-- CREACION DE ANIMTRACKS
+			-------------------------------------------------------
+			(
+				_sepTransform = #(#(#separator, "Separator01", false, "Transform"))
+				_sep = #(#(#separator, "Separator01", false, ""))
+				_sepArm = #(#(#separator, "Separator01", false, "Arm_Controls"))
+				_sepFingerInfluence = #(#(#separator, "Separator01", false, "Influence_finger20"))
+				_sepAutoStrech =  #(#(#separator, "Separator01", false, "AutoStrech_IK"))
+				_sepIk = #(#(#separator, "Separator01", false, "IK_Controls"))
+				_sepFk = #(#(#separator, "Separator01", false, "FK_Controls"))
+					
+				--*****************/ANIM/******************** --
+				-- Clavicula
+				lb.animInfo.setAnimTracks this.animNodes.clavicle (_sepTransform + (lb.rig.solutions.prepareAnimTracks this.animNodes.clavicle.rotation.controller[#Zero_Euler_XYZ] #all))
+						
+				-- UpperArm
+				lb.animInfo.setAnimTracks this.animNodes.upperArm (_sepTransform + (lb.rig.solutions.prepareAnimTracks this.animNodes.upperArm.rotation.controller[#Zero_FK_Controller] #all) + _sep + #(#(this.animNodes.upperarm[#Transform][#Scale][#Zero_Scale_XYZ][#X_scale][#Float_limit], "Transform:Scale:Zero_Scale_XYZ:X_scale:Float_limit", true, "X_Scale",1)))
+					
+				-- ForeArm
+				lb.animInfo.setAnimTracks this.animNodes.foreArm (_sepTransform + (lb.rig.solutions.prepareAnimTracks this.animNodes.foreArm.rotation.controller[#Zero_FK_Controller] #z )  + _sep + #(#(this.animNodes.foreArm[#Transform][#Scale][#Zero_Scale_XYZ][#X_scale][#Float_limit], "Transform:Scale:Zero_Scale_XYZ:X_scale:Float_limit", true, "X_Scale",1)))
+					
+				-- Hand de posición para el offset en Ik
+				lb.animInfo.setAnimTracks this.animNodes.hand (_sepTransform + _sepIk + (lb.rig.solutions.prepareAnimTracks this.animNodes.hand.position.controller[#IKoffset_controller] #all) + _sep + _sepFk + (lb.rig.solutions.prepareAnimTracks this.animNodes.hand.rotation.controller[#Zero_FK_Controller] #all)) 
+									
+				_herarchies = lb.rig.getHierarchiesFromNodes this.animNodes.fingers			
+					
+				for i = 1 to  _herarchies.count do
+				(
+					if _herarchies[i][1] != undefined then
+					(
+						if i != 1 then
+							lb.animInfo.setAnimTracks _herarchies[i][1]  (_sepTransform + (lb.rig.solutions.prepareAnimTracks _herarchies[i][1].rotation.controller[#Zero_Euler_XYZ] #all))
+						else
+							lb.animInfo.setAnimTracks _herarchies[i][1] (_sepTransform + (lb.rig.solutions.prepareAnimTracks _herarchies[i][1].rotation.controller[#Zero_Euler_XYZ] #all ) + _sep + #(#(_herarchies[i][1][#Transform][#Scale][#Zero_Scale_XYZ][#X_scale][#Float_limit], "Transform:Scale:Zero_Scale_XYZ:X_scale:Float_limit", true, "X_Scale",1)))
+					)
+					
+					if _herarchies[i][2] != undefined then
+					(
+						if i != 1 then
+							lb.animInfo.setAnimTracks _herarchies[i][2] (_sepTransform + (lb.rig.solutions.prepareAnimTracks _herarchies[i][2].rotation.controller[#Zero_Euler_XYZ] #all ) + _sep + #(#(_herarchies[i][2][#Transform][#Scale][#Zero_Scale_XYZ][#X_scale][#Float_limit], "Transform:Scale:Zero_Scale_XYZ:X_scale:Float_limit", true, "X_Scale",1)))
+						else
+							lb.animInfo.setAnimTracks _herarchies[i][2] (_sepTransform + (lb.rig.solutions.prepareAnimTracks _herarchies[i][2].rotation.controller[#Zero_Euler_XYZ] #z ) + _sep + #(#(_herarchies[i][2][#Transform][#Scale][#Zero_Scale_XYZ][#X_scale][#Float_limit], "Transform:Scale:Zero_Scale_XYZ:X_scale:Float_limit", true, "X_Scale",1)))
+					)
+								
+					for j = 3 to _herarchies[i].count do
+						lb.animInfo.setAnimTracks _herarchies[i][j] (_sepTransform + (lb.rig.solutions.prepareAnimTracks _herarchies[i][j].rotation.controller[#Zero_Euler_XYZ] #z ) + _sep + #(#(_herarchies[i][j][#Transform][#Scale][#Zero_Scale_XYZ][#X_scale][#Float_limit], "Transform:Scale:Zero_Scale_XYZ:X_scale:Float_limit", true, "X_Scale",1)))
+				)
+				
+				--*****************/IK/********************--
+				-- Hand
+				lb.animInfo.setAnimTracks this.ikNodes.handSHP (_sepTransform + (lb.rig.solutions.prepareAnimTracks this.ikNodes.handSHP.position.controller[#Zero_Pos_XYZ] #all) + _sep + (lb.rig.solutions.prepareAnimTracks this.ikNodes.handSHP.rotation.controller[#Zero_Euler_XYZ] #all)) 
+				lb.animInfo.setAnimTracks this.ikNodes.elbowSHP (_sepTransform + (lb.rig.solutions.prepareAnimTracks this.ikNodes.elbowSHP.position.controller[#Zero_Pos_XYZ] #all)) 
+					
+				-- Control de fkIk
+				lb.animInfo.setAnimTracks this.ikNodes.fkIkSHP (_sepArm + #(#(this.ikNodes.fkIkSHP[#Modified_Object][#Arm_Controls].custAttributes[#fkIkSnaps][#fkik], "Modified_Object:Arm_Controls:custAttributes[#fkIkSnaps]:fkik", true, "FkIk", 0)) + _sep +  _sepAutoStrech + #(#(this.ikNodes.fkIkSHP[#Modified_Object][#Arm_Controls].custAttributes[#autoStrechIK][#autoStrech], "Modified_Object:Arm_Controls:custAttributes[#autoStrechIK]::autostrech", true, "AutoStrech_IK", 0)))
+					
+				this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].fkIk = 0
+				this.ikNodes.fkIkSHP.modifiers[#Arm_Controls].autoStrech = 0
+					
+				--*****************/BB/******************** --
+				lb.animInfo.setAnimTracks this.bbNodes.breakElbowSHP (_sepTransform + (lb.rig.solutions.prepareAnimTracks this.bbNodes.breakElbowSHP.position.controller[#Zero_Pos_XYZ] #all)) 
+	
+				-- Quitamos los locks en los pesos del pointContraint para evitar fallos de creación de claves con el Cbox
+				lb.animation.setlocks this.ikNodes.handSHP.position.controller[#Weights][#Weight__PC_pointConstraint] false
+				lb.animation.setlocks this.ikNodes.elbowSHP.position.controller[#Weights][#Weight__PC_pointConstraint] false
+				lb.animation.setlocks this.bbNodes.breakElbowSHP.position.controller[#Weights][#Weight__PC_pointConstraint] false	
+					
+				lb.animation.setlocks this.ikNodes.handSHP.rotation.controller[#Weights][#Weight__OC_pointConstraint] false
+				lb.animation.setlocks this.ikNodes.elbowSHP.rotation.controller[#Weights][#Weight__OC_pointConstraint] false
+				lb.animation.setlocks this.bbNodes.breakElbowSHP.rotation.controller[#Weights][#Weight__OC_pointConstraint] false
+			)-- CREACION DE ANIMTRACKS
+			
+			-------------------------------------------------------
+			-- CAPAS, LOCKS DE EJES DE PIEZAS, VIRTUAL PARENTS,  Y PROPIEDADES, 
+			-------------------------------------------------------
+			(
+				-- Array para almacenar los nodos creados.
+				_chrNodes = (lb.rig.getAllChildren this.animNodes.armSolutionHLP) + this.animNodes.armSolutionHLP + _base
+				
+				(	
+					(
+						if (LayerManager.getLayer 1) == undefined then _chrLayer = lb.layer.newAssetLayer "chrName" else _chrLayer = (LayerManager.getLayer 1)
+						
+						lb.layer.activeLayer _chrLayer
+						
+						-- Renombramos los objetos a la capa chrName y los añadimos.
+						for o in _chrNodes do 
+						(
+							o.name = lb.nc.replaceNamePart o.name 2 "chrName"
+							_chrLayer.addNode o
+						)
+								
+						-- Borramos la capa antiguo del esqueleto de rig
+						LayerManager.deleteLayerByName "chr_animEdit"
+					)
+				)
+				
+				--*****************/LOCKS DE EJES DE PIEZAS/******************** --
+				(
+					-- Por defecto bloqueamos todos los ejes de todas las piezas, para después ir desbloqueando las piezas que queremos animar.
+					_Pos = #{4..9}
+					_Rot = #{1..3,7..9}
+					_Sca = #{1..6}
+					_PosRot = #{7..9}
+					
+					for o in _chrNodes where (getTransformLockFlags o).isEmpty do
+						setTransformLockFlags o #all
+					
+					-- Grupo de piezas que liberamos solo la posición.
+					setTransformLockFlags this.ikNodes.elbowSHP _Pos
+					setTransformLockFlags this.bbNodes.breakElbowSHP _Pos
+					
+					-- Grupo de piezas que liberamos solo la rotación.
+					setTransformLockFlags this.animNodes.clavicle _Rot
+					setTransformLockFlags this.animNodes.upperArm #{1..3,8..9} -- Eje x,y,z Libre
+					setTransformLockFlags this.animNodes.forearm #{1..5,8..9} -- Eje x Libre
+					setTransformLockFlags this.animNodes.fingers #{1..5,8..9}
+
+					-- Dedos
+					-- Creamos animtracks por defecto en todos los dedos y después los cambiamos solo a los que necesiten las tres pistas de rotación.
+					_herarchies = lb.rig.getHierarchiesFromNodes this.animNodes.fingers
+
+					for i = 1 to  _herarchies.count do
+					(
+						if _herarchies[i][1] != undefined then
+							setTransformLockFlags _herarchies[i][1] _Rot
+						
+						if _herarchies[i][2] != undefined then
+							if i != 1 then
+								setTransformLockFlags _herarchies[i][2] #{1..3,8..9}
+							else
+								setTransformLockFlags _herarchies[i][2] #{1..5,8..9}
+
+						for j = 3 to _herarchies[i].count do
+							setTransformLockFlags _herarchies[i][j] #{1..5,8..9}
+					)
+					
+					-- Grupo de piezas que liberamos solo la posición y rotación
+					setTransformLockFlags this.ikNodes.handSHP _PosRot
+					
+					-- Grupo de piezas que liberamos todas las transform.
+					setTransformLockFlags _base #none
+				)
+				
+				--*****************/VIRTUAL PARENTS/******************** --
+				(
+					lb.rig.linkVirtualParent #(this.animNodes.hand) this.animNodes.foreArm
+					lb.rig.linkVirtualParent #(this.animNodes.upperArm) this.animNodes.clavicle
+					
+					
+					lb.rig.linkVirtualParent #(this.ikNodes.handSHP) this.ikNodes.fkIKSHP
+					lb.rig.linkVirtualParent #(this.ikNodes.elbowSHP) this.ikNodes.fkIKSHP
+
+					lb.rig.linkVirtualParent #(this.bbNodes.breakElbowSHP) this.ikNodes.fkIKSHP
+					
+					for i = 3 to this.animNodes.fingers.count do lb.rig.linkVirtualParent #(this.animNodes.fingers[i]) this.animNodes.hand
+				)
+				
+				--*****************/PROPIEDADES/******************** --
+				(
+					_chrNodes.showFrozenInGray = false
+					_chrNodes.renderable = false
+		
+					clearSelection()
+				)
+				
+				-------------------------------------------------------
+				-- OBJECT SETS, 
+				-------------------------------------------------------
+				(
+					-- Montamos el nombre del selectionset de la cabeza-cuello, spine, pelvis, y root.
+					_filterName = filterString this.animNodes.upperArm.name "_"
+					_selSetArmName = _filterName[1] + "_" + _filterName[2] + "_" + _filterName[3] +"_" + _filterName[4] + "_arm"
+					
+					-- Añadimos las piezas a su selection set correspondiente.
+					_objectSet = #(this.animNodes.clavicle, this.animNodes.upperArm, this.animNodes.foreArm, this.animNodes.hand, this.ikNodes.fkIkSHP, this.ikNodes.elbowSHP, this.ikNodes.handSHP, this.bbNodes.breakElbowSHP) + this.animNodes.fingers
+					lb.objectsets.add _objectSet _selSetArmName					
+				)-- SELECTION SETS. 
+			)-- LOCKS DE PIEZAS Y PROPIEDADES
+			
+			-------------------------------------------------------
+			-- CREACIÖN DE DYNCONNECTION
+			-------------------------------------------------------
+			(
+				_rootNode = (lb.nc.NC_chrPrefix + "_chrName_" + lb.nc.NC_classAnim + "_" + lb.nc.NC_locationMiddle + "_" + lb.nc.NC_ANIM_root + "_" + lb.nc.NC_nonSpecifiedCache + "_" + lb.nc.NC_controlFlag)
+				_spine03 = (lb.nc.NC_chrPrefix + "_chrName_" + lb.nc.NC_classAnim + "_" + lb.nc.NC_locationMiddle + "_spine03_" + lb.nc.NC_nonSpecifiedCache + "_" + lb.nc.NC_controlFlag)
+				_baseNodeName = lb.nc.replaceNamePart _base.name 2 "chrName"
+				
+				lb.dynConnect.addAttribute this.ikNodes.handPosRefHLP 
+				lb.dynConnect.addTarget this.ikNodes.handPosRefHLP #link _baseNodeName connectOnLoad:false keepInitialOffset:true
+				
+				lb.dynConnect.addAttribute this.animNodes.armSolutionHLP 
+				lb.dynConnect.addTarget this.animNodes.armSolutionHLP #link _spine03 alternateTargetNodes:#(_rootNode, _base) connectOnLoad:false keepInitialOffset:true
+				
+				lb.dynConnect.addAttribute this.animNodes.armStructureHLP
+				lb.dynConnect.addTarget this.animNodes.armStructureHLP #orientationConstraint _rootNode alternateTargetNodes:#(_base) connectOnLoad:false keepInitialOffset:true
+				
+			)
+			
+		), -- fn createConnections
+			
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------		
+		------------------------------------------------
+		--@fn: boolean | create | Crea la solución. Devuelve true si lo consigo o false sino. 
+		--@opt: string | side | Lado del cual queremos crear la solucion.
+		------------------------------------------------
+		fn create solutionRoot side:lb.nc.NC_locationLeft =
+		(
+			-- Le pasamos el lado del brazo para crear la solución necesaria.
+			this.side = side
+			
+			undo off
+			(
+				-- Obtenemos los huesos de skin para más tarde crear las cadenas de huesos de fkIk.
+				_armTemp = solutionRoot.solutionInfo.params.createBones()
+				
+				lb.rig.solutions.createFkIkChains _armTemp chainType:#anim
+				lb.rig.solutions.createFkIkChains _armTemp chainType:#fk
+				lb.rig.solutions.createFkIkChains _armTemp chainType:#ik
+				lb.rig.solutions.createFkIkChains _armTemp chainType:#bb
+							
+				-- Rellenamos el struct de la solución con las piezas que se han creado del duplicado.
+				this.fillStructNodes()
+				
+				this.createConnections side
+
+-- 				this.connectSolution()
+				
+				lb.rig.solutions.addSolutionInfo this.animNodes.armSolutionHLP solName	 solutionParameters 1.0
+				
+				delete _armTemp
+				gc()
+			)
+		),			
+
+		------------------------------------------------
+		--@fn: boolean | remove | Elimina la solución. Devuelve true si lo consigo o false sino. 
+		--@gets: node | solutionRoot | Padre de la solución de la categoria.
+		------------------------------------------------
+		fn remove =
+		(
+			lb.rig.solutions.deleteSolution 
+		),	
+		
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas	
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.rig.solutions.addSolution this --añade la solución a la principal
+		)
+		
+	)--rsa_fkikArm
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	
+	rsa_fkikArm() --crea la libreria
+)

@@ -1,0 +1,117 @@
+<info>
+  <id>cpdg</id>
+  <name>Cop Dog</name>
+  <drive>p:\copDog</drive>
+  
+  <resources>
+    
+    <resource>
+      <type>svn</type>
+      <name>asset</name>
+      <url>http://svn.infinitall.com/copDog_asset</url>
+      <localPath>p:\copDog\asset</localPath>
+      <networkPath>\\lbdata001\p\copDog\asset</networkPath>
+    </resource>
+
+    <resource>
+      <type>svn</type>
+      <name>documentation</name>
+      <url>http://svn.infinitall.com/copDog_doc</url>
+      <localPath>p:\copDog\doc</localPath>
+      <networkPath>\\lbdata001\p\copDog\documentation</networkPath>
+    </resource>
+    
+    <resource>
+      <type>share</type>
+      <name>frame</name>
+      <url>none</url>
+      <localPath>none</localPath>
+      <networkPath>\\lbdata002\p\copDog\frame</networkPath>
+    </resource>
+
+    <resource>
+      <type>share</type>
+      <name>frameR</name>
+      <url>none</url>
+      <localPath>none</localPath>
+      <networkPath>\\lbdata002\p\copDog\frameR</networkPath>
+    </resource>
+
+    <resource>
+      <type>svn</type>
+      <name>management</name>
+      <url>http://svn.infinitall.com/copDog_management</url>
+      <localPath>p:\copDog\management</localPath>
+      <networkPath>\\lbdata001\p\copDog\management</networkPath>
+    </resource>
+
+    <resource>
+      <type>svn</type>
+      <name>marketing</name>
+      <url>http://svn.infinitall.com/copDog_marketing</url>
+      <localPath>p:\copDog\marketing</localPath>
+      <networkPath>\\lbdata001\p\copDog\marketing</networkPath>
+    </resource>
+    
+    <resource>
+      <type>svn</type>
+      <name>resource</name>
+      <url>http://svn.infinitall.com/copDog_resource</url>
+      <localPath>p:\copDog\resource</localPath>
+      <networkPath>\\lbdata001\p\copDog\resource</networkPath>
+    </resource>
+
+    <resource>
+      <type>svn</type>
+      <name>sequence</name>
+      <url>http://svn.infinitall.com/copDog_sequence</url>
+      <localPath>p:\copDog\asset</localPath>
+      <networkPath>\\lbdata001\p\copDog\sequence</networkPath>
+    </resource>
+
+    <resource>
+      <type>svn</type>
+      <name>sound</name>
+      <url>http://svn.infinitall.com/copDog_sound</url>
+      <localPath>p:\copDog\asset</localPath>
+      <networkPath>\\lbdata001\p\copDog\sound</networkPath>
+    </resource>
+
+    <resource>
+      <type>svn</type>
+      <name>video</name>
+      <url>http://svn.infinitall.com/copDog_video</url>
+      <localPath>p:\copDog\video</localPath>
+      <networkPath>\\lbdata001\p\copDog\video</networkPath>
+    </resource>
+
+    <resource>
+      <type>share</type>
+      <name>simulation</name>
+      <url>none</url>
+      <localPath>none</localPath>
+      <networkPath>\\lbdata002\p\copDog\simulation</networkPath>
+    </resource>
+  
+  </resources>
+
+  <parameters>
+
+    <paramblock>
+      <type>general</type>
+      <name>common</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <width>1920</width>
+        <height>1080</height>
+        <aspect>1.0</aspect>
+      </size>
+      <gamma>
+        <input>1.84</input>
+        <output>1.0</output>
+      </gamma>
+    </paramblock>
+
+  </parameters>
+  
+</info>

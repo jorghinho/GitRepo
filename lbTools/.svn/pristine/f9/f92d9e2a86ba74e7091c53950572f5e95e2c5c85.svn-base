@@ -1,0 +1,801 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--Descripcion: solución de plantilla 
+------------------------------------------------------------------------------------------------------------------------------------------------
+(	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: strRigNodes | Contiene las piezas de anim de la solución.
+	------------------------------------------------------------------------------------------------------------------------------------------------	
+	struct strAnimNodes
+	(
+		spineSolutionHLP				= undefined,				-- 	Nodo de anim padre de la solución.
+		spineNodes						= #(),						--	Nodos de de la spine.
+		spineNodesEnd 					= #(),						--	Nodos de los huesos finales de la spin
+		spineHlpExp 					= #(),						--	Point de expresion amarillos de la spine.
+		spineHlpParent 					= #(),						--	Point rojos de la spine.
+		circleControl					= #(),						--	Shape de control.
+		spineHlpExpParent				= #()						--	point padre de toda la jerarquía.
+	)	
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: rs_ikFkSpine | Contiene la solución de animación
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct rsa_fkIkSpine
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),																--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),													--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #spine,																	--@var: category | Categoria de la solución. Puede valer, #arm, #leg, #spine...
+		subCategory = #anim,																--@var: subCategory | Subcategoria de la solución, indica el tipo de esqueleto. Puede valer #skin, #anim, #AnimEdit
+		conectionId = #anthropomorphic,														--@var: conectionId | Tipo de conexion que lleva la solución, para saber si puede conectarse con otras soluciones. Puede valer, #anthropomorphic, #quadruped, ...
+		index = 20,																			--@var: index | Indice para ordenar
+		
+		solName = lb.rig.solutions.getFileSolutionName (getThisScriptFilename() as string),	--@var: solName | Nombre de la solución.
+		description = "Solución ikFkSpine",													--@var: description | Descripcion de la libreria.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		solutionParameters = lb.rig.solutions.params, 														--@var | self | Almacena el ca especifico de la solución.
+		
+		self = undefined,																	--@var | self | Almacena la definición del struct.
+		selfFile = "",																		--@var | selfFile | Almacena la ruta del propio archivo de script que contiene la definición.
+		
+		side							= lb.nc.NC_locationMiddle,
+		
+		animNodes 						= strAnimNodes(),			--	Nodos de la cadena de hueso de anim.
+		
+		rigNodesAll 					= #(),						--	Nodos de todos los objetos de la cadena de anim.
+		
+		------------------------------------------------------------------------------------------------ 
+		-- CUSTOM ATTRIBUTES
+		------------------------------------------------------------------------------------------------
+		------------------------------------------------------------------------------------------------------------------------------------------------------
+		-- CA_solutionArmSpineStrech: Función que contiene el customAttribute del snap de SpineStrech
+		------------------------------------------------------------------------------------------------------------------------------------------------------
+		fn createAttribAutoStrechSpine =
+		(
+			CA_ARS_autoStrechSpine = attributes autoStrechSpine 
+			(
+				-- Parametros Ca
+				parameters main rollout:rollAutoStrech
+				(
+					-- Controles
+					autoStrech type:#float ui:(snpAutoStrech, sldAutoStrech)
+				)
+				
+				------------------------------------------------------------------------------
+				----------------------------Rollout -----------------------------------------
+				------------------------------------------------------------------------------
+				rollout rollAutoStrech "AutoStrech Controls"
+				(
+					spinner snpAutoStrech "AutoStrech_Ik" range:[0,1,1]
+					slider sldAutoStrech "" range:[0,1,1]
+				)
+			)
+			CA_ARS_autoStrechSpine
+		),
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------------------------------------------------------------
+		-- Función para rellenar los arrays y nodos de la solución "strRigSolutionArmFkIk". Busca en la escena todos los huesos de tipo anim
+		-- para ir rellenando los nodos de anim, FK, IK, y sus variables dependientes de cada uno.
+		------------------------------------------------------------------------------------------------------------------------------------------------------
+		fn fillStructNodes =
+		(
+			-- Vaciamos los arrays para evitar que se acumulen nodos invalidos.
+			this.animNodes.spineNodes 					= #()
+			this.animNodes.spineSolutionHLP				= undefined					-- 	Nodo de anim padre de la solución.
+			this.animNodes.spineNodesEnd 				= #()						--	Nodos de los huesos finales de la spin
+			this.animNodes.spineHlpExp 					= #()						--	Point de expresion amarillos de la spine.
+			this.animNodes.spineHlpParent 				= #()						--	Point rojos de la spine.
+			this.animNodes.circleControl				= #()						--	Shape de control.
+			this.animNodes.spineHlpExpParent			= #()	
+			
+			
+			-- Recorremos las cadenas almacenadas de anim, Fk, Ik, para almacenarlas en los structs de las cadenas.
+			for o in objects do
+			(
+				_filterParts = filterString o.name "_"
+				
+				-- Filtramos para obtener solo las piezas de tipo anim
+				if _filterParts[3] == lb.nc.NC_classAnim then
+				(
+					-- Recorremos los structs y determinanos si es el lado dercho o el izquierdo
+					-- para más adelante capturar los nodos de cada cadena e ir rellenando las variables.
+					if _filterParts[4] == this.side then
+					(
+						case _filterParts[5] of
+						(
+							-- Para  obtener todas los dedos  indexadas.
+							default:
+							
+								if (findstring _filterParts[5] "spine" != undefined) then
+									append this.animNodes.spineNodes o
+						)
+						
+						-- Captura todos los nodos de anim
+						append this.rigNodesAll o
+					)
+				)--if filter 3	
+			)-- for o
+			
+			this.animNodes.spineNodes = lb.misc.sortNodesByName this.animNodes.spineNodes
+		), -- fn fillStructNodes	
+		
+		------------------------------------------------------------------------------------------------------------------------------------------------------
+		-- Función para crear constraints, conexiones de anim y la solución en si.
+		-- SIDE: puede valer lb.nc.NC_locationLeft, lb.nc.NC_locationRight lb.nc.NC_locationMiddle
+		------------------------------------------------------------------------------------------------------------------------------------------------------
+		fn createConnection side = 
+		(			
+			----------------------------------------------------
+			--CREACIÓN DE BASE
+			----------------------------------------------------
+			-- Buscamos la base, sino existe se crea.
+			_base = lb.rig.solutions.getBaseNode()
+			_baseAnimEdit = lb.rig.solutions.getBaseNode type:#AnimEdit
+			----------------------------------------------------
+			--CREACIÓN DE HUESOS AUXILIARES
+			----------------------------------------------------
+			(
+				--*****************/ANIM/******************** --
+				-- Creación de los huesos finales de cada hueso de spine y configuración.
+				for i = 1 to this.animNodes.spineNodes.count do 
+				(
+					_o = this.animNodes.spineNodes[i]
+					
+					_tempBoneEnd = lb.rig.smartCreateEnd _o	 --creación de los huesos finales.
+					
+					--NC
+					if not (i == this.animNodes.spineNodes.count) then
+					(
+						_filterName = FilterString _tempBoneEnd.name "_"
+						_tempBoneEnd.name = lb.nc.replaceNamePart _tempBoneEnd.name 5 (_filterName[5] + "End")
+					)
+					
+					_tempBoneEnd.name = lb.nc.replaceNamePart _tempBoneEnd.name 7 (lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag)
+					_tempBoneEnd.parent = _o 	--Linkar los huesos finales a su hueso.
+					
+					append this.animNodes.spineNodesEnd _tempBoneEnd	--Añadir en un array los huesos finales.
+				)
+			)--End Creación de huesos auxiliares.
+			
+			----------------------------------------------------
+			--CREACIÓN DE HELPERS AUXILIARES
+			----------------------------------------------------
+			(
+				--Creamos el spineSolutionHLP, que es de donde colgará toda la solución de la estructura y llevará almacenada la información de versión de la solución.
+				this.animNodes.spineSolutionHLP = lb.rig.createPointFromObj this.animNodes.spineNodes[1]
+				this.animNodes.spineSolutionHLP.name = lb.nc.replaceNamePart this.animNodes.spineSolutionHLP.name 5 "spineFkIk-solution-root"
+				this.animNodes.spineSolutionHLP.name = lb.nc.replaceNamePart this.animNodes.spineSolutionHLP.name 7 (lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag)
+				this.animNodes.spineSolutionHLP.size = 15 * _baseAnimEdit.scale[1]
+				this.animNodes.spineSolutionHLP.wirecolor = red
+				
+				-- NC y configuración de point amarillo padre de toda la jerarquía.
+				_tempHlpParentAll = lb.rig.createPointFromObj this.animNodes.spineSolutionHLP	--creación de point amarillo padrre de toda la jerarquía.
+				
+				_filterName = FilterString _tempHlpParentAll.name "_"
+				_tempHlpParentAll.name = lb.nc.replaceNamePart _tempHlpParentAll.name 5 (_filterName[5] + "-x-hlp-parentAll")
+				_tempHlpParentAll.name = lb.nc.replaceNamePart _tempHlpParentAll.name 7 (lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag)
+				_tempHlpParentAll.size = 12 * _baseAnimEdit.scale[1]
+				_tempHlpParentAll.cross = off
+				_tempHlpParentAll.wirecolor = yellow
+				
+				_tempHlpParentAll.parent = this.animNodes.spineSolutionHLP
+				
+				lb.controller.freezeTransform this.animNodes.spineSolutionHLP #all
+				lb.controller.freezeTransform _tempHlpParentAll #all
+				
+				append this.animNodes.spineHlpExpParent _tempHlpParentAll
+				
+				--Creación de los point auxiliares de la spine y configuración.(rojo y amarillo)
+				for _o in this.animNodes.spineNodes do 
+				(
+					if _o != this.animNodes.spineNodes[1] then
+					(
+						_tempHlpParent = lb.rig.createPointFromObj _o		--creación de point rojos, los parent.
+						_tempHlpExp = lb.rig.createPointFromObj _o		--creación de point amarillos, los Exp.
+						
+						-- NC y configuración de point rojos o parent
+						_tempHlpParent.name = _o.name
+						_filterName = FilterString _tempHlpParent.name "_"
+						_tempHlpParent.name = lb.nc.replaceNamePart _tempHlpParent.name 5 (_filterName[5] + "-x-hlp-parent")
+						_tempHlpParent.name = lb.nc.replaceNamePart _tempHlpParent.name 7 (lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag)
+						_tempHlpParent.size = 10 * _baseAnimEdit.scale[1]
+						_tempHlpParent.cross = off
+						_tempHlpParent.wirecolor = red
+						
+						-- NC y configuración de point amarillos o expressions.
+						_tempHlpExp.name = _o.name
+						_filterName = FilterString _tempHlpExp.name "_"
+						_tempHlpExp.name = lb.nc.replaceNamePart _tempHlpExp.name 5 (_filterName[5] + "-x-hlp-exp")
+						_tempHlpExp.name = lb.nc.replaceNamePart _tempHlpExp.name 7 (lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag)
+						_tempHlpExp.size = 12 * _baseAnimEdit.scale[1]
+						_tempHlpExp.cross = off
+						_tempHlpExp.wirecolor = yellow
+						
+						lb.controller.setActiveController _o #all #frozen
+	 					_o.parent = _tempHlpExp  --Linka hueso correspondiente a su point amarillo.
+						lb.controller.setActiveController _o #all #zero
+						
+						_tempHlpExp.parent = _tempHlpParent		--Linkar point amarillo a rojo
+	 					_tempHlpParent.parent = this.animNodes.spineHlpExpParent[1]		--Linkar point rojo al hueso parent de la spine.
+	 					
+	 					lb.controller.freezeTransform _tempHlpParent #all --frezear los point rojos de la spine
+	 					lb.controller.freezeTransform _tempHlpExp #all --frezear los point amarillos de la spine
+						
+						append this.animNodes.spineHlpParent _tempHlpParent --Añadir en su array los point rojos o parent.
+						append this.animNodes.spineHlpExp _tempHlpExp		--Añadir en su array los point amarillos o exp.
+					)
+				)
+				
+				--Creación de points rojos y amarillos y configuración de los huesos finales de la spine.
+				_tempHlpParent = lb.rig.createPointFromObj this.animNodes.spineNodesEnd[this.animNodes.spineNodesEnd.count]	--creación de point rojos, los parent de los huesos finales.
+				_tempHlpExp = lb.rig.createPointFromObj this.animNodes.spineNodesEnd[this.animNodes.spineNodesEnd.count]		--creación de point amarillos, los Exp de los huesos finales.
+				
+				-- NC y configuración de points rojos o parent
+				_tempHlpParent.name = this.animNodes.spineNodes[this.animNodes.spineNodes.count].name
+				_tempHlpParent.name = lb.nc.replaceNamePart _tempHlpParent.name 5 ("spine04-x-hlp-parent")
+				_tempHlpParent.name = lb.nc.replaceNamePart _tempHlpParent.name 7 (lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag)
+				_tempHlpParent.size = 10 * _baseAnimEdit.scale[1]
+				_tempHlpParent.cross = off
+				_tempHlpParent.wirecolor = red
+				
+				-- NC y configuración de point amarillos o expressions.
+				_tempHlpExp.name = this.animNodes.spineNodes[this.animNodes.spineNodes.count].name
+				_tempHlpExp.name = lb.nc.replaceNamePart _tempHlpExp.name 5 ("spine04-x-hlp-exp")
+				_tempHlpExp.name = lb.nc.replaceNamePart _tempHlpExp.name 7 (lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag)
+				_tempHlpExp.cross = off
+				_tempHlpExp.wirecolor = yellow
+				
+				_tempHlpExp.parent = _tempHlpParent			--Linkar point amarillo a rojo
+				_tempHlpParent.parent = this.animNodes.spineHlpExpParent[1]		--Linkar point rojo al hueso parent de la spine.
+				
+				lb.controller.freezeTransform _tempHlpParent #all --frezear los point rojos de la spine
+				lb.controller.freezeTransform _tempHlpExp #all --frezear los point amarillos de la spine
+				
+				append this.animNodes.spineHlpParent _tempHlpParent --Añadir en su array los point rojos o parent.
+				append this.animNodes.spineHlpExp _tempHlpExp		--Añadir en su array los point amarillos o exp.
+			)--End creación de helpers auxiliares
+			
+			----------------------------------------------------
+			-- MERGEO DE SHAPES DE CONTROL
+			----------------------------------------------------
+			_circleControl = #()
+			(
+				--creación del shape de control de la spine.
+				circleControl = lb.shapes.shapeCircle()
+				
+-- 				circleControl.radius = 25 * _baseAnimEdit.scale[1]	 --Tamaño
+				circleControl.pos = this.animNodes.spineHlpExp[4].pos 	--posición
+				lb.rig.rotatePivotOnly circleControl (eulerAngles 0 90 0)  --rotar pivot only
+				lb.rig.rotatePivotOnly circleControl (eulerAngles 0 0 180)  --rotar pivot only
+				
+				lb.controller.freezeTransform circleControl #all --frezear los point rojos de la spine
+				
+				--NC
+				circleControl.name = this.animNodes.spineHlpExp[4].name
+				circleControl.name = lb.nc.replaceNamePart circleControl.name 5 ("controlSpine-x-shp-x")
+				circleControl.name = lb.nc.replaceNamePart circleControl.name 7 (lb.nc.NC_controlFlag)
+				
+				append _circleControl circleControl
+			)-- End mergeo de shapes de control
+			
+			----------------------------------------------------
+			--ORDENACIÓN DE EJES
+			----------------------------------------------------
+			(
+ 				--*****************/ANIM/******************** --
+				for _o in this.animNodes.spineNodes do
+					_o.rotation.controller[#Zero_Euler_XYZ].controller.axisOrder = 4
+			)--ORDENACIÓN DE EJES
+			
+			-------------------------------------------------------
+			-- CREACIÓN DE CONEXIONES
+			-------------------------------------------------------
+			(
+				circleControl.parent = this.animNodes.spineHlpExpParent[1]  --linkar el controlSpine al point amarillo solutionRoot.
+				
+				lb.controller.freezeTransform circleControl #all
+				
+				--creacion del position constraint del controlSpine al hueso final spine03.
+				circleControl.pos.controller.Available.controller = Position_Constraint ()
+				circleControl.pos.controller.Position_Constraint.controller.appendTarget this.animNodes.spineNodesEnd[4] 100
+				circleControl.pos.controller.setName 3 ("PC_Spine03End")
+				circleControl.pos.controller.PC_Spine03End.controller.RELATIVE = on
+				
+				--creación del position constraint en el point rojo.
+				for _o=1 to this.animNodes.spineHlpParent.count do 
+				(
+					_filterNameBon  = (lb.nc.getNamePart this.animNodes.spineNodesEnd[_o].name 5)
+					_filterNameBonPart = (filterString _filterNameBon "-")[1]
+					
+					this.animNodes.spineHlpParent[_o].pos.controller.Available.controller = Position_Constraint ()
+					this.animNodes.spineHlpParent[_o].pos.controller.Position_Constraint.controller.appendTarget this.animNodes.spineNodesEnd[_o] 100
+					this.animNodes.spineHlpParent[_o].pos.controller.setName 3 ("PC_" + (_filterNameBonPart))
+				)
+				
+				--Creación de los float expressions del point amarillo padre de toda la jerarquía.
+				for _o in this.animNodes.spineHlpExpParent do 
+				(
+					--Añadimos float expression en la pista Y de rotación.
+					_floatSpineHlpExp = _o.rotation.controller[#Zero_Euler_XYZ][#Y_rotation].controller = Float_Expression() --Añadimos el Float Expression.
+					_floatSpineHlpExp.AddScalarTarget "rotY" circleControl.rotation.controller[#Zero_Euler_XYZ][#Y_rotation].controller
+					_floatSpineHlpExp.setExpression ("(rotY / 2)/2")
+					
+					--Añadimos float expression en la pista Z de rotación.
+					_floatSpineHlpExp = _o.rotation.controller[#Zero_Euler_XYZ][#Z_rotation].controller = Float_Expression() --Añadimos el Float Expression.
+					_floatSpineHlpExp.AddScalarTarget "rotZ" circleControl.rotation.controller[#Zero_Euler_XYZ][#Z_rotation].controller
+					_floatSpineHlpExp.setExpression ("(rotZ / 2)/2")
+					
+					--Añadimos float expression en la pista X de rotación.
+					_floatSpineHlpExp = _o.rotation.controller[#Zero_Euler_XYZ][#X_rotation].controller = Float_Expression() --Añadimos el Float Expression.
+					_floatSpineHlpExp.AddScalarTarget "rotX" circleControl.rotation.controller[#Zero_Euler_XYZ][#X_rotation].controller
+					_floatSpineHlpExp.setExpression ("(rotX / 3)")
+				)
+				
+				--creación de float expression en las pistas de rotación de los point amarillo.
+				for _i = 1 to this.animNodes.spineHlpExp.count do 
+				(
+					_o = this.animNodes.spineHlpExp[_i]
+					
+					if _o != this.animNodes.spineHlpExp[4] then
+					(
+						--Añadimos float expression en la pista X de rotación.
+						_floatSpineHlpExp = _o.rotation.controller[#Zero_Euler_XYZ][#X_rotation].controller = Float_Expression() --Añadimos el Float Expression.
+						_floatSpineHlpExp.AddScalarTarget "rotX" circleControl.rotation.controller[#Zero_Euler_XYZ][#X_rotation].controller
+						_floatSpineHlpExp.setExpression (("(rotX *") + ((_i)as string) + ")/1.5")
+						
+						--Añadimos float expression en la pista X de rotación.
+						_floatSpineHlpExp = _o.rotation.controller[#Zero_Euler_XYZ][#Y_rotation].controller = Float_Expression() --Añadimos el Float Expression.
+						_floatSpineHlpExp.AddScalarTarget "rotY" circleControl.rotation.controller[#Zero_Euler_XYZ][#Y_rotation].controller
+						_floatSpineHlpExp.setExpression (("(rotY *") + ((_i)as string) + ")/1.5")
+						
+						--Añadimos float expression en la pista X de rotación.
+						_floatSpineHlpExp = _o.rotation.controller[#Zero_Euler_XYZ][#Z_rotation].controller = Float_Expression() --Añadimos el Float Expression.
+						_floatSpineHlpExp.AddScalarTarget "rotZ" circleControl.rotation.controller[#Zero_Euler_XYZ][#Z_rotation].controller
+						_floatSpineHlpExp.setExpression (("(rotZ *") + ((_i)as string) + ")/2")
+					)
+				)
+				
+				--Creacion de un expresion para controlar la rotacion del controlSpine.
+				circleControl.rotation.controller.Available.controller = Euler_XYZ ()
+				_floatCircleControl = circleControl.rotation.controller[#Euler_XYZ][#Y_rotation].controller = Float_Expression() --Añadimos el Float Expression.
+				_floatCircleControl.AddScalarTarget "rotY" circleControl.rotation.controller[#Zero_Euler_XYZ][#Y_rotation].controller
+				_floatCircleControl.setExpression ("rotY")
+-- 				
+				_floatCircleControl = circleControl.rotation.controller[#Euler_XYZ][#Z_rotation].controller = Float_Expression() --Añadimos el Float Expression.
+				_floatCircleControl.AddScalarTarget "rotZ" circleControl.rotation.controller[#Zero_Euler_XYZ][#Z_rotation].controller
+				_floatCircleControl.setExpression ("rotZ/1.5")
+				
+				--Apartado para solucionar las rotaciones individuales de los huesos con los point rojos.
+				(
+					_HlpParent3 = this.animNodes.spineHlpParent[3] --obtenemos el point rojo 03
+					_HlpParent2 = this.animNodes.spineHlpParent[2] --obtenemos el point rojo 02
+					_HlpParent1 = this.animNodes.spineHlpParent[1] --obtenemos el point rojo 01
+					_spineNodes0 =this.animNodes.spineNodes[1] --obtenemos el hueso spine00
+					_spineNodes1 = this.animNodes.spineNodes[2] --obtenemos el hueso spine01
+					_spineNodes2 = this.animNodes.spineNodes[3] --obtenemos el hueso spine02
+					
+					lb.controller.setActiveController _spineNodes0 #all #frozen
+					_spineNodes0.parent = this.animNodes.spineHlpExpParent[1]
+					lb.controller.setActiveController _spineNodes0 #all #zero
+
+					--Solución para el point rojo número 3.-------Spine00
+					_HlpParent3.rotation.controller.Available.controller = Euler_XYZ ()
+					_HlpParent3.rotation.controller.setName 3 ("Inst_spine00")
+					
+					--Añadimos float expression en la pista X de rotación para controlar la rotación de Spine00
+					_floatSpineHlpParent = _HlpParent3.rotation.controller[#Inst_spine00][#X_rotation].controller = Float_Expression() --Añadimos el Float Expression.
+					_floatSpineHlpParent.AddScalarTarget "Inst_spine00X" _spineNodes0.rotation.controller[#Zero_Euler_XYZ][#X_rotation].controller
+					_floatSpineHlpParent.setExpression ("Inst_spine00X")
+					
+					--Añadimos float expression en la pista Y de rotación para controlar la rotación de Spine00
+					_floatSpineHlpParent = _HlpParent3.rotation.controller[#Inst_spine00][#Y_rotation].controller = Float_Expression() --Añadimos el Float Expression.
+					_floatSpineHlpParent.AddScalarTarget "Inst_spine00Y" _spineNodes0.rotation.controller[#Zero_Euler_XYZ][#Y_rotation].controller
+					_floatSpineHlpParent.setExpression ("Inst_spine00Y")
+					
+					--Añadimos float expression en la pista Z de rotación para controlar la rotación de Spine00
+					_floatSpineHlpParent = _HlpParent3.rotation.controller[#Inst_spine00][#Z_rotation].controller = Float_Expression() --Añadimos el Float Expression.
+					_floatSpineHlpParent.AddScalarTarget "Inst_spine00Z" _spineNodes0.rotation.controller[#Zero_Euler_XYZ][#Z_rotation].controller
+					_floatSpineHlpParent.setExpression ("Inst_spine00Z")
+					
+					--Solución para el point rojo número 3..-------Spine01
+					_HlpParent3.rotation.controller.Available.controller = Euler_XYZ ()
+					_HlpParent3.rotation.controller.setName 4 ("Inst_spine01")
+					
+					--Añadimos float expression en la pista X de rotación para controlar la rotación de Spine01
+					_floatSpineHlpParent = _HlpParent3.rotation.controller[#Inst_spine01][#X_rotation].controller = Float_Expression() --Añadimos el Float Expression.
+					_floatSpineHlpParent.AddScalarTarget "Inst_spine01X" _spineNodes1.rotation.controller[#Zero_Euler_XYZ][#X_rotation].controller
+					_floatSpineHlpParent.setExpression ("Inst_spine01X")
+					
+					--Añadimos float expression en la pista Y de rotación para controlar la rotación de Spine01
+					_floatSpineHlpParent = _HlpParent3.rotation.controller[#Inst_spine01][#Y_rotation].controller = Float_Expression() --Añadimos el Float Expression.
+					_floatSpineHlpParent.AddScalarTarget "Inst_spine01Y" _spineNodes1.rotation.controller[#Zero_Euler_XYZ][#Y_rotation].controller
+					_floatSpineHlpParent.setExpression ("Inst_spine01Y")
+					
+					--Añadimos float expression en la pista Z de rotación para controlar la rotación de Spine01
+					_floatSpineHlpParent = _HlpParent3.rotation.controller[#Inst_spine01][#Z_rotation].controller = Float_Expression() --Añadimos el Float Expression.
+					_floatSpineHlpParent.AddScalarTarget "Inst_spine01Z" _spineNodes1.rotation.controller[#Zero_Euler_XYZ][#Z_rotation].controller
+					_floatSpineHlpParent.setExpression ("Inst_spine01Z")
+					
+					--Solución para el point rojo número 3..-------Spine02
+					_HlpParent3.rotation.controller.Available.controller = Euler_XYZ ()
+					_HlpParent3.rotation.controller.setName 5 ("Inst_spine02")
+					
+					--Añadimos float expression en la pista X de rotación para controlar la rotación de Spine01
+					_floatSpineHlpParent = _HlpParent3.rotation.controller[#Inst_spine02][#X_rotation].controller = Float_Expression() --Añadimos el Float Expression.
+					_floatSpineHlpParent.AddScalarTarget "Inst_spine02X" _spineNodes2.rotation.controller[#Zero_Euler_XYZ][#X_rotation].controller
+					_floatSpineHlpParent.setExpression ("Inst_spine02X")
+					
+					--Añadimos float expression en la pista Y de rotación para controlar la rotación de Spine01
+					_floatSpineHlpParent = _HlpParent3.rotation.controller[#Inst_spine02][#Y_rotation].controller = Float_Expression() --Añadimos el Float Expression.
+					_floatSpineHlpParent.AddScalarTarget "Inst_spine02Y" _spineNodes2.rotation.controller[#Zero_Euler_XYZ][#Y_rotation].controller
+					_floatSpineHlpParent.setExpression ("Inst_spine02Y")
+					
+					--Añadimos float expression en la pista Z de rotación para controlar la rotación de Spine01
+					_floatSpineHlpParent = _HlpParent3.rotation.controller[#Inst_spine02][#Z_rotation].controller = Float_Expression() --Añadimos el Float Expression.
+					_floatSpineHlpParent.AddScalarTarget "Inst_spine02Z" _spineNodes2.rotation.controller[#Zero_Euler_XYZ][#Z_rotation].controller
+					_floatSpineHlpParent.setExpression ("Inst_spine02Z")
+					
+					------------------------------------------------------------------------------------------------------------------------------------------
+					--Solución para el point rojo número 2.-------Spine00
+					_HlpParent2.rotation.controller.Available.controller = Euler_XYZ ()
+					_HlpParent2.rotation.controller.setName 3 ("Inst_spine00")
+					
+					--Añadimos float expression en la pista X de rotación para controlar la rotación de Spine00
+					_floatSpineHlpParent = _HlpParent2.rotation.controller[#Inst_spine00][#X_rotation].controller = Float_Expression() --Añadimos el Float Expression.
+					_floatSpineHlpParent.AddScalarTarget "Inst_spine00X" _spineNodes0.rotation.controller[#Zero_Euler_XYZ][#X_rotation].controller
+					_floatSpineHlpParent.setExpression ("Inst_spine00X")
+					
+					--Añadimos float expression en la pista Y de rotación para controlar la rotación de Spine00
+					_floatSpineHlpParent = _HlpParent2.rotation.controller[#Inst_spine00][#Y_rotation].controller = Float_Expression() --Añadimos el Float Expression.
+					_floatSpineHlpParent.AddScalarTarget "Inst_spine00Y" _spineNodes0.rotation.controller[#Zero_Euler_XYZ][#Y_rotation].controller
+					_floatSpineHlpParent.setExpression ("Inst_spine00Y")
+					
+					--Añadimos float expression en la pista Z de rotación para controlar la rotación de Spine00
+					_floatSpineHlpParent = _HlpParent2.rotation.controller[#Inst_spine00][#Z_rotation].controller = Float_Expression() --Añadimos el Float Expression.
+					_floatSpineHlpParent.AddScalarTarget "Inst_spine00Z" _spineNodes0.rotation.controller[#Zero_Euler_XYZ][#Z_rotation].controller
+					_floatSpineHlpParent.setExpression ("Inst_spine00Z")
+					
+					--Solución para el point rojo número 2.-------Spine01
+					_HlpParent2.rotation.controller.Available.controller = Euler_XYZ ()
+					_HlpParent2.rotation.controller.setName 4 ("Inst_spine01")
+					
+					--Añadimos float expression en la pista X de rotación para controlar la rotación de Spine00
+					_floatSpineHlpParent = _HlpParent2.rotation.controller[#Inst_spine01][#X_rotation].controller = Float_Expression() --Añadimos el Float Expression.
+					_floatSpineHlpParent.AddScalarTarget "Inst_spine01X" _spineNodes1.rotation.controller[#Zero_Euler_XYZ][#X_rotation].controller
+					_floatSpineHlpParent.setExpression ("Inst_spine01X")
+					
+					--Añadimos float expression en la pista Y de rotación para controlar la rotación de Spine00
+					_floatSpineHlpParent = _HlpParent2.rotation.controller[#Inst_spine01][#Y_rotation].controller = Float_Expression() --Añadimos el Float Expression.
+					_floatSpineHlpParent.AddScalarTarget "Inst_spine01Y" _spineNodes1.rotation.controller[#Zero_Euler_XYZ][#Y_rotation].controller
+					_floatSpineHlpParent.setExpression ("Inst_spine01Y")
+					
+					--Añadimos float expression en la pista Z de rotación para controlar la rotación de Spine00
+					_floatSpineHlpParent = _HlpParent2.rotation.controller[#Inst_spine01][#Z_rotation].controller = Float_Expression() --Añadimos el Float Expression.
+					_floatSpineHlpParent.AddScalarTarget "Inst_spine01Z" _spineNodes1.rotation.controller[#Zero_Euler_XYZ][#Z_rotation].controller
+					_floatSpineHlpParent.setExpression ("Inst_spine01Z")
+					
+					------------------------------------------------------------------------------------------------------------------------------------------
+					--Solución para el point rojo número 1.-------Spine00
+					--Añadimos float expression en la pista X de rotación para controlar la rotación de Spine00
+					_floatSpineHlpParent = _HlpParent1.rotation.controller[#Zero_Euler_XYZ][#X_rotation].controller = Float_Expression() --Añadimos el Float Expression.
+					_floatSpineHlpParent.AddScalarTarget "Inst_spine00X" _spineNodes0.rotation.controller[#Zero_Euler_XYZ][#X_rotation].controller
+					_floatSpineHlpParent.setExpression ("Inst_spine00X")
+					
+					--Añadimos float expression en la pista Y de rotación para controlar la rotación de Spine00
+					_floatSpineHlpParent = _HlpParent1.rotation.controller[#Zero_Euler_XYZ][#Y_rotation].controller = Float_Expression() --Añadimos el Float Expression.
+					_floatSpineHlpParent.AddScalarTarget "Inst_spine00Y" _spineNodes0.rotation.controller[#Zero_Euler_XYZ][#Y_rotation].controller
+					_floatSpineHlpParent.setExpression ("Inst_spine00Y")
+					
+					--Añadimos float expression en la pista Z de rotación para controlar la rotación de Spine00
+					_floatSpineHlpParent = _HlpParent1.rotation.controller[#Zero_Euler_XYZ][#Z_rotation].controller = Float_Expression() --Añadimos el Float Expression.
+					_floatSpineHlpParent.AddScalarTarget "Inst_spine00Z" _spineNodes0.rotation.controller[#Zero_Euler_XYZ][#Z_rotation].controller
+					_floatSpineHlpParent.setExpression ("Inst_spine00Z")
+				)
+				
+				--configura la rotación del point amarillo del parentAll de toda la jerarquía.
+				_floatControlSpineHlp = _tempHlpParentAll.rotation.controller[#Zero_Euler_XYZ][#Y_rotation].controller = Float_Expression() --Añadimos el Float Expression.
+				_floatControlSpineHlp.AddScalarTarget "rotY" this.animNodes.spineHlpExp[3].rotation.controller[#Zero_Euler_XYZ][#Y_rotation].controller
+				_floatControlSpineHlp.setExpression ("rotY/25")
+				
+				_floatControlSpineHlp = _tempHlpParentAll.rotation.controller[#Zero_Euler_XYZ][#Z_rotation].controller = Float_Expression() --Añadimos el Float Expression.
+				_floatControlSpineHlp.AddScalarTarget "rotZ" this.animNodes.spineHlpExp[3].rotation.controller[#Zero_Euler_XYZ][#Z_rotation].controller
+				_floatControlSpineHlp.setExpression ("rotZ/25")
+			)-- End creación de conexiones.
+			
+			-------------------------------------------------------------------------------
+			-- CREACIÓN DE CUSTOMS ATTRIBUTES Y WIREPARAMETERS
+			-------------------------------------------------------------------------------
+			(
+				-- Creamos el modificador vacio, y añadimos el CA del Spine Strech.
+				_emptyModSpineStrech = emptyModifier()
+				_emptyModSpineStrech.name = "Spine_Controls"
+				
+				addModifier _circleControl[1] _emptyModSpineStrech
+				custAttributes.add  _circleControl[1].modifiers[#Spine_Controls] (createAttribAutoStrechSpine()) #unique
+				
+				_circleControl[1].modifiers[#Spine_Controls].autoStrech.controller = bezier_float()
+				_circleControl[1].modifiers[#Spine_Controls].autoStrech.controller = float_limit upper_limit: 1 lower_limit: 0
+			)--End Creación de custom attributes y wireparameter.
+			
+			-------------------------------------------------------------------------------
+			-- CREACIÓN DE STRECHING
+			-------------------------------------------------------------------------------
+			(
+				--ESCALA INDIVIDUAL.
+				--creación de float script para configurar el strech individual en scala para pasarselo luego en la posición del hijo.
+				for _o in this.animNodes.spineNodes do 
+				(
+					_filterName = (lb.nc.getNamePart _o.name 5)
+					_o.scale.controller.Zero_Scale_XYZ.controller.X_Scale.controller = float_list ()
+					_floatScriptStrech = _o.scale.controller[#Zero_Scale_XYZ][#X_Scale].controller.Available.controller = float_script ()  --Añadimos el Float Script.
+					_floatScriptStrech.AddObject (_filterName + "_ScaleX") _o.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Bezier_float]
+					_floatScriptStrech.script = ("1 - " + (_filterName + "_scaleX") + ".value")
+					_o.scale.controller[#Zero_Scale_XYZ][#X_Scale].controller.setName 2 "LockScale"
+					
+					_o.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Bezier_float].controller = float_limit upper_limit: 1000000 lower_limit: 0
+					
+					-- Actzamos la variable de bloqueo y apuntamos al float limit.
+					_nameVar = _o.scale.controller[#Zero_Scale_XYZ][#X_Scale][#LockScale].GetName 5
+					_o.scale.controller[#Zero_Scale_XYZ][#X_Scale][#LockScale].AddObject _nameVar _o.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Float_Limit].controller
+				)
+				
+				--creación de float expression en posición para la scala individual.
+				for _o in this.animNodes.spineNodesEnd do 
+				(
+					_filterName = (lb.nc.getNamePart _o.name 5)
+					_filterName5 = filterString _filterName "-"
+					_parent = _o.parent
+					
+					_o.pos.controller[#Zero_pos_XYZ][#X_Position].controller = float_list ()
+					_floatExpStrech = _o.pos.controller[#Zero_pos_XYZ][#X_Position].controller.Available.controller = Float_Expression()  --Añadimos el Float Expression.
+					_floatExpStrech.AddScalarTarget (_filterName5[1] + "_StrechPosX") _parent.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Float_Limit][#Limited_Controller__Bezier_Float]
+					_FloatExpStrech.AddScalarConstant (_filterName5[1] + "_Length") _o.parent.length
+					_floatExpStrech.setExpression ("((" + _filterName5[1] + "_StrechPosX * " + _filterName5[1] + "_Length) - " + (_filterName5[1] + "_Length)"))
+					_o.pos.controller[#Zero_Pos_XYZ][#X_Position].controller.setName 2 "strech_PosX"
+				)
+				
+				--ESCALA GENÉRICA.
+				--creación de float Expresion para configurar el strech genérico en scala para pasarselo luego en la posición del hijo, se controlará con el controlSpine.
+				for _o in this.animNodes.spineNodes do 
+				(
+					_filterName = (lb.nc.getNamePart _o.name 5)
+					_floatExpreStrech = _o.scale.controller[#Zero_Scale_XYZ][#X_Scale].controller.Available.controller = Float_Expression ()  --Añadimos el Float expression.
+					_floatExpreStrech.AddScalarTarget ("PosX") _CircleControl[1].pos.controller[#Zero_Pos_XYZ][#X_Position]
+					_floatExpreStrech.AddScalarTarget "control" _CircleControl[1].modifiers[#Spine_Controls].autoStrechSpine.autoStrech.controller[1].controller
+					_floatExpreStrech.setExpression ("(PosX/30*control)")
+					
+					_o.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Float_Expression].controller = float_limit upper_limit: 1000000 lower_limit: -1
+					
+					_filterName = (lb.nc.getNamePart _o.name 5)
+					
+					_floatScriptStrechAll = _o.scale.controller[#Zero_Scale_XYZ][#X_Scale].controller.Available.controller = float_script ()  --Añadimos el Float Script.
+					_floatScriptStrechAll.AddObject (_filterName + "_ScaleX") _o.scale.controller[#Zero_Scale_XYZ].X_Scale.controller[3].controller.Limited_Controller__Float_Expression.controller
+					_floatScriptStrechAll.script = ("-" + (_filterName + "_scaleX") + ".value")
+					_o.scale.controller[#Zero_Scale_XYZ][#X_Scale].controller.setName 4 "LockScale"
+				)
+				
+				--creación de float expression en posición para la scala genérica.
+				for _o in this.animNodes.spineNodesEnd do 
+				(
+					_filterName = (lb.nc.getNamePart _o.name 5)
+					_filterName5 = filterString _filterName "-"
+					_parent = _o.parent
+					
+					_floatExpStrech = _o.pos.controller[#Zero_pos_XYZ][#X_Position].controller.Available.controller = Float_Expression()  --Añadimos el Float Expression.
+					_floatExpStrech.AddScalarTarget (_filterName5[1] + "_StrechPosX") _parent.scale.controller[#Zero_Scale_XYZ].X_Scale.controller[3].controller.Limited_Controller__Float_Expression.controller
+					_FloatExpStrech.AddScalarConstant (_filterName5[1] + "_Length") _o.parent.length
+					_floatExpStrech.setExpression ("(" + _filterName5[1] + "_StrechPosX * " + _filterName5[1] + "_Length)")
+					_o.pos.controller[#Zero_Pos_XYZ][#X_Position].controller.setName 3 "strech_ExprScale"
+				)
+			)-- End creación de streching
+
+			-------------------------------------------------------
+			-- CREACIÓN DE POINT SCRIPT
+			-------------------------------------------------------
+			(
+			)--End creación de point Script
+			
+			-------------------------------------------------------
+			-- CREACION DE ANIMTRACKS
+			-------------------------------------------------------
+			(
+				_sepTransform = #(#(#separator, "Separator01", false, "Transform"))
+				_sepAutoStrech =  #(#(#separator, "Separator01", false, "AutoStrech_IK"))
+				_sep = #(#(#separator, "Separator01", false, ""))
+					
+				--*****************/ANIM/******************** --
+				-- Spine			
+				for _o in this.animNodes.spineNodes do
+					lb.animInfo.setAnimTracks _o (_sepTransform + (lb.rig.solutions.prepareAnimTracks _o.rotation.controller[#Zero_Euler_XYZ] #all ) + _sep + #(#(_o[#Transform][#Scale][#Zero_Scale_XYZ][#X_scale][#Float_limit], "Transform:Scale:Zero_Scale_XYZ:X_scale:Float_limit", true, "X_Scale",100)))
+					
+				--control shape de la SpineData
+				lb.animInfo.setAnimTracks _CircleControl[1] (_sepTransform + (lb.rig.solutions.prepareAnimTracks _CircleControl[1].pos.controller[#Zero_Pos_XYZ] #X) + _sep +  (lb.rig.solutions.prepareAnimTracks _CircleControl[1].rotation.controller[#Zero_Euler_XYZ] #all ) + _sep + _sepAutoStrech  + #(#(_CircleControl[1][#Modified_Object][#Spine_Controls].custAttributes[#autoStrechSpine][#autoStrech], "Modified_Object:Spine_Controls:custAttributes[#autoStrechSpine]::autostrech", true, "AutoStrech_Spine", 0)))
+			)-- End Creación AnimTracks.
+			
+			-------------------------------------------------------
+			-- LOCKS DE EJES DE PIEZAS, CAPAS, Y PROPIEDADES, 
+			-------------------------------------------------------
+			(
+				-- Array para almacenar los nodos creados.
+				_chrNodes = (lb.rig.getAllChildren this.animNodes.spineSolutionHLP) + this.animNodes.spineSolutionHLP + _base
+				
+				(	
+					--*****************/CAPAS/******************** --
+					(
+						if (LayerManager.getLayer 1) == undefined then _chrLayer = newLayer "chrName" else _chrLayer = (LayerManager.getLayer 1)
+						
+						lb.layer.activeLayer _chrLayer
+						
+						-- Renombramos los objetos a la capa chrName y los añadimos.
+						for o in _chrNodes do 
+						(
+							o.name = lb.nc.replaceNamePart o.name 2 "chrName"
+							_chrLayer.addNode o
+						)
+								
+						-- Borramos la capa antiguo del esqueleto de rig
+						LayerManager.deleteLayerByName "chr_animEdit"
+					)
+				)
+ 				
+ 				--*****************/LOCKS DE EJES DE PIEZAS/******************** --
+				-- Por defecto bloqueamos todos los ejes de todas las piezas, para después ir desbloqueando las piezas que queremos animar.
+				_Pos = #{4..9}
+				_Rot = #{1..3,7..9}
+				_PosRot = #{7..9}
+				
+				for _o in _chrNodes where (getTransformLockFlags _o).isEmpty do
+					setTransformLockFlags _o #all
+					
+				-- Grupo de piezas que liberamos solo la rotación.
+				setTransformLockFlags this.animNodes.spineNodes #{1..3,8..9} -- Eje rotacion x,y,z y scale z Libre
+				setTransformLockFlags _circleControl #{2..3,7..9} -- Eje posicion X y rotacion x,y,z Libre
+				
+				--*****************/VIRTUAL PARENTS/******************** --
+				(
+					lb.rig.linkVirtualParent #(_CircleControl[1]) this.animNodes.spineNodes[this.animNodes.spineNodes.count]
+					lb.rig.linkVirtualParent #(this.animNodes.spineNodes[this.animNodes.spineNodes.count]) this.animNodes.spineNodes[3]
+					lb.rig.linkVirtualParent #(this.animNodes.spineNodes[3]) this.animNodes.spineNodes[2]
+					lb.rig.linkVirtualParent #(this.animNodes.spineNodes[2]) this.animNodes.spineNodes[1]
+				)
+
+				--*****************/PROPIEDADES/******************** --
+				_chrNodes.showFrozenInGray = false
+				_chrNodes.renderable = false
+				
+				-- Ajustamos los tamaños de los shapes.
+				lb.rig.snapByShape _baseAnimEdit _base
+				
+				clearSelection()
+			)-- LOCKS DE PIEZAS Y PROPIEDADES
+			
+			-------------------------------------------------------
+			-- SKINCONNECTION INFO, 
+			-------------------------------------------------------
+			(
+			)
+			
+			-------------------------------------------------------
+			-- SELECTION SETS, 
+			-------------------------------------------------------
+			(
+				-- Montamos el nombre del selectionset de la spine y controlSpine
+				_filterName = filterString this.animNodes.spineNodes[1].name "_"
+				_selSetSpine = _filterName[1] + "_" + _filterName[2] + "_" + _filterName[3] + "_" + _filterName[4] + "_" + "spine"
+				
+				-- Añadimos las piezas a su selection set correspondiente.
+				lb.objectsets.add this.animNodes.spineNodes _selSetSpine
+				lb.objectsets.add _circleControl _selSetSpine
+			)-- SELECTION SETS, 
+			
+			-------------------------------------------------------
+			-- CREACIÖN DE DYNCONNECTION
+			-------------------------------------------------------
+			(
+				lb.dynConnect.addAttribute this.animNodes.spineSolutionHLP 
+				lb.dynConnect.addTarget this.animNodes.spineSolutionHLP #link (lb.nc.NC_chrPrefix + "_chrName_" + lb.nc.NC_classAnim + "_" + lb.nc.NC_locationMiddle + "_" + lb.nc.NC_ANIM_root + "_" + lb.nc.NC_nonSpecifiedCache + "_" + lb.nc.NC_controlFlag) alternateTargetNodes:#(_base) connectOnLoad:false keepInitialOffset:true		
+			)
+		),	-- fn createFkIkConnection
+			
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		------------------------------------------------
+		--@fn: boolean | create | Crea la solución. Devuelve true si lo consigo o false sino. 
+		--@gets: node | solutionRoot | Raiz de la solución de la categoria.
+		------------------------------------------------
+		fn create editRoot side:lb.nc.NC_locationMiddle =
+		(
+			-- Le pasamos el lado del brazo para crear la solución necesaria.
+			this.side = side
+			
+			undo off
+			(
+				-- Obtenemos los huesos de skin para más tarde crear las cadenas de huesos de fkIk.
+				_spineTemp = editRoot.solutionInfo.params.createBones()
+				lb.rig.solutions.createFkIkChains _spineTemp chainType:#anim
+				
+				-- Rellenamos el struct de la solución con las piezas que se han creado del duplicado.
+				this.fillStructNodes()
+				
+				this.createConnection side
+				
+				lb.rig.solutions.addSolutionInfo this.animNodes.spineSolutionHLP (lb.rig.solutions.getFileSolutionName (getThisScriptFilename() as string))	 solutionParameters 1.0
+				
+				delete _spineTemp
+				gc()
+			)
+		),			
+		
+		------------------------------------------------
+		--@fn: boolean | remove | Elimina la solución. Devuelve true si lo consigo o false sino. 
+		--@gets: node | solutionRoot | Padre de la solución de la categoria.
+		------------------------------------------------
+		fn remove solutionRoot =
+		(
+
+		),	
+		
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.rig.solutions.addSolution this --añade la solución a la principal
+		)
+		
+	)--rsa_fkIkSpin
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	
+	rsa_fkIkSpine() --crea la libreria
+)

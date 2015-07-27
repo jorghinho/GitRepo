@@ -1,0 +1,108 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--Descripcion: solución de plantilla 
+------------------------------------------------------------------------------------------------------------------------------------------------
+(	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: template | Contiene la solución de plantilla
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct rs_template
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #category,					--@var: category | Categoria de la solución. Puede valer, #arm, #leg, #spine...
+		subCategory = #subCategory,				--@var: subCategory | Subcategoria de la solución, indica el tipo de esqueleto. Puede valer #skin, #anim, #editRig
+		conectionId = #conectionId,				--@var: conectionId | Tipo de conexion que lleva la solución, para saber si puede conectarse con otras soluciones. Puede valer, #anthropomorphic, #quadruped, ...
+		index = 10,								--@var: index | Indice para ordenar
+
+		solName = lb.rig.solutions.getFileSolutionName (getThisScriptFilename() as string),	--@var: solName | Nombre de la solución.
+		description = "Solución plantilla",	--@var: description | Descripcion de la libreria.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+				
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: boolean | create | Crea la solución. Devuelve true si lo consigo o false sino. 
+		--@gets: node | solutionRoot | Raiz de la solución de la categoria.
+		------------------------------------------------
+		fn create solutionRoot =
+		(
+			-- Crea la solución respecto al padre de la solución.
+		),			
+
+		------------------------------------------------
+		--@fn: boolean | remove | Elimina la solución. Devuelve true si lo consigo o false sino. 
+		--@gets: node | solutionRoot | Padre de la solución de la categoria.
+		------------------------------------------------
+		fn remove solutionRoot =
+		(
+
+		),	
+		
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.rig.solutions.addSolution this --añade la solución a la principal
+		)
+		
+	)--rs_template
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	
+	rs_template() --crea la libreria
+)

@@ -1,0 +1,6429 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--Descripcion: Herramienta Plantilla.
+------------------------------------------------------------------------------------------------------------------------------------------------
+(
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollMain | Contiene la herramienta plantilla.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollMainDef "Synoptic Box"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) --@var : parent | Herramienta o rolllout del que depende y/o contiene el rollout actual
+		
+		local rightColumnWidth = 180
+
+		local leftColumnWidth = 450
+		local minRollWidth = leftColumnWidth + rightColumnWidth		--@var: minRollWidth | Ancho mínimo de la herramienta.
+		local minRollHeight = 775		--@var: minRollHeight | Alto mínimo de la herramienta.
+		local expanded = false
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+
+		local rollOpen = false
+		local mousePos = [0,0]
+		local cursor = dotNetClass "Windows.Forms.Cursor"
+		local ui = undefined
+		local dialogWidth = 450
+		local dialogHeight = 720
+		
+		local fillColor = (dotNetClass "System.Drawing.Color").fromARGB 255 255 0
+		local borderColor = (dotNetClass "System.Drawing.Color").fromARGB 255 255 255
+		
+		local defaultColors = #((dotNetClass "System.Drawing.Color").fromARGB 0 0 0, \				--	NEGRO
+											(dotNetClass "System.Drawing.Color").fromARGB 159 159 159,	--	GRIS
+											(dotNetClass "System.Drawing.Color").fromARGB 151 178 255, \	--	AZUL CLARO
+											(dotNetClass "System.Drawing.Color").fromARGB 41 103 229, \	--	AZUL OSCURO
+											(dotNetClass "System.Drawing.Color").fromARGB 163 255 74, \	--	VERDE CLARO
+											(dotNetClass "System.Drawing.Color").fromARGB 91 176 35, \		--	VERDE OSCURO
+											(dotNetClass "System.Drawing.Color").fromARGB 253 255 50, \	-- 	AMARILLO
+											(dotNetClass "System.Drawing.Color").fromARGB 255 181 52, \	-- 	NARANJA
+											(dotNetClass "System.Drawing.Color").fromARGB 255 67 67, \		--	ROJO CLARO
+											(dotNetClass "System.Drawing.Color").fromARGB 200 25 25)		--	ROJO OSCURO
+		
+		local oldValues = #()					--	valores de los items antes de comenzar a editarlos
+		local newValues = #()					--	nuevos valores de los items tras la edición.
+		local numObjects = undefined --numero de objetos de la escena
+
+		local TVname = "channelBoxTV"	-- nombre del track view manipulado por el Channel Box
+		
+		local synopticSceneAssets = #()
+		local selectedAsset = undefined
+		local prevSelectedAsset = undefined
+		
+		struct _selectionSet ( name = "", objectList = #() )
+		local _selectionSets = #()
+		local _addSelectionSetString = "Add new set..."
+		local _selectionSetDummyText = ""
+
+		local lbIconsPath = (getDir #maxRoot) + "macroscripts\\lbTools\\icons\\"
+
+		timer tmClock interval:500 active:true
+
+		-- Es la pila de undo / redo. Tenemos que hacer las cosas a traves de ella y creando comandos
+		-- segun el tipo de accion (consultar cuales hay, son structs commandXXXX) y ejecutandolos usando executeCommand del _commandStack
+		local _commandStack = undefined 
+
+		-- Backups de posiciones iniciales para saber el offset y poder utilizar el UNDO/REDO
+		local _transformatorItemPosBackup = [0,0] 
+		local _itemPosBackup = [0,0] 
+
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		
+		-- ASSET LIST
+		dotNetControl dgAssetIcons "System.Windows.Forms.DataGridView" pos:[5,5] width:220 height:25
+		dotNetControl dgAssetIconsHscroll "System.Windows.Forms.HScrollBar" pos:[5,30] width:220 height:10
+		--checkbutton ckbAssetList "list" pos:[210,5] width:23 height:24 images:#(iconsPath + "displayIcons001_24i.bmp", undefined, 50, 1,1,1,1,false) border:false toolTip:"Shows complete asset list"
+
+		-- RIG CONTROLES SUPERIORES
+		dotNetControl lblLoadMessage "system.Windows.Forms.Label" pos:[210,5] width:100 height:25 style_sunkenedge:true
+		button btnLoad "Load" pos:[395,5] width:20 height:20 border:false visible:false images:#(parent.iconPath + "bip_general_i.bmp", undefined, 30, 5, 5, 6, 6,true) tooltip:"Load Synoptic Scheme"
+		button btnSave "Save" pos:[420,5] width:20 height:20 border:false visible:false images:#(parent.iconPath + "bip_general_i.bmp", undefined, 30, 7, 7, 8, 8,true) tooltip:"Save Synoptic Scheme"
+		
+		button btnHelp "" tooltip:"OPEN HELP DOCS FOR THIS TOOL" pos:[minRollWidth - 26,5] width:24 height:24 images:#(lbIconsPath + "help_icon.gif", lbIconsPath + "help_icon_alpha.bmp", 1,1,1,1,1,true)
+
+		--button btnRenderImage "Render" pos:[245,5] width:25 height:25 border:false visible:false images:#(parent.iconPath + "Render_24i.bmp", undefined, 13,5,5,6,6,true) toolTip:"Add Render Image"
+		--button btnViewportImage "Viewport" pos:[270,5] width:25 height:25 border:false visible:false images:#(parent.iconPath + "ViewportNavigationControls_24i.bmp", undefined, 46,5,5,6,6,true) toolTip:"Add Viewport Image"
+		--checkbox chkAutoCreateSelectors "Auto Selectors" pos:[135,10] width:100 height:15
+		--checkbutton btnFilterSelectors "Selectors" pos:[340,5] width:50 height:25 checked:true visible:false 
+		--checkbutton btnFilterImages "Images" pos:[390,5] width:50 height:25 visible:false 
+		
+
+		------------------------------------
+		--ANIMATION MODE
+		-----------------------------------
+
+		-- SELECCTION SET		
+		label lblSelectionSets "Selection Sets" pos:[250,3] width: 130 height: 12
+		dotNetControl cbSelectionSets "System.Windows.Forms.ComboBox" pos:[250,20] width:140 height:20
+		button btnDeleteSelectionSet "" pos:[400, 20] width:20 height:20 images:#(parent.iconPath + "bip_mixer_i.bmp", undefined, 20, 2,2,3,3,true) tooltip:"Delete selection list"
+		button btnLoadSelectionSet "" pos:[420, 20] width:20 height:20 images:#(parent.iconPath + "bip_general_i.bmp", undefined, 30, 5, 5, 6, 6,true) tooltip:"Load selection sets from file"
+
+		-- CHANNEL BOX
+		local channelBoxGroupPos = [10,675]
+		groupBox channelBoxGroup "Channel Box" pos: [channelBoxGroupPos.x - 5,channelBoxGroupPos.y - 15] width: 200 height: 105		
+		button btnKey "Key" pos:[channelBoxGroupPos.x+0,channelBoxGroupPos.y+0] width:25 height:25 images:#(parent.iconpath + "bip_ikkey_i.bmp", undefined, 8, 1, 1, 2, 2,true) toolTip:"Creates a key in current frame" border:false
+		button btnUnkey "Unkey" pos:[channelBoxGroupPos.x+25,channelBoxGroupPos.y+0] width:25 height:25 images:#(parent.iconpath + "bip_keyframe_i.bmp", undefined, 44, 3, 3, 4, 4,true) toolTip:"Deletes key in current frame" border:false
+		button btnZero "Zero" pos:[channelBoxGroupPos.x+50,channelBoxGroupPos.y+0] width:25 height:25 images:#(parent.iconpath + "Helpers_24i.bmp", undefined, 6, 2, 2, 2, 2,true) toolTip:"Assigns Zero value" border:false
+		button btnDeleteAllAnimation "DA" pos:[channelBoxGroupPos.x+75,channelBoxGroupPos.y+0] width:25 height:25 images:#(parent.iconpath + "bip_keyframe_i.bmp", undefined, 46, 39, 39, 39, 39,true) toolTip:"Delete all the animation of the track" border:false
+		checkbox chkApplyToSet "All set" pos:[channelBoxGroupPos.x+103,channelBoxGroupPos.y+0] width:35 height:25
+		checkbutton btnKeyTangents "KI" pos:[channelBoxGroupPos.x+142,channelBoxGroupPos.y+0] width:25 height:25 toolTip:"Change interpolation to selected keys of selected objects" images:#(parent.iconpath + "TrackViewKeyTangents_24i.bmp", undefined, 21, 1, 1, 1, 1,true) border:false
+		button btnTrackView "T" pos:[channelBoxGroupPos.x+170,channelBoxGroupPos.y+0] width:20 height:25 images:#(parent.iconpath + "trackViewTools_16i.bmp", undefined, 115, 62, 62, 62, 62,true) border:false toolTip:"Open track view"
+		
+		button btnSelectBodyAnimNodes "SelAnim" pos:[channelBoxGroupPos.x+0,channelBoxGroupPos.y+30] width:25 height:25 toolTip:"Select RIG nodes" images:#(iconsPath+"riggingIcons001_24i.bmp",undefined,50,5,5,5,5,true) border:false
+		button btnSelectFacialAnimNodes "SelAnim" pos:[channelBoxGroupPos.x+25,channelBoxGroupPos.y+30] width:25 height:25 toolTip:"Select FACIAL nodes"  images:#(iconsPath+"riggingIcons001_24i.bmp",undefined,50,7,7,7,7,true) border:false
+		button btnSelectAllAnimNodes "SelAnim" pos:[channelBoxGroupPos.x+50,channelBoxGroupPos.y+30] width:25 height:25 toolTip:"Select FACIAL+RIG nodes" images:#(parent.iconpath + "bip_modes_i.bmp", undefined, 8, 1, 1, 2, 2,true)  border:false
+		button btnSelectSet "SS" pos:[channelBoxGroupPos.x+75,channelBoxGroupPos.y+30] width:25 height:25 toolTip:"Select All Objects in Sets" images:#(parent.iconpath + "mainToolbar_16i.bmp", undefined, 98, 19, 19, 20, 20,true)  border:false
+		button btnSelectOpposite "SO" pos:[channelBoxGroupPos.x+100,channelBoxGroupPos.y+30] width:25 height:25 toolTip:"Select Opposite" images:#(parent.iconpath + "bip_tracksel_i.bmp", undefined, 10, 9, 9, 10, 10,true) border:false
+		button btnSelectMoreOpposite "SMO" pos:[channelBoxGroupPos.x+125,channelBoxGroupPos.y+30] width:25 height:25 toolTip:"Append opposite to selection" images:#(parent.iconpath + "bip_tracksel_i.bmp", undefined, 10, 7, 7, 8, 8,true) border:false
+		button btnFkIkSnap "Ik" pos:[channelBoxGroupPos.x+150,channelBoxGroupPos.y+30] width:20 height:25 enabled:false toolTip:"Match Ik-Fk keeping FK and IK poses" tooltip:"Fk/Ik Toggle Not Match"
+		button btnFkIkMatch "M" pos:[channelBoxGroupPos.x+170,channelBoxGroupPos.y+30] width:20 height:25 enabled:false toolTip:"Match Ik-Fk matching FK and IK poses" tooltip:"Fk/Ik Match"
+		
+		checkbutton ckbCopyPastePosture "Posture" pos:[channelBoxGroupPos.x+0,channelBoxGroupPos.y+60] width:50 height:25 toolTip:"Select to copy/paste track values" checked:true
+		checkbutton ckbCopyPasteTrack "Track" pos:[channelBoxGroupPos.x+50,channelBoxGroupPos.y+60] width:50 height:25 toolTip:"Select to copy/paste track animations"
+		button btnCopy "Copy" pos:[channelBoxGroupPos.x+110,channelBoxGroupPos.y+60] width:25 height:25 images:#(parent.iconpath + "bip_copypaste_i.bmp", undefined, 24, 1, 1, 2, 2,true) toolTip:"Copy" border:false
+		button btnPaste "Paste" pos:[channelBoxGroupPos.x+135,channelBoxGroupPos.y+60] width:25 height:25 images:#(parent.iconpath + "bip_copypaste_i.bmp", undefined, 24, 11, 11, 12, 12,true) toolTip:"Paste" border:false
+		button btnPasteOpposite "PasteOpposite" pos:[channelBoxGroupPos.x+160,channelBoxGroupPos.y+60] width:25 height:25 images:#(parent.iconpath + "bip_copypaste_i.bmp", undefined, 24, 13, 13, 14, 14,true) toolTip:"Paste Opposite" border:false
+
+		
+		-- ASSET MANAGER
+		local assetManagerGroupPos = [220,675]
+		groupBox assetManagerGroup "Asset Manager" pos: [assetManagerGroupPos.x - 5,assetManagerGroupPos.y - 15] width: 215 height: 105
+		button btnHide "hide" pos:[assetManagerGroupPos.x+0,assetManagerGroupPos.y+0] width:25 height:20 toolTip:"Hide current asset"
+		button btnShow "show" pos:[assetManagerGroupPos.x+25,assetManagerGroupPos.y+0] width:25 height:20 toolTip:"Shows current asset if it's not visible"
+		button btnUnhideAll "all" pos:[assetManagerGroupPos.x+50,assetManagerGroupPos.y+0] width:20 height:20 toolTip:"Unhide all assets"
+		button btnSolo "solo" pos:[assetManagerGroupPos.x+70,assetManagerGroupPos.y+0] width:25 height:20 toolTip:"Hide all assets except selected"
+		checkbox chkaffectAllAssets "all assets" pos:[assetManagerGroupPos.x+4,assetManagerGroupPos.y+25] toolTip:"affect all assets"
+		checkbox chkaffectDependentAssets "dependents" pos:[assetManagerGroupPos.x+4,assetManagerGroupPos.y+42] checked:true toolTip:"affect dependent assets"
+		button btnConnection "Con" pos:[assetManagerGroupPos.x+99,assetManagerGroupPos.y+0] width:24 height:20 toolTip:"Connect/Disconnect Rig"
+		button btnVMpuppet "P" pos:[assetManagerGroupPos.x+128,assetManagerGroupPos.y+0] width:13 height:20 toolTip:"Puppet Mode"
+		button btnVMpuppetHead "PH" pos:[assetManagerGroupPos.x+141,assetManagerGroupPos.y+0] width:17 height:20 toolTip:"Puppet + Head Mode"
+		button btnVMhead "H" pos:[assetManagerGroupPos.x+158,assetManagerGroupPos.y+0] width:13 height:20 toolTip:"Head Mode"
+		button btnVMskin "S" pos:[assetManagerGroupPos.x+171,assetManagerGroupPos.y+0] width:13 height:20 toolTip:"Skin Mode"
+		button btnVMskinBox "SB" pos:[assetManagerGroupPos.x+184,assetManagerGroupPos.y+0] width:17 height:20 toolTip:"Skin + Box Mode"
+		checkbox chkaffectFFDs "FFDs" pos:[assetManagerGroupPos.x+104,assetManagerGroupPos.y+25] checked:true toolTip:"Disable FFDs in HEAD and PUPPET+HEAD mode"
+		checkbox chkaffectHair "Hair" pos:[assetManagerGroupPos.x+154,assetManagerGroupPos.y+25] checked:true toolTip:"Hide HAIR and disable HAIR SKIN in HEAD and PUPPET+HEAD mode"
+		checkbox chkDisSecPuppets "SP" pos:[assetManagerGroupPos.x+104,assetManagerGroupPos.y+42] checked:true toolTip:"Enable/Disable Secondary Puppets in HEAD ans PUPPET+HEAD mode"
+		checkbox chkShowExtraControls "EC" pos:[assetManagerGroupPos.x+154,assetManagerGroupPos.y+42] width:43 height:15 checked:true toolTip:"Show/Hide extra animation controls in SKIN+BOX Mode"
+		button btnLoadAnimation "Load" pos:[assetManagerGroupPos.x+0,assetManagerGroupPos.y+60] width:25 height:25 images:#(parent.iconpath + "bip_general_i.bmp", undefined, 30, 5, 5, 6, 6,true) tooltip:"Load Animation"
+		button btnSaveAnimation "Save" pos:[assetManagerGroupPos.x+28,assetManagerGroupPos.y+60] width:25 height:25 images:#(parent.iconpath + "bip_general_i.bmp", undefined, 30, 7, 7, 8, 8,true) tooltip:"Save Animation"
+		spinner spnInsertAt	"Insert at " pos:[assetManagerGroupPos.x+90,assetManagerGroupPos.y+65] width:60 type:#integer scale:1 range:[-1000,100000,0] enabled:true
+
+
+		-- TURBO SMOOTH GROUP
+		local turboSmoothGroupPos = [455,70] -- ABAJO [10,780]
+		groupBox turboSmoothGroup "TSmooth" pos: [turboSmoothGroupPos.x - 5,turboSmoothGroupPos.y - 15] width: 65 height: 44
+		button btnTurboSmoothOn "TS ON" pos:[turboSmoothGroupPos.x,turboSmoothGroupPos.y] width:26 height:26 tooltip: "Turbosmooth On for all asset Meshes" images:#(parent.iconPath+"patches_24i.bmp",lbIconsPath + "alphaNone_24i.bmp",2,2,2,2,2) 
+		button btnTurboSmoothOff "TS OFF" pos:[turboSmoothGroupPos.x+30,turboSmoothGroupPos.y] width:26 height:26 tooltip: "Turbosmooth Off for all asset Meshes" images:#(parent.iconPath+"patches_24i.bmp",lbIconsPath + "alphaNone_24i.bmp",2,1,1,1,1) 
+		
+		-- DISPLAY GROUP
+		local displayGroupPos = [525,70] -- ABAJO [85,780]
+		groupBox displayGroup "Display" pos: [displayGroupPos.x - 5,displayGroupPos.y - 15] width: 65 height: 44
+		checkbutton btnHeadXRAYToggle "X-Ray Head" pos:[displayGroupPos.x ,displayGroupPos.y] width:24 height:24 tooltip: "Toggle head transparency for positioning elements inside" images:#(parent.iconpath + "AtmosApp_24i.bmp", undefined, 3, 3, 3, 3, 3,false)
+		button btnTrajectoryToggle "Show Traj" pos:[displayGroupPos.x + 30 ,displayGroupPos.y] width:24 height:24 tooltip: "Toggle trajectory for selected component (only puppet)" images:#(parent.iconpath + "TrackViewKeyTangents_24i.bmp", undefined, 21, 7, 7, 7, 7,false)
+
+		-- CONSTRAINTS GROUP
+		local contraintsGroupPos = [455,120]
+		local constraintsWidth = rightColumnWidth - 10
+		local contraintsHeight = 280
+		local constraintsListHeight = 120
+		groupBox constraintsGroup "Point constraints" pos: [contraintsGroupPos.x - 5,contraintsGroupPos.y - 15] width:constraintsWidth height:contraintsHeight
+		dotNetControl lvConstraintsLinks "System.Windows.Forms.ListView" pos:[contraintsGroupPos.x,contraintsGroupPos.y] width:(constraintsWidth-10) height:constraintsListHeight
+		spinner spnConstraintsLinkStartTime "Link start time:" pos:[contraintsGroupPos.x,contraintsGroupPos.y+constraintsListHeight+5] width:(constraintsWidth-10) height:20 range:[-9999999,99999999,0]  type:#integer scale:1 fieldwidth:40 
+		checkbox ckbConstraintsSyncLinkTime "Sync timeline to link frame" tooltip:"This will set your timeline frame to the selected link frame so you can see when is the link happening" pos:[contraintsGroupPos.x,contraintsGroupPos.y + constraintsListHeight + 25 ] width:(constraintsWidth-10) height:20 checked:false 
+		button btnConstraintsAddLink "Add Link" tooltip:"Add link" pos:[contraintsGroupPos.x,contraintsGroupPos.y + constraintsListHeight + 25 + 25 ] width:((constraintsWidth-10)/2) height:20
+		button btnConstraintsLinkToWorld "Link to World" tooltip:"Link To World" pos:[contraintsGroupPos.x+((constraintsWidth-10)/2),contraintsGroupPos.y + constraintsListHeight + 25 + 25] width:((constraintsWidth-10)/2) height:20 
+		button btnConstraintsDeleteLink "Delete Link" tooltip:"Delete link" pos:[contraintsGroupPos.x,contraintsGroupPos.y +constraintsListHeight + 25 + 25 + 25] width:(constraintsWidth-10) height:20 
+		
+		local constraintsSnapGroupPos = [contraintsGroupPos.x,contraintsGroupPos.y + constraintsListHeight + 25 + 25 + 25 + 20 + 3]
+		groupBox constraintsSnapGroup "Fix jumps between links" pos:constraintsSnapGroupPos width:(constraintsWidth-10) height:42
+		button btnConstraintsSnapPrevLinkToThis "Prev to This" tooltip:"When there is a jump, this makes the last link to finish where the selected one starts" pos:[constraintsSnapGroupPos.x +5,constraintsSnapGroupPos.y + 17] width:((constraintsWidth-20)/2) height:20
+		button btnConstraintsSnapThisLinkToPrev "This to Prev" tooltip:"When there is a jump, this moves the position where selected link starts to the end position of the previous link" pos:[constraintsSnapGroupPos.x + ((constraintsWidth-10)/2),constraintsSnapGroupPos.y + 17] width:((constraintsWidth-20)/2) height:20
+
+		-- Version nueva a sustituir, para usar iconos. Pero usar iconos mas pequeños!
+		--checkbutton btnConstraintsAddLink "Add" tooltip:"Add link" pos:[contraintsGroupPos.x,contraintsGroupPos.y + constraintsListHeight + 20 ] width:30 height:30 visible:false images:#(lbIconsPath + "channelBox_linkControls_24i.bmp", lbIconsPath + "alphaNone_24i.bmp", 12, 1, 1, 2, 2)
+		--button btnConstraintsLinkToWorld "World" tooltip:"Link To World" pos:[contraintsGroupPos.x+35,contraintsGroupPos.y + constraintsListHeight + 20] width:30 height:30 visible:false images:#(lbIconsPath + "channelBox_linkControls_24i.bmp",lbIconsPath + "alphaNone_24i.bmp", 12, 5, 5, 6, 6)
+		--button btnConstraintsDeleteLink "Del" tooltip:"Delete link" pos:[contraintsGroupPos.x+70,contraintsGroupPos.y +constraintsListHeight + 20] width:30 height:30 visible:false images:#(lbIconsPath + "channelBox_linkControls_24i.bmp",  lbIconsPath + "alphaNone_24i.bmp", 12, 3, 3, 4, 4)
+		--checkbox ckbConstraintsSyncLinkTime "Sync" tooltip:"When selecting links with this checked will move your timeline current frame to the link frame" pos:[contraintsGroupPos.x,contraintsGroupPos.y+constraintsListHeight+60] width:30 height:30 visible:false images:#(lbIconsPath + "channelBox_linkControls_24i.bmp", lbIconsPath + "alphaNone_24i.bmp",  12, 11, 11, 12, 12) checked:false
+		--button btnConstraintsSnapPrevLinkToThis "PT" tooltip:"Snap previous link to this" pos:[contraintsGroupPos.x+35,contraintsGroupPos.y+constraintsListHeight+60] width:30 height:30 visible:false images:#(lbIconsPath + "channelBox_linkControls_24i.bmp", lbIconsPath + "alphaNone_24i.bmp", 12, 9, 9, 10, 10)
+		--button btnConstraintsSnapThisLinkToPrev "TP" tooltip:"Snap this link to previous" pos:[contraintsGroupPos.x+70,contraintsGroupPos.y+constraintsListHeight+60] width:30 height:30 visible:false images:#(lbIconsPath + "channelBox_linkControls_24i.bmp",  lbIconsPath + "alphaNone_24i.bmp",12, 7, 7, 8, 8)
+		
+
+		-- ANIM LAYERS
+		local animLayersGroupBoxPos = [455, contraintsGroupPos.y + contraintsHeight + 5]
+		local animlayersGroupBoxHeight = 180
+		local animlayersGroupBoxWidth = rightColumnWidth - 10
+		local animLayersListHeight = 100
+		groupBox animlayersGroupBox "Animation Layers" pos: [animLayersGroupBoxPos.x - 5,animLayersGroupBoxPos.y - 15] width:animlayersGroupBoxWidth height:animlayersGroupBoxHeight
+		button btnEnableAnimLayers "Enable" pos:[animLayersGroupBoxPos.x,animLayersGroupBoxPos.y ] width:30 height:30 visible:false border:false images:#(lbIconsPath + "channelBox_animLayers_24i.bmp", undefined, 24, 5, 5, 6, 6,true) tooltip:"Enable Animation Layers"
+		button btnDisableAnimLayers "Disable" pos:[animLayersGroupBoxPos.x + 30,animLayersGroupBoxPos.y] width:30 height:30 visible:false border:false images:#(lbIconsPath + "channelBox_animLayers_24i.bmp", undefined, 24, 21, 21, 22, 22, true) tooltip:"Disable Animation Layers"
+		button btnSetActiveAnimLayer "Ac" pos:[animLayersGroupBoxPos.x + 60,animLayersGroupBoxPos.y] width:30 height:30 toolTip:"Set Active Layer" border:false visible:false images:#(lbIconsPath + "channelBox_animLayers_24i.bmp", undefined, 24, 23, 23, 24, 24,true)
+		button btnCollapseAnimLayers "Col" pos:[animLayersGroupBoxPos.x + 90,animLayersGroupBoxPos.y] width:30 height:30 toolTip:"Collapse Layers" border:false visible:false images:#(lbIconsPath + "channelBox_animLayers_24i.bmp", undefined, 24, 19, 19, 20, 20,true)
+		dotNetControl lvAnimLayers "System.Windows.Forms.ListView" pos:[animLayersGroupBoxPos.x,animLayersGroupBoxPos.y + 30] width:(animlayersGroupBoxWidth - 10) height:animLayersListHeight
+		button btnAddAnimLayer "Add" pos:[animLayersGroupBoxPos.x ,animLayersGroupBoxPos.y + animLayersListHeight + 30] width:30 height:30 toolTip:"Add Anim Layer" border:false visible:false  images:#(lbIconsPath + "channelBox_animLayers_24i.bmp", undefined, 24, 3, 3, 4, 4, true)
+		button btnRemoveAnimLayer "Del" pos:[animLayersGroupBoxPos.x + 30,animLayersGroupBoxPos.y  + animLayersListHeight + 30] width:30 height:30 toolTip:"Delete Anim Layer" border:false visible:false images:#(lbIconsPath + "channelBox_animLayers_24i.bmp", undefined, 24, 11, 11, 12, 12, true)
+		label lblAnimLayerWeight "Weight" pos:[animLayersGroupBoxPos.x + 65,animLayersGroupBoxPos.y + animLayersListHeight + 30] width:60 height:16
+		spinner spnAnimLayerWeight "" pos:[animLayersGroupBoxPos.x + 65,animLayersGroupBoxPos.y + animLayersListHeight + 45] width:60 height:16 range:[-1e+008,1e+008,0]
+
+		------------------------------------
+		--RIG MODE
+		-----------------------------------
+
+		local rigGroupPos = [channelBoxGroupPos.x+0,channelBoxGroupPos.y+30]
+		button btnCreateSelectors "CS" pos:[5,655] width:25 height:25 border:false visible:false  images:#(parent.iconPath + "SubObjectIcons_24i.bmp", undefined, 40,4,4,4,4,true) toolTip:"Create Selectors From Selected Nodes"
+		button btnSeparator1 "|" pos:[30,655] width:15 height:25 enabled:false border:false
+		checkbutton btnAddSelector "Add" pos:[45,655] width:25 height:25  images:#(parent.iconPath + "parameterCollector_i.bmp", undefined, 28, 7, 7, 7, 7,true) border:false toolTip:"Add Selector"	
+		button btnRemoveSelector "Remove" pos:[70,655] width:25 height:25  images:#(parent.iconPath + "MeditTools_i.bmp", undefined, 44, 7, 7, 8, 8,true) border:false toolTip:"Remove Item"	
+		checkbutton btnMove "Move" pos:[95,655] width:25 height:25 checked:false border:false images:#(parent.iconPath + "MainToolbar_16i.bmp", undefined, 102, 21, 21, 22, 22,true) tooltip:"Move"
+		button btnSeparator3 "|" pos:[120,655] width:15 height:25 enabled:false border:false
+		checkbutton btnSymmetryBar "symBar" pos:[135,655] width:25 height:25 border:false images:#(parent.iconPath + "MainToolbar_16i.bmp", undefined, 102, 51,51,52,52,true) tooltip:"Show Symmetry Bar"
+		button btnSymmetry "Symmetry" pos:[160,655] width:25 height:25 border:false images:#(parent.iconPath + "MergeAnim_24i.bmp", undefined, 4,4,4,4,4,true) tooltip:"Make Symmetry"
+		button btnMoveToSym "Move to symmetry" pos:[185,655] width:25 height:25 border:false images:#(parent.iconPath + "bip_curve_24i.bmp", undefined, 20,17,17,17,17,true) tooltip:"Move to symmetry"
+		button btnSeparator4 "|" pos:[210,655] width:15 height:25 enabled:false border:false
+		checkbutton btnLock "Lock" pos:[225,655] width:25 height:25 border:false images:#(parent.iconPath + "shaveUtilsToolbar_i.bmp", undefined, 18,15,15,15,15,true) tooltip:"Lock"
+
+		button btnAlignHZLeft "HL" pos:[5,685] width:25 height:25 border:false images:#(iconsPath + "miscIcons001_24i.bmp", undefined, 50, 35,35,35,35,true) tooltip:"Alignt Horizontal Left"
+		button btnAlignHZCenter "HC" pos:[30,685] width:25 height:25 border:false images:#(iconsPath + "miscIcons001_24i.bmp", undefined, 50, 36,36,36,36,true) tooltip:"Alignt Horizontal Center"
+		button btnAlignHZRight "HR" pos:[55,685] width:25 height:25 border:false images:#(iconsPath + "miscIcons001_24i.bmp", undefined, 50, 37,37,37,37,true) tooltip:"Alignt Horizontal Right"
+		button btnAlignVtTop "VT" pos:[85,685] width:25 height:25 border:false images:#(iconsPath + "miscIcons001_24i.bmp", undefined, 50, 32,32,32,32,true) tooltip:"Alignt Vertical Top"
+		button btnAlignVtCenter "VC" pos:[110,685] width:25 height:25 border:false images:#(iconsPath + "miscIcons001_24i.bmp", undefined, 50, 33,33,33,33,true) tooltip:"Alignt Vertical Center"
+		button btnAlignVtBottom "VB" pos:[135,685] width:25 height:25 border:false images:#(iconsPath + "miscIcons001_24i.bmp", undefined, 50, 34,34,34,34,true) tooltip:"Alignt Vertical Bottom"
+
+		editText edtObjName "" pos:[5,717] width:128 height:18 readOnly:true
+		pickButton btnPickObject "Pick" pos:[135,715] width:25 height:20
+			
+		button btnBringToFront "BF" pos:[170,685] width:25 height:25 border:false images:#(iconsPath + "miscIcons001_24i.bmp", undefined, 50, 44,44,44,44,true) tooltip:"Bring To Front"
+		button btnSendToBack "SB" pos:[195,685] width:25 height:25 border:false images:#(iconsPath + "miscIcons001_24i.bmp", undefined, 50, 45,45,45,45,true) tooltip:"Send To Back"
+		button btnMoveForward "MF" pos:[170,715] width:25 height:25 border:false images:#(iconsPath + "miscIcons001_24i.bmp", undefined, 50, 46,46,46,46,true) tooltip:"Move Forward"
+		button btnMoveBackwards "MB" pos:[195,715] width:25 height:25 border:false images:#(iconsPath + "miscIcons001_24i.bmp", undefined, 50, 47,47,47,47,true) tooltip:"Move Backwards"
+		
+		button btnAddTab "+" pos:[405,655] width:20 height:20
+		button btnRemoveTab "-" pos:[425,655] width:20 height:20
+		editText edtTabName "" pos:[275,658] width:120 height:17
+		
+		label lblTab "Tab" pos:[255,658] width:20 height:15
+		label lblText "Text" pos:[250,680] width:25 height:15
+		label lblFillColor "Fill" pos:[260,702] width:20 height:15
+		label lblBorderColor "Border" pos:[240,721] width:35 height:15
+		
+		editText edtSelectorText pos:[275,680] width:145 height:17
+		dotNetControl dgFillColor "System.Windows.Forms.DataGridView" pos:[280,700] width:142 height:20
+		colorPicker cpFillColor pos:[422,700] width:25 height:20
+		dotNetControl dgBorderColor "System.Windows.Forms.DataGridView" pos:[280,720] width:142 height:20
+		colorPicker cpBorderColor pos:[422,720] width:25 height:20
+		
+		dotNetControl tbTabs "System.Windows.Forms.TabControl" pos:[0,37] width:450 height:620 
+		dotNetControl rMenu "System.Windows.Forms.ContextMenuStrip" pos:[130,525] width:60 height:14 
+
+		--++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+		--FUNCTIONS
+		--++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		/*fn updateUI = 
+		(
+
+			--local contraintsGroupPos = [455,120]
+			--local constraintsWidth = rightColumnWidth - 10
+			--local contraintsHeight = 230
+			--local constraintsListHeight = 120
+
+			-- creamos el contenedor
+			constraintsContainer = lb.UI.str_container()
+			-- creamos la interfaz y guardamos el group box en vez del contenedor
+			--fn createUI pos width height labelTxt:"" isGroupBox:false mainLayoutType:#vertical =
+			constraintsContainer = constraintsContainer.createUI contraintsGroupPos constraintsWidth contraintsHeight labelTxt:"Point Constraints" isGroupBox:True
+			constraintsContainer.mainlayout.addItem btnConstraintsAddLink
+			constraintsContainer.mainlayout.addItem btnConstraintsDeleteLink
+			constraintsContainer.mainlayout.addItem btnConstraintsLinkToWorld
+
+			-- actualizamos tamaños respecto a los items que hay ahora
+			constraintsContainer.updateUI()
+
+
+			--constraintsGroup "Point constraints" pos: [contraintsGroupPos.x - 5,contraintsGroupPos.y - 15] width:constraintsWidth height:contraintsHeight
+			--lvConstraintsLinks "System.Windows.Forms.ListView" pos:[contraintsGroupPos.x,contraintsGroupPos.y] width:(constraintsWidth-10) height:constraintsListHeight
+			--spnConstraintsLinkStartTime "Start:" pos:[contraintsGroupPos.x,contraintsGroupPos.y+constraintsListHeight+5] width:(constraintsWidth-10) height:20 range:[-9999999,99999999,0]  type:#integer scale:1 fieldwidth:40
+			--btnConstraintsAddLink "Add Link" tooltip:"Add link" pos:[contraintsGroupPos.x,contraintsGroupPos.y + constraintsListHeight + 20 ] width:((constraintsWidth-10)/2) height:20
+			--btnConstraintsLinkToWorld "Link to World" tooltip:"Link To World" pos:[contraintsGroupPos.x+35,contraintsGroupPos.y + constraintsListHeight + 20] width:((constraintsWidth-10)/2) height:20 
+			--btnConstraintsDeleteLink "Delete Link" tooltip:"Delete link" pos:[contraintsGroupPos.x+70,contraintsGroupPos.y +constraintsListHeight + 45] width:(constraintsWidth-10) height:20 
+			--ckbConstraintsSyncLinkTime "Sync timeline frame" tooltip:"Sync Link Time" pos:[contraintsGroupPos.x,contraintsGroupPos.y+constraintsListHeight+60] width:30 height:30 
+			--btnConstraintsSnapPrevLinkToThis "Prev to This" tooltip:"Snap previous link to this" pos:[contraintsGroupPos.x+35,contraintsGroupPos.y+constraintsListHeight+60] width:30 height:30
+			--btnConstraintsSnapThisLinkToPrev "This to Prev" tooltip:"Snap this link to previous" pos:[contraintsGroupPos.x+70,contraintsGroupPos.y+constraintsListHeight+60] width:30 height:30
+		
+
+		)*/
+
+		fn initConstraintsListView =
+		(
+			lvConstraintsLinks.gridLines = true 
+			lvConstraintsLinks.View = (dotNetClass "System.Windows.Forms.View").details
+			lvConstraintsLinks.borderstyle = (dotnetclass "System.Windows.Forms.BorderStyle").fixedSingle
+			lvConstraintsLinks.headerStyle = (dotnetclass "System.Windows.Forms.ColumnHeaderStyle").nonClickable
+			lvConstraintsLinks.hideSelection = false
+			lvConstraintsLinks.BackColor = (dotnetclass "System.Drawing.SystemColors").Menu
+			
+			lvConstraintsLinks.columns.clear()
+			lvConstraintsLinks.showItemTooltips = true
+			lvConstraintsLinks.labelEdit = false
+			lvConstraintsLinks.fullRowSelect = true
+			lvConstraintsLinks.scrollable = true
+			lvConstraintsLinks.gridlines = false
+
+			lvConstraintsLinks.HeaderStyle = (dotNetClass "System.Windows.Forms.ColumnHeaderStyle").None
+			
+			lvConstraintsLinks.Columns.add "Target" lvConstraintsLinks.width
+		)--fn initConstraintsListView
+		
+
+		----------------------------------------------------------------------------------------
+		-- Rellena el listView con los targets del controlador pointConstraint que tiene el objeto
+		-- clearSelection: True o False. En la lista no habrá ningún item seleccionado
+		---------------------------------------------------------------------------------------
+		fn updateConstraintsList clearSelection:false = 
+		(
+
+			if ui.tabs.selectedTab.selectedItems.count == 1 then
+			(
+				-- Backup de indices seleccionados
+				selIndexBackup = #()
+				if not clearSelection do 
+				(
+					for i = 1 to lvConstraintsLinks.selectedItems.count do 
+						append selIndexBackup ((lvConstraintsLinks.selectedItems.item[i-1]).index + 1)
+				)
+
+				--vacia el listado despues de obtener el backup
+				lvConstraintsLinks.items.clear() 
+
+				-- Ojo, esto actualiza los datos del constraint para este objeto.
+				_PCNode = lb.links.getLinkNode()
+				lb.links.pointConstraint.getPointData _PCNode -- actualiza la informacion
+				_pointData = lb.links.pointConstraint.pointData -- Obtiene la estructura con la info rellena
+				
+				--si tiene los controladores de constraint
+				if _PCNode != undefined and _pointData.pcController != undefined and _pointData.ocController != undefined do
+				(
+					
+					--array con las relaciones linkTime-linkTarget-realIndex
+					_pointData.pointLinks = #() 
+					
+					--recorre los targets. (recorremos solo el de posicion porque el de orientación estará sincronizado)
+					for i = 1 to _pointData.pcController.getNumTargets() do
+					(
+						frame =  0 as time
+						target = (_pointData.pcController.getNode i).parent
+						
+						--averigua el nombre del target
+						if target == undefined then target = "_World_"
+						else target = target.name
+						
+						--averigua el frame en el que empieza a actuar-----------------------
+						stop = false
+						wController = _pointData.pcController.weight[i].controller
+						if wController != undefined then --si el peso tiene controlador asignado
+							for j=1 to (numKeys wController) where not stop and (at time (getKeyTime wController j) _pointData.pcController.weight[i]) == 1.0 do
+							(
+								frame = (getKeyTime wController j)
+								stop = true --para
+							)
+						
+						append _pointData.pointLinks #(frame, target, i) --añade una relacion linkTime-linkTarget-realIndex	
+					)
+					
+					--recorre las claves del controlador del peso de los constraints buscando las que estén a 0, lo que indica un lincaje a WORLD
+					for i=1 to (numKeys _pointData.cWeightController) do
+					(
+						frame = getKeyTime _pointData.cWeightController i
+						if (at time frame _pointData.cWeightController.value) == 0.0 then
+						(
+							if _PCNode.parent != undefined then
+								append _pointData.pointLinks #(frame, ("Virtual World: " + (_PCNode).parent.name), i) --añade una relacion linkTime-linkTarget-realKeyIndex	
+							else
+								append _pointData.pointLinks #(frame, "World", i) --añade una relacion linkTime-linkTarget-realKeyIndex	
+						)
+					)
+					
+					--ordena los links antes de llenar el listado
+					qsort _pointData.pointLinks lb.links.pointConstraint.compareByLinkTime
+					
+					--rellena el listado
+					for i=1 to _pointData.pointLinks.count do
+					(
+						-- convertimos el numero de frame a un valor representable correctamente.
+						-- hay que hacer conversiones a entero y string para que elimine la parte que muestra una "f"
+						_newRowText = (((_pointData.pointLinks[i][1] as string) as integer) as string)
+						_newRowText += (" - " + _pointData.pointLinks[i][2])
+
+						-- añadimos el item
+						lvConstraintsLinks.items.add _newRowText 
+						
+						-- lo seleccionamos si no queremos perder la selección y estaba seleccionado
+						if not clearSelection and (findItem selIndexBackup i) > 0 then
+						(
+							lvConstraintsLinks.items.item[i-1].selected = true
+							lvConstraintsLinks.EnsureVisible (i-1)
+						)
+					)
+					
+				)
+			)
+
+			-- Si no habia uno seleccionado, simplemente vacia el listado
+			else 
+				lvConstraintsLinks.items.clear() 
+
+				
+		)
+
+		--------------------------------------------------------------------------------------
+		-- Actualiza toda la informacion de la parte de constraints.
+		-- updateList: True o False. Para evitar rellenar la lista de enlaces continuamente. Por defecto no lo hace.
+		-- clearSelections: True o False. Si queremos que , ademas, si actualizamos elimine la seleccion de cualquier tipo en la lista.
+		--------------------------------------------------------------------------------------
+		fn updateConstraintsUI updateList:false clearSelections:false = 
+		(
+			-- Actualizamos la lista de enlaces
+			if updateList do 
+				updateConstraintsList clearSelections:clearSelections
+
+			-- variables sobre la lista de constraints
+			_emptyList = lvConstraintsLinks.items.count == 0
+			_oneSelected = lvConstraintsLinks.selectedItems.count == 1
+			_anySelected = lvConstraintsLinks.selectedItems.count > 0
+			_firstSelected = not _emptyList and lvConstraintsLinks.items.item[0].selected
+
+			-- variables sobre la lista de elementos seleccionados
+			_oneControlSelected = ui.tabs.selectedTab.selectedItems.count == 1 
+
+			-- Elegimos el estado inicial de los items segun el estado
+			ckbConstraintsSyncLinkTime.enabled = _oneControlSelected
+			btnConstraintsAddLink.enabled = _oneControlSelected
+			btnConstraintsLinkToWorld.enabled = _oneControlSelected
+			btnConstraintsDeleteLink.enabled = _anySelected and not _emptyList
+			btnConstraintsSnapPrevLinkToThis.enabled = _oneSelected and not _emptyList and not _firstSelected
+			btnConstraintsSnapThisLinkToPrev.enabled = _oneSelected and not _emptyList and not _firstSelected
+
+			-- Para el spinner que modifica el frame de inicio
+			if _oneSelected and not _emptyList then
+			(
+				-- inicializo el texto del spinner
+				spnConstraintsLinkStartTime.value = 0 
+				
+				_selectedItemText = lvConstraintsLinks.selectedItems.item[0].text
+				
+				-- Si se formó correctamente...
+				if matchPattern _selectedItemText pattern:"*-*" do
+				(
+					-- Obtenemos el frame del texto
+					_selectedItemText = (filterString _selectedItemText " -")[1] -- separa por espacios y guiones
+					-- Lo pasamos a entero para sacar el numero de frame
+					_frameNumber = _selectedItemText as integer 
+					
+					spnConstraintsLinkStartTime.enabled = true
+					spnConstraintsLinkStartTime.value = _frameNumber
+				)
+			)
+			else 
+				spnConstraintsLinkStartTime.enabled = false
+
+
+		)
+
+		--------------------------------------------------------------------------------------
+		--	Procesa de forma genérica todos los menús de botón derecho de la herramienta según su texto
+		--	No pueden existir dos opciones de menú derecho que se llamen iguales ni entre distintos menús
+		--------------------------------------------------------------------------------------
+		fn menuItemClickedProcess menuText =
+		(
+			case menuText of
+			(
+				"Assign To Selected Object": ui.tabs.selectedTab.selectedItems[1].assignObject $
+				
+				"Pick Object": 
+				(
+					_obj = pickObject()
+					if _obj != undefined then ui.tabs.selectedTab.selectedItems[1].assignObject _obj
+				)
+				
+				"Remove Object": ui.tabs.selectedTab.selectedItems[1].assignObject _obj
+				
+				"Select Assigned Object(s)": (deselect objects; for _item in ui.tabs.selectedTab.selectedItems do _item.selectObj())
+				"Select Unassigned Selectors": (_unAssignedSelectors = for _item in ui.tabs.selectedTab.selectorItems where _item.obj == undefined collect _item; ui.selectItems _unAssignedSelectors)
+
+				"Toggle IKFK switcher": ui.tabs.selectedTab.selectedItems[1].toggleIKFKSwitch()
+				
+				"Delete Selector(s)": ui.removeItems ui.tabs.selectedTab.selectedItems
+				
+				"Bring To Front": ui.setItemsOrder ui.tabs.selectedTab.selectedItems #bringToFront
+				"Send To Back": ui.setItemsOrder ui.tabs.selectedTab.selectedItems #sendToBack
+				"Move Forward": ui.setItemsOrder ui.tabs.selectedTab.selectedItems #moveForward
+				"Move Backwards": ui.setItemsOrder ui.tabs.selectedTab.selectedItems #moveBackwards
+				"Delete Image(s)": ui.removeItems ui.tabs.selectedTab.selectedItems
+				
+				"Cut Selector(s)": ui.cutItems()
+				"Copy Selector(s)": ui.copyItems()
+				"Paste Selector(s)": ui.pasteItems()
+				"Paste Selector Size": ui.pasteProperties #size
+				"Paste Selector Position": ui.pasteProperties #pos
+					
+				"Switch To Animator Mode": lb.synopticBox.rollMain.setEditMode #animator
+				"Switch To Rigger Mode": lb.synopticBox.rollMain.setEditMode #rigger
+				
+				"Reset Bar": (ui.symmetryBar.xPos = (ui.tabs.selectedTab.uiObj.width / 2); ui.symmetryBar.update())
+
+				"Prepare viewport": ui.prepareViewport()
+				"Restore viewport": ui.restoreViewport()
+			)
+		)
+		
+		 
+		--------------------------------------------------------------------------------------
+		--	Determina qué forma tiene que tener el cursor según el objeto
+		--	sobre el que está o el estado del interface
+		--------------------------------------------------------------------------------------
+		fn setCursorShape uiControl mousePos =
+		(
+			_newCursor = (dotNetClass "Windows.Forms.Cursors").arrow
+			
+			if ui.editMode == #animator then 
+				_newCursor = (dotNetClass "Windows.Forms.Cursors").hand
+			else
+			(
+				case ui.mode of
+				(
+					#addSelectorsTool: _newCursor = (dotNetClass "Windows.Forms.Cursors").arrow
+					
+					default:
+					(	
+						if uiControl.name == ui.selectorUIobjName or uiControl.name == ui.imageUIobjName then
+						(
+							_newCursor = (dotNetClass "Windows.Forms.Cursors").sizeAll
+						)
+						
+						if uiControl.name == ui.transformatorUIobjName then 
+						(
+							_area = ""
+							if mousePos.x > uiControl.width - ui.transformator.borderTolerance then append _area "L"
+							if mousePos.x < ui.transformator.borderTolerance then append _area "R"
+							if mousePos.y > uiControl.height - ui.transformator.borderTolerance then append _area "B"
+							if mousePos.y < ui.transformator.borderTolerance then append _area "T"
+							
+							--	Si estamos en el borde mostramos los cursores que indican que se puede escalar
+							--	Si no mostramos el cursor de mover
+							if _area == "T" or _area == "B" then
+								_newCursor = (dotNetClass "Windows.Forms.Cursors").sizeNS
+							else if _area == "L" or _area == "R" then
+								_newCursor = (dotNetClass "Windows.Forms.Cursors").sizeWE
+							else if _area == "LT" or _area == "RB" then
+								_newCursor = (dotNetClass "Windows.Forms.Cursors").sizeNESW
+							else if _area == "RT" or _area == "LB" then
+								_newCursor = (dotNetClass "Windows.Forms.Cursors").sizeNWSE
+							else
+								_newCursor = (dotNetClass "Windows.Forms.Cursors").sizeAll
+						)
+					)
+				)
+			)
+			
+			cursor.current = _newCursor
+		)
+
+
+		--++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+		--	STRUCTS MEMENTO - Para UNDO/REDO
+		--++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+		-- Articulo que habla de todo esto
+		--http://www.developer.com/design/article.php/10925_3720566_2/Working-With-Design-Patterns-Memento.htm
+
+		-- Comando para mover selectores
+		-- Crear uno y usar el command stack para ejecutarlo y que se guarde en la pila
+		struct commandMoveSelector
+		(
+			-- Offset de posicion 
+			_posOffset = [0,0],
+
+			-- Los items que se mueven en grupo
+			_selector = undefined,
+
+			-- funcion a utilizar para hacer un REDO (ejecuta la accion)
+			-- NO SE DEBE LLAMAR. HAY QUE USAR LA PILA DE COMANDOS UNICAMENTE
+			fn executeCommand = 
+			(
+			),
+
+			-- Funcion a utilizar para hacer un UNDO (revierte la accion)
+			-- NO SE DEBE LLAMAR. HAY QUE USAR LA PILA DE COMANDOS UNICAMENTE
+			fn undoCommand =
+			(
+				if _selector != undefined then 
+				(
+					_selector.setPos [ _selector.pos.x - _posOffset.x , _selector.pos.y - _posOffset.y]
+
+					-- Normalmente el transformator sigue al item, asi que tambien lo actualizamos
+					if ui.transformator != undefined then 
+						ui.transformator.setPos [ (ui.transformator.pos).x - _posOffset.x , (ui.transformator.pos).y - _posOffset.y]
+				)
+				else 
+					print "ERROR: UNDO MOVE COMMAND WRONG. Related SELECTOR not defined"	
+			),
+
+			fn redoCommand = 
+			(
+				if _selector != undefined then 
+				(
+					_selector.setPos [ _selector.pos.x + _posOffset.x , _selector.pos.y + _posOffset.y]
+					
+					-- Normalmente el transformator sigue al item, asi que tambien lo actualizamos
+					if ui.transformator != undefined then 
+						ui.transformator.setPos [ (ui.transformator.pos).x + _posOffset.x , (ui.transformator.pos).y + _posOffset.y]
+				)
+				else 
+					print "ERROR: REDO MOVE COMMAND WRONG. Related SELECTOR not defined"	
+			)
+
+		)
+
+
+		-- Comando para mover grupos usando el transformator
+		-- Crear uno y usar el command stack para ejecutarlo y que se guarde en la pila
+		struct commandMoveGroup
+		(
+			-- Offset de posicion 
+			_posOffset = [0,0],
+
+			-- Los items que se mueven en grupo
+			_selItems = #(),
+
+			-- funcion a utilizar para hacer un REDO (ejecuta la accion)
+			-- NO SE DEBE LLAMAR. HAY QUE USAR LA PILA DE COMANDOS UNICAMENTE
+			fn executeCommand = 
+			(
+				-- Guardamos las referencias a los items seleccinados en una lista
+				for item in ui.tabs.selectedTab.selectedItems do
+					append _selItems item
+			),
+
+			-- Funcion a utilizar para hacer un UNDO (revierte la accion)
+			-- NO SE DEBE LLAMAR. HAY QUE USAR LA PILA DE COMANDOS UNICAMENTE
+			fn undoCommand =
+			(
+				if ui.transformator != undefined then 
+				(
+					ui.transformator.setPos [ (ui.transformator.pos).x - _posOffset.x , (ui.transformator.pos).y - _posOffset.y]
+					for _item in _selItems do
+						_item.setPos [_item.pos.x - _posOffset.x, _item.pos.y - _posOffset.y]
+				)
+				else 
+					print "ERROR: UNDO GROUP MOVE COMMAND WRONG. TRANSFORMATOR not defined"	
+			),
+
+			fn redoCommand = 
+			(
+				if ui.transformator != undefined then 
+				(
+					ui.transformator.setPos [ (ui.transformator.pos).x + _posOffset.x , (ui.transformator.pos).y + _posOffset.y]
+					for _item in _selItems do
+						_item.setPos [_item.pos.x + _posOffset.x, _item.pos.y + _posOffset.y]
+				)
+				else 
+					print "ERROR: REDO MOVE COMMAND WRONG. TRANSFORMATOR not defined"
+			)
+
+		)
+
+
+		-- Es el sistema que utilizamos para guardar las acciones. Todas debemos llamarlas ejecutando el comando
+		-- Gestiona las pilas de UNDO y REDO y se ocupa de ejecutar las acciones 
+		struct commandStack 
+		(
+			-- Las pilas de redo y undo
+			_undoStack = #() ,
+			_redoStack = #() ,
+			
+			-- El tamaño de la pila de UNDO-REDO
+			_maxUndoSize = 30 ,
+
+			-- Lo activamos en el momento que queramos saber como va el command stack por linea de comandos
+			_verbosity = false, 
+
+			fn executeCommand command = 
+			(
+				if _verbosity do print "Ejecutando comando en stack"
+				-- Ejecutamos el comando
+     			command.executeCommand()
+     			-- Lo añadimos a la lista de comandos ejecutados
+      			append _undoStack command
+				-- Si nos hemos pasado, borramos los primero
+      			while _undoStack.count > _maxUndoSize do
+      				deleteItem _undoStack 1
+				-- Limpiamos la pila de REDO
+      			_redoStack = #()
+      			
+      			if _verbosity do this.printStacks()
+			),
+
+			fn undoCommand =
+			(
+				if _verbosity do print "Deshaciendo comando en stack"
+
+      			if _undoStack.count > 0 do
+      			(	
+      				-- Obtengo el ultimo de la pila de comandos
+      				command = _undoStack[_undoStack.count]
+      				-- Lo borro de la misma
+      				deleteItem _undoStack _undoStack.count
+      				-- Deshago el comando
+      				command.undoCommand()
+      				-- Lo meto en la pila de REDO
+					append _redoStack command
+				)
+				if _verbosity do this.printStacks()
+			),
+
+			fn redoCommand = 
+			(
+				if _verbosity do print "Rehaciendo comando en stack"
+
+      			if _redoStack.count > 0 do 
+      			(
+      				-- Obtengo el ultimo de la pila
+					command = _redoStack[_redoStack.count]
+					-- Lo borro de la lista
+					deleteItem _redoStack _redoStack.count
+					-- Ejecuto el comando redo del mismo
+      				command.redoCommand()
+      				-- Lo añado a la pila de comandos hechos
+      				append _undoStack command
+
+      				-- Si nos hemos pasado, borramos los primero
+      				while _undoStack.count > _maxUndoSize do
+      					deleteItem _undoStack 1
+      			)
+      			if _verbosity do this.printStacks()
+			),
+
+			fn printStacks =
+			(
+				print "-----------------------------"
+				print "UNDO STACK:"
+				if _undoStack.count == 0 then 
+					print "empty..."
+				else 
+					print _undoStack as string
+				
+				print "REDO STACK:"
+				if _redoStack.count == 0 then 
+					print "empty..."
+				else 
+					print _redoStack as string
+			)
+		)
+
+		
+		--++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+		--	SELECTOR  ITEM
+		--  Cada uno de los items que contiene el sinoptico que sirve para seleccionar piezas
+		--++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+		
+
+		--------------------------------------------------------------------------------------
+		--	Evento MOUSEDOWN para los selectores
+		--------------------------------------------------------------------------------------
+		fn mouseDownItemEvent self events = 
+		(
+			--	Sólo lanzamos el evento si el item está activo
+			if self.enabled then
+			(
+				_btn = events.button.toString()
+				_selfItem = undefined	--	item al que pertenece el objeto de interface
+				_doubleClick = events.Clicks > 1
+				
+				--	buscamos el item al que pertenece el objeto de interface
+				--	Nos aseguramso además de que no se lanza el evento en items que están desactivados
+				case self.name of
+				(
+					(ui.selectorUIobjName):	for _item in ui.tabs.selectedTab.selectorItems where _item.uiObj == self do _selfItem = _item
+					(ui.imageUIobjName): for _item in ui.tabs.selectedTab.imageItems where _item.uiObj == self do _selfItem = _item
+				)
+				
+				case _btn of
+				(
+					"Left":
+					(
+						_addSelection = keyboard.controlPressed
+						_removeSelection = keyboard.altPressed -- not keyboard.controlPressed
+						
+						-- si no hay teclas pulsadas
+						if not _addSelection and not _removeSelection do 
+						(
+							ui.selectItems _selfItem clearSelection:true selectObjectSet:false selectDescendants:_doubleClick
+						)
+						-- Si se añade a la antigua seleccion
+						if _addSelection then
+							ui.selectItems _selfItem clearSelection:false selectObjectSet:(keyboard.controlPressed and keyboard.shiftPressed) selectDescendants:_doubleClick
+						-- Si se elimina de la seleccion
+						else if _removeSelection and not _addSelection then 
+							ui.deselectItems _selfItem clearSelection:false selectObjectSet:(keyboard.controlPressed and keyboard.shiftPressed) selectDescendants:_doubleClick							
+					
+						mousePos = [events.x, events.y]
+
+					
+						ui.transformator.uiObj.hide()
+						
+						if ui.editMode == #rigger then
+						(
+							case ui.mode of
+							(
+								#addSelectorsTool: cursor.current  = (dotNetClass "Windows.Forms.Cursors").no
+								#transformTool:
+								(
+									-- Guardamos un backup de la posicion para saber el offset de posicion al soltar
+									_itemPosBackup = _selfItem.pos
+									
+									-- Cambiamos el cursor
+									cursor.current = (dotNetClass "Windows.Forms.Cursors").sizeAll
+								)
+							)
+						)
+					)
+					
+					"Right":
+					(
+						if not _selfItem.selected then
+							ui.selectItems _selfItem clearSelection:(not keyboard.controlPressed and not _selfItem.selected)
+						
+						lb.synopticBox.rollMain.createRMenu mouse.screenPos ui.filterItems
+					)
+					
+					"Middle":
+					(
+					)
+				)
+					
+			)
+		)
+		
+		--------------------------------------------------------------------------------------
+		--	Evento MOUSEMOVE para los selectores
+		--------------------------------------------------------------------------------------
+		fn mouseMoveItemEvent self events = 
+		(
+			if self.enabled then
+			(
+				_newMousePos = [events.x, events.y]
+				_btn = events.button.toString()
+				_xOffset = _newMousePos.x - mousePos.x
+				_yOffset = _newMousePos.y - mousePos.y
+				
+				case ui.editMode of
+				(
+					#rigger:
+					(
+						case ui.mode of
+						(
+							#addSelectorsTool: setCursorShape self _newMousePos
+							
+							#transformTool:
+							(
+								setCursorShape self _newMousePos
+								
+								if _btn == "Left" then
+								(
+									ui.moveItems ui.tabs.selectedTab.selectedItems [_xOffset, _yOffset]
+								)
+							)
+						)
+					)
+					
+					#animator:
+					(
+						setCursorShape self _newMousePos
+					)
+				)
+			)
+		)
+
+		--------------------------------------------------------------------------------------
+		--	Evento MOUSEUP para los selectores
+		--------------------------------------------------------------------------------------
+		fn mouseUpItemEvent self events =
+		(
+			if self.enabled then
+			(
+				_btn = events.button.toString()
+				
+				if _btn == "Left" then
+				(
+					-- Si venimos de mover un selector creamos el comando para poder deshacerlo
+					if self.name == ui.selectorUIobjName do 
+					(
+						_item = undefined
+						_selfIts = ui.tabs.selectedTab.selectedItems
+						_counter = 1
+
+						-- Obtenemos el item relacionado
+						while _item == undefined and _counter <= _selfIts.count do
+						(
+							if (_selfIts[_counter]).uiObj == self do 
+								_item = _selfIts[_counter]
+
+							_counter = _counter +1
+						)
+
+						if _item != undefined do 
+						(
+							_itemPosOffset = [0,0]
+							_itemPosOffset.x = _item.pos.x - _itemPosBackup.x
+							_itemPosOffset.y = _item.pos.y - _itemPosBackup.y
+
+							-- Si no hemos hecho un simple click sin moverlo
+							if _itemPosOffset.x != 0 and _itemPosOffset.y != 0 do 
+							(
+								-- creamos el comando con los datos que necesita
+								_command = commandMoveSelector _selector:_item _posOffset:_itemPosOffset
+
+								-- Lo ejecutamos usando la pila de undo/redo para que ella gestione todo
+								_commandStack.executeCommand _command
+							)
+						)
+					)
+
+					ui.transformator.update()
+				)
+				
+				if _btn == "Right" then
+				(
+				)
+				
+				if _btn == "Middle" then
+				(
+				)
+			
+				setfocus tbTabs
+			)
+		)
+		
+		--------------------------------------------------------------------------------------
+		--	Evento KEYDOWN  para los selectores
+		--------------------------------------------------------------------------------------
+		fn keyDownItemEvent self events = 
+		(
+			--	Sólo lanzamos el evento si el item está activo
+			if self.enabled then
+			(
+				_key = events.keydata.tostring()
+				lb.synopticBox.rollMain.keyDownProcess _key
+			)
+		)
+		
+
+		--------------------------------------------------------------------------------------
+		--	STRUCT de selectores
+		--------------------------------------------------------------------------------------
+		struct strSelectorItem 
+		(
+			---------------------------------------
+			--	PROPIEDADES
+			---------------------------------------
+			
+			type = #selector,
+			pos = [0,0],
+			size = [20,20],
+			selected = false,
+			mode = #idle,
+			uiObj = undefined,
+			tab = undefined,	--	tab al que pertenece el item
+			obj = undefined,
+			text = "",
+			locked = false,
+			isIKFKSwitch = false,
+			
+			fillColor = ui.selectorFillColor,
+			borderColor = ui.selectorBorderColor,
+			
+			---------------------------------------
+			--	FUNCIONES
+			---------------------------------------
+			
+			--------------------------------------------------------------------------------------
+			fn setPos newPos =
+			(
+				if [this.uiObj.location.x, uiObj.location.y] != newPos then
+				(
+					this.pos = newPos
+					
+					uiObj.location = dotNetObject "System.Drawing.Point" (pos.x - (uiObj.width/2)) (pos.y - (uiObj.height/2))
+				)
+				--uiObj.refresh()
+			),
+			
+			
+			--------------------------------------------------------------------------------------
+			fn setSize newSize pivot:undefined =
+			(
+				if [this.uiObj.width, this.uiObj.height] != newSize then
+				(
+					this.size = newSize
+					this.uiObj.location = dotNetObject "System.Drawing.Point" (this.pos.x - (this.size.x/2)) (this.pos.y - (this.size.y/2))
+					this.uiObj.width = size.x
+					this.uiObj.height = size.y
+					this.uiObj.refresh()
+				)
+			),
+			
+			--------------------------------------------------------------------------------------
+			fn move offset = 
+			(
+				_newCoords = pos + offset
+				setPos _newCoords
+				uiObj.refresh()
+			),
+			
+			--------------------------------------------------------------------------------------
+			fn setText txt = 
+			(
+				this.text = txt
+				this.uiObj.text = txt
+				this.uiObj.refresh()
+			),
+			
+			--------------------------------------------------------------------------------------
+			fn update =
+			(
+				--	Actualizamos el color del objeto
+				_borderColor = if not this.selected then this.borderColor else ui.selectorHighlightColor
+				
+				--_fillColor = (dotNetClass "System.Drawing.Color").fromARGB _fillColor.r _fillColor.g _fillColor.b
+				this.uiObj.suspendLayout()
+				
+				this.uiObj.backColor = this.fillColor
+				this.uiObj.flatAppearance.checkedBackColor = this.fillColor
+				this.uiObj.flatAppearance.mouseOverBackColor = this.fillColor
+				this.uiObj.flatAppearance.mouseDownBackColor = this.fillColor
+				this.uiObj.flatAppearance.borderSize = if selected then ui.selectedSelectorBorderSize else ui.selectorBorderSize
+				this.uiObj.flatAppearance.borderColor = _borderColor
+				this.uiObj.text = this.text
+				this.setSize this.size
+				this.setPos this.pos
+				
+				this.uiObj.resumeLayout()
+				--this.uiObj.refresh()
+			),
+			
+			--------------------------------------------------------------------------------------
+			fn selectObj  selectObjectSet:false selectDescendants:false = 
+			(
+				if obj != undefined then
+				(
+					selectMore obj
+					if selectDescendants then
+					(
+						for arrDesc in (lb.rig.getHierarchySubLevelsFromNode obj) do
+							selectMore arrDesc
+					)
+					if selectObjectSet then 
+						selectMore (lb.objectSets.getNodesInSameObjectSet obj)
+				)
+			),
+			
+			--------------------------------------------------------------------------------------
+			fn deselectObj = 
+			(
+				if obj != undefined then
+					deselect obj
+			),
+
+			--------------------------------------------------------------------------------------
+			fn switchIKFK = 
+			(
+				if obj != undefined then
+				(
+					lb.synopticbox.rollmain.snapFkIk #(obj)
+				)
+			),
+			
+			--------------------------------------------------------------------------------------
+			fn setFillColor col =
+			(
+				this.fillColor = col
+				this.uiObj.backColor = col
+				this.uiObj.flatAppearance.checkedBackColor = col
+				this.uiObj.flatAppearance.mouseOverBackColor = col
+				this.uiObj.flatAppearance.mouseDownBackColor = col
+				--this.refresh()
+			),
+			
+			--------------------------------------------------------------------------------------
+			fn setBorderColor col =
+			(
+				this.borderColor = col
+				this.uiObj.flatAppearance.borderColor = col
+				--this.refresh()
+			),
+			
+			--	Asigna al selector el objeto que representa en la escena
+			--------------------------------------------------------------------------------------
+			fn assignObject newObj = 
+			(
+				this.obj = newObj
+				--lb.synopticBox.rollMain.updateInterface()
+			),
+
+			--------------------------------------------------------------------------------------
+			fn toggleIKFKSwitch = 
+			(
+				this.isIKFKSwitch = not this.isIKFKSwitch
+			),
+			
+			--------------------------------------------------------------------------------------
+			fn deSelect keepObjectSelected:false =
+			(
+				selected = false
+				
+				if ui.editMode == #animator and not keepObjectSelected then deselectObj()
+				
+				this.uiObj.flatAppearance.borderColor = borderColor
+			),
+			
+			--------------------------------------------------------------------------------------
+			fn select selectObjectSet:false selectDescendants:false = 
+			(
+				selected = true
+				
+				if ui.editMode == #animator then
+				(
+					if this.isIKFKSwitch then
+						this.switchIKFK()
+					else
+						this.selectObj selectObjectSet:selectObjectSet selectDescendants:selectDescendants
+				)
+				
+				this.uiObj.flatAppearance.borderColor = (dotnetclass "system.drawing.color").white
+			),
+			
+			--------------------------------------------------------------------------------------
+			fn init pos:[10,10] size:[ui.selectorWidth, ui.selectorHeight] fillColor:ui.selectorFillColor borderColor:ui.selectorBorderColor text:"" = 
+			(
+				--	Creación del control dotNet y configuración de apariencia
+				_uiItem = (dotnetObject "System.Windows.Forms.Button")
+				uiObj = _uiItem
+				
+				_uiItem.name = ui.selectorUIobjName
+				_uiItem.location = dotNetObject "System.Drawing.Point" -100 -100
+				_uiItem.textAlign = (dotNetClass "System.Drawing.ContentAlignment").bottomCenter
+				_uiItem.flatStyle = (dotnetClass "System.Windows.Forms.FlatStyle").flat
+				_uiItem.flatAppearance.borderSize = ui.selectorBorderSize
+				
+				--	le añadimos los eventos al control dotNet
+				dotNet.addEventHandler _uiItem "mouseDown" mouseDownItemEvent
+				dotNet.addEventHandler _uiItem "mouseUp" mouseUpItemEvent
+				dotNet.addEventHandler _uiItem "mouseMove" mouseMoveItemEvent
+				dotNet.addEventHandler _uiItem "keyDown" keyDownItemEvent
+				
+				tab = ui.tabs.selectedTab
+				
+				if ui.filterItems == #images then uiObj.enabled = false
+				
+				--	Colocamos y mostramos el control
+				this.setText text
+				this.setFillColor fillColor
+				this.setBorderColor borderColor
+				this.setSize size
+				this.setPos pos
+			),
+			
+			--------------------------------------------------------------------------------------
+			fn refresh =
+			(
+				uiObj.refresh()
+			)
+		)	--	strSelectorItem
+		
+
+		--++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+		--	TRANSFORMATOR  ITEM
+		--  Es la caja que contiene items y que sirve para moverlos y escalarlos en grupo, cuando estamos en modo rig
+		--++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+		
+		--------------------------------------------------------------------------------------
+		--	Evento MOUSEDOWN para el transformator
+		--------------------------------------------------------------------------------------
+		fn mouseDownTransformatorItemEvent self events = 
+		(
+			_btn = events.button.toString()
+			_selfItem = ui.transformator	--	item al que pertenece el objeto de interface
+			
+			if _btn == "Left" then
+			(
+				if ui.editMode == #rigger then
+				(
+					oldValues = (parent.getValues ui.tabs.selectedTab.selectedItems) + (parent.getValues _selfItem)	--	Metemos como último elemento del array los valores actuales del Transformator
+					mousePos = [events.x, events.y]
+					
+					self.hide()
+					
+					if 	mousePos.x < ui.transformator.borderTolerance or mousePos.x > (self.width - ui.transformator.borderTolerance) or \
+						mousePos.y < ui.transformator.borderTolerance or mousePos.y > (self.height - ui.transformator.borderTolerance) then
+					(
+						ui.mode = #transformToolScale
+						_selfItem.pivot.x = if events.x < ui.transformator.borderTolerance then (_selfItem.pos.x + _selfItem.size.x) else _selfItem.pos.x
+						_selfItem.pivot.y = if events.y < ui.transformator.borderTolerance then (_selfItem.pos.y + _selfItem.size.y) else _selfItem.pos.y
+					)
+					else
+					(
+						ui.mode = #transformToolMove
+						_transformatorItemPosBackup = ui.transformator.pos
+					)
+				
+					setCursorShape self mousePos
+				)
+			)
+			
+			if _btn == "Right" then
+			(
+				lb.synopticBox.rollMain.createRMenu mouse.screenPos ui.filterItems
+			)
+			
+			 if _btn == "Middle" then
+			(
+			)
+		)
+		
+		--------------------------------------------------------------------------------------
+		fn sign num =
+		(
+			if num < 0 then -1 else 1
+		)
+		
+		--------------------------------------------------------------------------------------
+		--	Evento MOUSEMOVE para el transformator
+		--------------------------------------------------------------------------------------
+		fn mouseMoveTransformatorItemEvent self events = 
+		(
+			_btn = events.button.toString()
+			_newMousePos = [events.x, events.y]
+			
+			case _btn of
+			(
+				"None":
+				(
+					setCursorShape self _newMousePos
+				)
+				"Left":
+				(
+					_transformator = ui.transformator
+					_offset = _newMousePos - mousePos
+
+					case ui.mode of 
+					(
+						#transformToolMove:
+						(
+							ui.moveItems ui.tabs.selectedTab.selectedItems _offset
+						)
+						
+						#transformToolScale:
+						(
+							if cursor.current == (dotNetClass "Windows.Forms.Cursors").sizeNS then
+								_transform = "vertical"
+							else if cursor.current == (dotNetClass "Windows.Forms.Cursors").sizeWE then
+								_transform = "horizontal"
+							else
+								_transform = "diagonal"
+
+							_oldValuesTransformator = oldValues[oldValues.count]
+							_dir = (_oldValuesTransformator.pos - _oldValuesTransformator.pivot)/_oldValuesTransformator.size
+							_offset *=  [sign _dir.x, sign _dir.y]
+
+							if _transform == "diagonal" and keyboard.shiftPressed do
+								_offset = if _offset.x > _offset.y then [_offset.x, _offset.x] else [_offset.y, _offset.y]
+							
+							_newSize = _oldValuesTransformator.size + _offset --* ((_oldValuesTransformator.pos - _oldValuesTransformator.pivot)/_oldValuesTransformator.size))
+							_scaleFactor = _newSize / _oldValuesTransformator.size
+														
+							--	Transformamos primero el Transformator
+							_transformator.draw _oldValuesTransformator.pos (_oldValuesTransformator.pos + _oldValuesTransformator.size + _offset)
+							
+							--	Transformamos ahora cada uno de los objetos seleccionados
+							for i = 1 to (ui.tabs.selectedTab.selectedItems.count) do
+							(
+								_item = ui.tabs.selectedTab.selectedItems[i]
+								_newPos = (oldValues[i].pos + (_offset * ((oldValues[i].pos - _oldValuesTransformator.pivot) / _oldValuesTransformator.size)))
+								_newSize = (oldValues[i].size * _scaleFactor)
+
+								case _transform of
+								(
+									"vertical"	: (_item.size = [_item.size.x, abs _newSize.y]; _item.pos = [_item.pos.x, _newPos.y])
+									"horizontal": (_item.size = [abs _newSize.x, _item.size.y]; _item.pos = [_newPos.x, _item.pos.y])
+									default		: (_item.size = [abs _newSize.x, abs _newSize.y]; _item.pos = [_newPos.x, _newPos.y])
+								)
+
+								_item.update()
+							)
+							
+							for _image in ui.tabs.selectedTab.imageItems where findItem ui.tabs.selectedTab.selectedItems _image == 0 do
+							(
+								_image.refresh()
+							)
+							--mousePos = _newMousePos
+						)
+					)
+				)
+			)
+		)
+
+		--------------------------------------------------------------------------------------
+		--	Evento MOUSEUP para el transformator
+		--------------------------------------------------------------------------------------
+		fn mouseUpTransformatorItemEvent self events =
+		(
+			_btn = events.button.toString()
+			
+			if _btn == "Left" then
+			(
+				-- Si venimos de mover un selector creamos el comando para poder deshacerlo
+				if ui.mode == #transformToolMove do
+				(
+					_transformatorItemPosOffset = [0,0]
+					
+					_transformatorItemPosOffset.x = (ui.transformator.pos).x - _transformatorItemPosBackup.x
+					_transformatorItemPosOffset.y = (ui.transformator.pos).y - _transformatorItemPosBackup.y
+
+					-- Si no hemos hecho un simple click sin moverlo
+					if _transformatorItemPosOffset.x != 0 and _transformatorItemPosOffset.y != 0 do 
+					(
+						-- creamos el comando con los datos que necesita
+						_command = commandMoveGroup _posOffset:_transformatorItemPosOffset
+
+						-- Lo ejecutamos usando la pila de undo/redo para que ella gestione todo
+						_commandStack.executeCommand _command
+					)
+				)
+
+				ui.mode = #transformTool
+				ui.transformator.update()
+				self.show()
+			)
+			
+			if _btn == "Right" then
+			(
+			)
+			
+			if _btn == "Middle" then
+			(
+			)
+			
+			setfocus tbTabs
+		)
+		
+		--------------------------------------------------------------------------------------
+		--	STRUCT de transformator (el cuadrado que rodea los items cuando los queremos mover)
+		--------------------------------------------------------------------------------------
+		struct strTransformatorItem 
+		(
+			---------------------------------------
+			--	PROPIEDADES
+			---------------------------------------
+			
+			type = #transformator,
+			pos = [-10,-10],
+			size = [0,0],
+			pivot = [0,0],
+			mode = #idle,
+			uiObj = undefined,
+			borderTolerance = 5,		--	pixels de tolerancia para detectar el borde del control
+			
+			--selItems = #(),
+			
+			---------------------------------------
+			--	FUNCIONES
+			---------------------------------------
+			
+			fn setPos newPos =
+			(
+				-- Si los items son de tipo selector, tenemos que hacer clipping en los lados del canvas
+				_clip = (ui.filterItems == #selectors)	
+
+				-- establecemos la posicion provisional				
+				pos = newPos
+				
+				-- Si hay que hacer clipping, miramos los extremos del canvas y lo restringimos
+				if  _clip then
+				(
+					_maxXpos = (ui.tabs.selectedTab.uiObj.width - size.x)
+					_maxYpos = (ui.tabs.selectedTab.uiObj.height - size.y)
+					
+					if pos.x < 0 then pos.x = 0
+					if pos.x > _maxXpos then pos.x = _maxXpos
+					if pos.y < 0 then pos.y = 0
+					if pos.y > _maxYpos then pos.y = _maxYpos
+				)
+				
+				-- Cambiamos la posicion del objeto visual de dotNet
+				uiObj.location = dotNetObject "System.Drawing.Point" (pos.x - ui.transformatorBorderSize) (pos.y - ui.transformatorBorderSize)
+				
+				uiObj.refresh()
+			),
+			
+			--------------------------------------------------------------------------------------
+			--@fn: void | move | Sirve para mover un offset respecto a la posicion actual. No para mover a un lugar concreto.
+			--------------------------------------------------------------------------------------
+			fn move offset = 
+			(
+				_newCoords = pos + offset
+				setPos _newCoords
+			),
+			
+			--------------------------------------------------------------------------------------
+			fn setSize newSize =
+			(
+				_borderSize = uiObj.flatAppearance.borderSize		
+								
+				size = newSize
+				uiObj.width = size.x + (_borderSize * 2)
+				uiObj.height = size.y + (_borderSize * 2)
+				uiObj.refresh()
+			),
+			
+			--------------------------------------------------------------------------------------
+			fn draw pos1 pos2 =
+			(
+				_xMin = _xMax = _yMin = _yMax = 0
+				_borderSize = uiObj.flatAppearance.borderSize
+																			
+				--	ordenamos las coordenadas de la caja
+				if pos1.x < pos2.x then  
+				(
+					_xMin = pos1.x
+					_xMax =  pos2.x
+				)
+				else
+				(
+					_xMin = pos2.x
+					_xMax =  pos1.x
+				)
+				
+				if pos1.y < pos2.y then  
+				(
+					_yMin = pos1.y
+					_yMax =  pos2.y
+				)
+				else
+				(
+					_yMin = pos2.y
+					_yMax =  pos1.y
+				)
+				
+				setSize([_xMax,_yMax] - [_xMin,_yMin])
+				setPos [_xMin,_yMin] 
+			),
+			
+			--------------------------------------------------------------------------------------
+			--@fn: void | updateChildIndex | Ordena el transformator para que se dibuje debajo de los selectorItem o  imageItem
+			--------------------------------------------------------------------------------------
+			fn updateChildIndex =
+			(
+				_tab = ui.tabs.selectedTab
+				_items = if ui.filterItems == #selectors then _tab.selectoritems else _tab.selectedItems
+				_childIndex = 0
+				
+				--	Ordenamos el transformator para que se dibuje justo debajo de los selectors
+				for _item in _items do 
+					if _tab.uiObj.controls.getChildIndex _item.uiObj > _childIndex then
+						_childIndex = (_tab.uiObj.controls.getChildIndex _item.uiObj)
+				
+				_tab.uiObj.controls.setChildIndex uiObj (_childIndex + 1)
+			),
+			
+			--------------------------------------------------------------------------------------
+			--@fn: void | frameItems | Encuadra los items pasados por parámetro para permitir su manipulación
+			--------------------------------------------------------------------------------------
+			fn frameItems items = 
+			(
+				_xMin = 999999
+				_xMax = -999999
+				_yMin = 999999
+				_yMax = -999999
+				
+				updateChildIndex()
+
+				-- Si estamos justo modificando los selectores 
+				-- Y le pasamos algun item
+				if (ui.mode == #transformTool) and (items != #none) and (items.count > 0) then
+				(
+					for _item in items do
+					(
+						if _item.uiObj.location.x < _xMin then _xMin = _item.uiObj.location.x
+						if _item.uiObj.location.y < _yMin then _yMin = _item.uiObj.location.y
+						if _item.uiObj.location.x + _item.uiObj.width > _xMax then _xMax = _item.uiObj.location.x + _item.uiObj.width
+						if _item.uiObj.location.y + _item.uiObj.height > _yMax then _yMax = _item.uiObj.location.y + _item.uiObj.height
+					)
+					
+					setPos [_xMin, _yMin]
+					setSize [(_xMax - _xMin), (_yMax - _yMin)]
+					uiObj.show()
+				)
+				else
+				(
+					this.setPos [-10 , -10]
+					this.setSize [0 , 0]
+					uiObj.hide()
+				)
+				
+				
+			),
+			
+			--------------------------------------------------------------------------------------
+			fn update =
+			(
+				uiObj.parent = ui.tabs.selectedTab.uiObj
+				
+				if ui.mode == #transformTool then
+					frameItems ui.tabs.selectedTab.selectedItems
+				else
+					frameItems #none
+				
+				updateChildIndex()
+			),
+			
+			--------------------------------------------------------------------------------------
+			fn init  = 
+			(
+				--	Creación del control dotNet y configuración de apariencia
+				_uiItem = (dotnetObject "System.Windows.Forms.Button")
+				this.uiObj = _uiItem
+
+				
+				_uiItem.visible = false
+				_uiItem.name = ui.transformatorUIobjName
+				_uiItem.textAlign = (dotNetClass "System.Drawing.ContentAlignment").bottomCenter
+				_uiItem.parent = ui.tabs.selectedTab.uiObj
+				
+				_uiItem.flatStyle = (dotnetClass "System.Windows.Forms.FlatStyle").flat
+				_uiItem.backColor = ui.transformatorFillColor
+				_uiItem.flatAppearance.checkedBackColor = ui.transformatorFillColor
+				_uiItem.flatAppearance.mouseOverBackColor = ui.transformatorFillColor
+				_uiItem.flatAppearance.mouseDownBackColor = ui.transformatorFillColor
+				_uiItem.flatAppearance.borderSize = ui.transformatorBorderSize
+				_uiItem.flatAppearance.borderColor = ui.transformatorBorderColor
+				
+				--	le añadimos los eventos al control dotNet
+				dotNet.addEventHandler _uiItem "mouseDown" 	mouseDownTransformatorItemEvent
+				dotNet.addEventHandler _uiItem "mouseUp" 	mouseUpTransformatorItemEvent
+				dotNet.addEventHandler _uiItem "mouseMove" 	mouseMoveTransformatorItemEvent
+				
+				
+				--	ordenamos los controles del interface para que los transformes se dibujen siempre por encima de las imágenes
+				_found = false
+				_controls = ui.getControls()
+				
+				for i = 1 to _controls.count where not _found do
+				(
+					if _controls[i].name == ui.imageUIobjName then 
+					(
+						_found = true
+						ui.tabs.selectedTab.uiObj.controls.setChildIndex _controls[_controls.count] (i - 1)
+					)
+				)
+				
+				--	Colocamos y mostramos el control
+				this.update()
+				uiObj.show()
+			),
+			
+			--------------------------------------------------------------------------------------
+			fn refresh =
+			(
+				uiObj.refresh()
+			)
+		)
+		
+
+		--++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+		--	REGIONSQUARE  ITEM 
+		-- El item que aparece cuando creamos una caja de seleccion sobre unos items. Desaparece al soltar el boton del raton
+		--++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+		
+		--------------------------------------------------------------------------------------
+		--	STRUCT de regionSquare
+		--------------------------------------------------------------------------------------
+		struct strRegionSquareItem
+		(
+			---------------------------------------
+			--	PROPIEDADES
+			---------------------------------------
+			
+			type = #regionSquare,
+			pos = [-10,-10],
+			size = [0,0],
+			mode = #idle,
+			uiObj = undefined,
+			
+			
+			---------------------------------------
+			--	FUNCIONES
+			---------------------------------------
+			
+			--------------------------------------------------------------------------------------
+			fn setPos newPos =
+			(
+				_borderSize = ui.regionSquareBorderSize
+				pos = newPos
+				
+				uiObj.location = dotNetObject "System.Drawing.Point" (pos.x - _borderSize) (pos.y - _borderSize)
+				
+				uiObj.refresh()
+			),
+			
+			--------------------------------------------------------------------------------------
+			fn move offset = 
+			(
+				_newCoords = pos + offset
+				setPos _newCoords
+			),
+			
+			--------------------------------------------------------------------------------------
+			fn setSize newSize =
+			(
+				_borderSize = ui.regionSquareBorderSize
+				
+				size = newSize
+				uiObj.width = size.x + (_borderSize * 2)
+				uiObj.height = size.y + (_borderSize * 2)
+				uiObj.refresh()
+			),
+			
+			--------------------------------------------------------------------------------------
+			fn draw pos1 pos2 =
+			(
+				_xMin = _xMax = _yMin = _yMax = 0
+				_borderSize = ui.regionSquareBorderSize
+				
+				--	ordenamos las coordenadas de la caja
+				if pos1.x < pos2.x then  
+				(
+					_xMin = pos1.x
+					_xMax =  pos2.x
+				)
+				else
+				(
+					_xMin = pos2.x
+					_xMax =  pos1.x
+				)
+				
+				if pos1.y < pos2.y then  
+				(
+					_yMin = pos1.y
+					_yMax =  pos2.y
+				)
+				else
+				(
+					_yMin = pos2.y
+					_yMax =  pos1.y
+				)
+				
+				setSize([_xMax,_yMax] - [_xMin,_yMin])
+				setPos [_xMin,_yMin] 
+				
+			),
+			
+			
+			--------------------------------------------------------------------------------------
+			fn update =
+			(
+				_tab = ui.tabs.selectedTab
+				_items = _tab.imageItems
+				_childIndex = 999999
+				
+				uiObj.parent = _tab.uiObj
+				
+				--	Ordenamos el regionSquare para que se dibuje justo debajo de los selectors
+				for _item in _items do 
+					if _tab.uiObj.controls.getChildIndex _item.uiObj < _childIndex then
+						_childIndex = (_tab.uiObj.controls.getChildIndex _item.uiObj)
+				
+				_tab.uiObj.controls.setChildIndex uiObj (_childIndex-1)
+
+
+			),
+			
+			
+			--------------------------------------------------------------------------------------
+			fn init  = 
+			(
+				--	Creación del control dotNet y configuración de apariencia
+				_uiItem = (dotnetObject "System.Windows.Forms.Button")
+				_uiItem.visible = false
+				_uiItem.name = ui.regionSquareUIobjName
+				_uiItem.parent = ui.tabs.selectedTab.uiObj
+				
+
+				_uiItem.flatStyle = (dotnetClass "System.Windows.Forms.FlatStyle").flat
+				_uiItem.backColor = ui.regionSquareFillColor
+				_uiItem.flatAppearance.checkedBackColor = ui.regionSquareFillColor
+				_uiItem.flatAppearance.mouseOverBackColor = ui.regionSquareFillColor
+				_uiItem.flatAppearance.mouseDownBackColor = ui.regionSquareFillColor
+				_uiItem.flatAppearance.borderSize = ui.regionSquareBorderSize
+				_uiItem.flatAppearance.borderColor = ui.regionSquareBorderColor
+				
+				--	le añadimos los eventos al control dotNet
+				dotNet.addEventHandler _uiItem "mouseDown" mouseDownTransformatorItemEvent
+				dotNet.addEventHandler _uiItem "mouseUp" mouseUpTransformatorItemEvent
+				dotNet.addEventHandler _uiItem "mouseMove" mouseMoveTransformatorItemEvent
+				
+				uiObj = _uiItem
+				
+				--	Colocamos y mostramos el control
+				this.update()
+			),
+			
+			--------------------------------------------------------------------------------------
+			fn refresh =
+			(
+				uiObj.refresh()
+			)
+		)	--	strRegionSquareItem
+		
+		--++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+		--	IMAGE ITEMS
+		--++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+		
+		--------------------------------------------------------------------------------------
+		--	STRUCT de Images
+		--------------------------------------------------------------------------------------
+		struct strImageItem 
+		(
+			---------------------------------------
+			--	PROPIEDADES
+			---------------------------------------
+			
+			type = #image,
+			pos = [0,0],
+			size = [20,20],
+			selected = false,
+			mode = #idle,
+			uiObj = undefined,
+			tab = undefined,	--	tab al que pertenece el item
+			
+			---------------------------------------
+			--	FUNCIONES
+			---------------------------------------
+			
+			--------------------------------------------------------------------------------------
+			fn setPos newPos =
+			(
+				pos = newPos
+				
+				uiObj.location = dotNetObject "System.Drawing.Point" (pos.x - (uiObj.width/2)) (pos.y - (uiObj.height/2))
+				uiObj.refresh()
+			),
+			
+			--------------------------------------------------------------------------------------
+			fn setSize newSize =
+			(
+				size = newSize
+				uiObj.location = dotNetObject "System.Drawing.Point" (pos.x - (size.x/2)) (pos.y - (size.y/2))
+				uiObj.width = size.x
+				uiObj.height = size.y
+				uiObj.refresh()
+			),
+			
+			--------------------------------------------------------------------------------------
+			fn move offset = 
+			(
+				_newCoords = pos + offset
+				setPos _newCoords
+			),
+			
+			--------------------------------------------------------------------------------------
+			fn update =
+			(
+				--	Actualizamos el color del objeto
+				_borderColor = if not selected then borderColor else highlightColor
+				
+			-- 				_fillColor = (dotNetClass "System.Drawing.Color").fromARGB _fillColor.r _fillColor.g _fillColor.b
+				
+				uiObj.backColor = fillColor
+				uiObj.flatAppearance.checkedBackColor = fillColor
+				uiObj.flatAppearance.mouseOverBackColor = fillColor
+				uiObj.flatAppearance.mouseDownBackColor = fillColor
+				uiObj.flatAppearance.borderSize = if selected then ui.selectedimageBorderSize else ui.imageBorderSize
+				uiObj.flatAppearance.borderColor = _borderColor
+			),
+			
+			--------------------------------------------------------------------------------------
+			fn deselect =
+			(
+				selected = false
+				
+				update()
+			),
+			
+			--------------------------------------------------------------------------------------
+			fn select = 
+			(
+				selected = true
+				update()
+			),
+			
+			--------------------------------------------------------------------------------------
+			fn init pos:[ui.tabs.selectedTab.uiObj.width/2, ui.tabs.selectedTab.uiObj.height/2] image:undefined = 
+			(
+				--	Creación del control dotNet y configuración de apariencia
+				_uiItem = (dotnetObject "System.Windows.Forms.Button")
+				_uiItem.visible = false
+				_uiItem.name = ui.imageUIobjName
+				_uiItem.height = ui.imageHeight
+				_uiItem.width = ui.imageWidth
+				_uiItem.location = dotNetObject "System.Drawing.Point" 50 100
+				_uiItem.textAlign = (dotNetClass "System.Drawing.ContentAlignment").bottomCenter
+				
+				_uiItem.flatStyle = (dotnetClass "System.Windows.Forms.FlatStyle").flat
+				_uiItem.backColor = ui.imageFillColor
+				_uiItem.flatAppearance.checkedBackColor = ui.imageFillColor
+				_uiItem.flatAppearance.mouseOverBackColor = ui.imageFillColor
+				_uiItem.flatAppearance.mouseDownBackColor = ui.imageFillColor
+				_uiItem.flatAppearance.borderSize = ui.imageBorderSize
+				_uiItem.flatAppearance.borderColor = ui.imageBorderColor
+				
+				--	le añadimos los eventos al control dotNet
+				dotNet.addEventHandler _uiItem "mouseDown" mouseDownItemEvent
+				dotNet.addEventHandler _uiItem "mouseUp" mouseUpItemEvent
+				dotNet.addEventHandler _uiItem "mouseMove" mouseMoveItemEvent
+				dotNet.addEventHandler _uiItem "keyDown" keyDownItemEvent
+				
+				uiObj = _uiItem
+				tab = ui.tabs.selectedTab
+				
+				--	si hay imagen definida escalamos el control al tamaño de la misma y la aplicamos como fondo del control
+				if image != undefined then
+				(
+					_filename = sysinfo.currentdir + "\\__imgTmp__.jpg"
+					_clipboard = dotNetClass "System.Windows.Forms.Clipboard"
+					
+					image.filename = _filename
+					save image
+					
+					_bmp = dotNetObject "System.Drawing.Bitmap" _filename	--	cargamos el bitmap
+					_clipboard.setImage _bmp	--	metemos el bitmap en memoria para poder liberarlo
+					_bmp.dispose()		--	liberamos las instancias del bitmap. Esto permite poder borrar el fichero. No se encontró otra forma.
+					deleteFile _filename	--	Ahora podemos borrar el fichero temporal que se ha creado para el bitmap
+					
+					_bmp = _clipboard.getImage()	--	capturamos el bitmap del clipboard
+					
+					setSize [_bmp.width, _bmp.height]		--	le damos al control el tamaño del bitmap
+					_uiItem.backGroundImageLayout = (dotNetClass "System.Windows.Forms.ImageLayout").stretch
+					_uiItem.backGroundImage = _bmp		--	por último, le ponemos al control el bitmap de fondo
+					
+				)
+				
+				if ui.filterItems == #selectors then uiObj.enabled = false
+				
+				setPos pos
+				uiObj.show()
+			),
+			
+			--------------------------------------------------------------------------------------
+			fn refresh =
+			(
+				uiObj.refresh()
+			)
+		)	--	strImageItem
+		
+		
+		--++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+		--	SYMMETRY BAR
+		--++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+		
+		
+		--------------------------------------------------------------------------------------
+		--	Evento MOUSEDOWN para Symmetry Bar
+		--------------------------------------------------------------------------------------
+		fn mouseDownSymmetryBarEvent self events = 
+		(
+			_btn = events.button.toString()
+			
+			if _btn == "Left" then
+			(
+				mousePos = [events.x, events.y]
+				ui.activeItems = #(ui.symmetryBar)
+			)
+			
+			if _btn == "Right" then
+			(
+				lb.synopticBox.rollMain.createRMenu mouse.screenPos #symmetryBar
+			)
+			
+			 if _btn == "Middle" then
+			(
+			)
+		)
+
+		--------------------------------------------------------------------------------------
+		--	Evento MOUSEMOVE para symmetryBar
+		--------------------------------------------------------------------------------------
+		fn mouseMoveSymmetryBarEvent self events = 
+		(
+			_newMousePos = [events.x, events.y]
+			_btn = events.button.toString()
+			
+			case ui.mode of
+			(
+				default:
+				(
+					cursor.current = (dotNetClass "Windows.Forms.Cursors").sizeWE
+					
+					if _btn == "Left" then
+					(
+						for _item in ui.activeItems do
+						(
+							_item.xPos += _newMousePos.x - mousePos.x
+							_item.update()
+						)
+					)
+				)
+			)
+		)
+
+		--------------------------------------------------------------------------------------
+		--	Evento MOUSEUP para symmetryBar
+		--------------------------------------------------------------------------------------
+		fn mouseUpSymmetryBarEvent self events =
+		(
+			_btn = events.button.toString()
+			
+			if _btn == "Left" then
+			(
+			)
+			
+			if _btn == "Middle" then
+			(
+			)
+			
+			setfocus tbTabs
+		)
+		
+		----------------------------------------------------
+		-- ITEM SYMMETRY BAR
+		----------------------------------------------------
+		struct strSymmetryBar
+		(
+			type = #symmetryBar,			--  tipo de elemento 
+			uiObj = undefined,				--  elemento de interface asociado
+			barObj = undefined, 			--  barra vertical
+			mode = #idle, 					--  puede valer #idle, #leftBorderDrag, #rightBorderDrag, #move o #timeSlide
+			xPos = (ui.tabs.selectedTab.uiObj.width/2),
+			
+			--	Inicia el objeto
+			--------------------------------------------------------------------------------------
+			fn init =
+			(
+				_barHandle = (dotnetObject "System.Windows.Forms.Button")
+				_barHandle.name = ui.symmetryBarHandleUIobjName
+				_barHandle.textAlign = (dotNetClass "System.Drawing.ContentAlignment").bottomCenter
+				_barHandle.location.x = ((xPos * ui.hScale) + ui.offset.x) as integer
+				_barHandle.location.y = ui.tabs.selectedTab.uiObj.height - ui.symmetryBarHandleHeight
+				_barHandle.width = ui.symmetryBarHandleWidth
+				_barHandle.height = ui.symmetryBarHandleHeight
+				_barHandle.flatStyle = (dotnetClass "System.Windows.Forms.FlatStyle").flat
+				_barHandle.flatAppearance.borderSize = ui.symmetryBarBorderSize
+				_barHandle.flatAppearance.borderColor = ui.symmetryBarBorderColor
+				_barHandle.backColor = ui.symmetryBarColor
+				_barHandle.flatAppearance.checkedBackColor = ui.symmetryBarColor
+				_barHandle.flatAppearance.mouseOverBackColor = ui.symmetryBarColor
+				_barHandle.flatAppearance.mouseDownBackColor = ui.symmetryBarColor
+				_barHandle.parent = ui.tabs.selectedTab.uiObj
+				
+				_bar = (dotnetObject "System.Windows.Forms.Button")
+				_bar.name = ui.symmetryBarUIobjName
+				_bar.textAlign = (dotNetClass "System.Drawing.ContentAlignment").bottomCenter
+				_bar.location.x = (xPos*ui.hScale) as integer
+				_bar.width = ui.symmetryBarWidth
+				_bar.height = ui.tabs.selectedTab.uiObj.height
+				_bar.flatStyle = (dotnetClass "System.Windows.Forms.FlatStyle").flat
+				_bar.flatAppearance.borderSize = ui.symmetryBarBorderSize
+				_bar.flatAppearance.borderColor = ui.symmetryBarBorderColor
+				_bar.backColor = ui.symmetryBarColor
+				_bar.flatAppearance.checkedBackColor = ui.symmetryBarColor
+				_bar.flatAppearance.mouseOverBackColor = ui.symmetryBarColor
+				_bar.flatAppearance.mouseDownBackColor = ui.symmetryBarColor
+				_bar.parent = ui.tabs.selectedTab.uiObj
+				
+				dotNet.addEventHandler _barHandle "mouseDown" mouseDownSymmetryBarEvent
+				dotNet.addEventHandler _barHandle "mouseUp" mouseUpSymmetryBarEvent
+				dotNet.addEventHandler _barHandle "mouseMove" mouseMoveSymmetryBarEvent
+				
+				dotNet.addEventHandler _bar "mouseDown" mouseDownSymmetryBarEvent
+				dotNet.addEventHandler _bar "mouseUp" mouseUpSymmetryBarEvent
+				dotNet.addEventHandler _bar "mouseMove" mouseMoveSymmetryBarEvent
+				
+				uiObj = _barHandle
+				barObj = _bar
+				this.update()
+			),
+			
+			--------------------------------------------------------------------------------------
+			fn update = 
+			(
+				_tab = ui.tabs.selectedTab
+				uiObj.parent = _tab.uiObj
+				barObj.parent = _tab.uiObj
+				
+				_tab.uiObj.controls.setChildIndex uiObj 0
+				_tab.uiObj.controls.setChildIndex barObj 1
+				
+				uiObj.visible = barObj.visible = btnSymmetryBar.checked
+				
+				barObj.location.x = ((xPos * ui.hScale) + ui.offset.x) as integer
+				barObj.height = ui.tabs.selectedTab.uiObj.height
+				
+				uiObj.location.x = barObj.location.x - (uiObj.width / 2)
+				uiObj.location.y = ui.tabs.selectedTab.uiObj.height - uiObj.height
+			),
+			
+			--	Redibuja el objeto
+			--------------------------------------------------------------------------------------
+			fn refresh =
+			(
+				barObj.refresh()
+				uiObj.refresh()
+			)
+		)	--	strSymmetryBar
+		
+
+		--++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+		-- TAB ITEM
+		--++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+			
+		--------------------------------------------------------------------------------------
+		--	Evento MOUSEDOWN para los Tabs
+		--------------------------------------------------------------------------------------
+		fn mouseDownTabEvent self events =
+		(
+			_btn = events.button.toString()
+			
+			mousePos = [events.x, events.y]
+			
+			case _btn of 
+			(
+				"Left":
+				(
+					case ui.mode of
+					(
+						#addSelectorsTool:	
+						(
+							ui.tabs.selectedTab.addSelector [events.x, events.y]
+							cursor.current  = (dotNetClass "Windows.Forms.Cursors").cross
+						)
+						
+						default:
+						(
+							ui.regionSquare.uiObj.show()
+						)
+					)
+				)
+			
+				"Middle":
+				(
+					
+				)
+			
+				"Right":
+				(
+					case ui.mode of
+					(
+						#addSelectorsTool: lb.synopticBox.rollMain.setMode #transformTool
+						default: lb.synopticBox.rollMain.createRmenu mouse.screenPos ui.filterItems
+					)
+					
+					
+				)
+			)
+		)
+		
+		--------------------------------------------------------------------------------------
+		--	Evento MOUSEMOVE para los Tabs
+		--------------------------------------------------------------------------------------
+		fn mouseMoveTabEvent self events =
+		(
+			_btn = events.button.toString()
+			_newMousePos = [events.x, events.y]
+			
+			if _btn == "Left" then
+			(
+				if ui.mode != #addSelectorsTool then ui.regionSquare.draw mousePos _newMousePos
+			)
+			
+			case ui.mode of
+			(
+				#addSelectorsTool: cursor.current = (dotNetClass "Windows.Forms.Cursors").cross
+			)
+		)
+		
+		--------------------------------------------------------------------------------------
+		--	Evento MOUSEUP para los tabs
+		--------------------------------------------------------------------------------------
+		fn mouseUpTabEvent self events =
+		(
+			_btn = events.button.toString()
+			_newMousePos = [events.x, events.y]
+
+			if _btn == "Left" then
+			(
+				case ui.mode of
+				(
+					#addSelectorsTool: cursor.current  = (dotNetClass "Windows.Forms.Cursors").cross
+					
+					default:
+					(
+						--	REGION SELECT  --
+						ui.regionSquare.uiObj.hide()
+						
+						if _newMousePos != mousePos then
+						(
+							local _x, _y, _width, _height
+							
+							--	Calculamos el rectángulo de selección
+							if mousePos.x < _newMousePos.x then _x = mousePos.x else _x = _newMousePos.x
+							if mousePos.y < _newMousePos.y then _y = mousePos.y else _y = _newMousePos.y
+							_width = abs (mousePos.x - _newMousePos.x)
+							_height = abs (mousePos.y - _newMousePos.y)
+							
+							--	Calculamos quien entran en la selección
+							_candidateItems = #()
+							
+							if ui.filterItems == #selectors then 
+								_candidateItems = ui.tabs.selectedTab.selectorItems 
+							else 
+								_candidateItems = ui.tabs.selectedTab.imageItems
+							
+							_itemsToSelect = #()
+								
+							for _item in _candidateItems do
+							(
+								if 	(_item.uiObj.location.x + _item.uiObj.width) > _x and (_item.uiObj.location.x < _x + _width) and
+									(_item.uiObj.location.y + _item.uiObj.height) > _y and (_item.uiObj.location.y < _y + _height) and
+									(_item.uiObj.enabled) then
+										append _itemsToSelect _item
+							)
+							
+							
+							if keyboard.altPressed then 
+								ui.deselectItems _itemsToSelect clearSelection:false
+							else if keyboard.controlPressed then 
+								ui.selectItems _itemsToSelect clearSelection:false
+							else
+								ui.selectItems _itemsToSelect clearSelection:true
+						)
+						else
+						(
+							ui.selectItems #none
+						)
+					)
+				)
+			)
+			
+			setFocus tbTabs
+		)
+		
+		--------------------------------------------------------------------------------------
+		--	Evento KEYDOWN para los tabs
+		--------------------------------------------------------------------------------------
+		fn keyDownTabEvent self events =
+		(
+			_key = events.keydata.tostring()
+			keyDownProcess _key
+		)
+
+		--------------------------------------------------------------------------------------
+		--	STRUCT tab
+		--------------------------------------------------------------------------------------
+		struct strTabItem
+		(
+			name = "New Synoptic",
+			uiObj = undefined,
+			selectorItems = #(),
+			imageItems = #(),
+			selectedItems = #(),
+						
+			--	Devuelve todos los items contenidos en el tab
+			--------------------------------------------------------------------------------------
+			fn getAllItems =
+			(
+				(selectorItems + imageItems)
+			),
+			
+			--------------------------------------------------------------------------------------
+			fn setName newName = 
+			(
+				this.name = newName
+				this.uiObj.text = newName
+			),
+			
+			--------------------------------------------------------------------------------------
+			fn addSelector pos size:[ui.selectorWidth, ui.selectorHeight] fillColor:ui.selectorFillColor borderColor:ui.selectorBorderColor assignedObj:undefined text:"" =
+			(
+				_selectorItem = strSelectorItem()
+				_selectorItem.init pos:pos size:size fillColor:fillColor borderColor:borderColor  text:text
+				_selectorItem.assignObject assignedObj
+				_selectorItem.uiObj.parent = this.uiObj
+				
+				this.uiObj.controls.setChildIndex _selectorItem.uiObj 0
+				
+				append this.selectorItems _selectorItem
+
+				--ui.selectItems _selectorItem clearSelection:(not keyboard.controlPressed)
+				
+				_selectorItem
+			),
+			
+			--------------------------------------------------------------------------------------
+			fn removeSelector selector  =
+			(
+				this.uiObj.controls.remove selector.uiObj
+				_index = finditem this.selectorItems selector
+				
+				if _index != undefined then
+					deleteItem this.selectorItems _index
+			),
+			
+			--------------------------------------------------------------------------------------
+			fn addImage image:undefined borderColor:undefined =
+			(
+				_imageItem = strImageItem()
+				_imageItem.init image:image
+				_imageItem.uiObj.parent = this.uiObj
+				_imageItem.update()
+				
+				append this.imageItems _imageItem
+				
+				_imageItem
+			),
+			
+			--------------------------------------------------------------------------------------
+			fn removeImage image  =
+			(
+				this.uiObj.controls.remove image.uiObj
+				_index = finditem this.imageItems image
+				
+				if _index != undefined then
+					deleteItem this.imageItems image
+			)
+		)
+		
+		--------------------------------------------------------------------------------------
+		--	STRUCT TabsCollection
+		--------------------------------------------------------------------------------------
+		struct strTabsCollection
+		(
+			uiObj = undefined,		
+			tabPages = #(),				--	Todos los tabs almacenados de tipo strTabItem
+			selectedTab = undefined,	--	Tab seleccionado actualmente
+			
+			
+			
+			--	Busca la pestaña cuyo nombre sea TABNAME
+			--------------------------------------------------------------------------------------
+			fn getTabByName tabName =
+			(
+				_tabPage = undefined
+				
+				--	buscamos el tab por nombre
+				for _tab in tabPages do
+					if _tab.uiObj.text == tabName then _tabPage = _tab
+						
+				_tabPage
+			),
+			
+			
+			--	Crea un objeto simétrico a ITEM según la barra de simetría
+			--------------------------------------------------------------------------------------
+			fn switchToTab tabPage = 
+			(
+				_tabPage = if classOf tabPage == strTabItem then tabPage else getTabByName tabPage
+				
+				uiObj.selectTab _tabPage.uiObj
+				selectedTab = _tabPage
+				edtTabName.text = _tabPage.uiObj.text
+				
+				--	pasamos todos los controles de interface al tab seleccionado
+				for _item in ui.uiItems do
+					_item.update()
+				
+				lb.synopticBox.rollMain.ui.syncSelection()
+			),
+			
+			--	Crea una nueva pestaña con el nombre TABNAME
+			--------------------------------------------------------------------------------------
+			fn addTab tabName showTab:true = 
+			(
+				uiObj.tabPages.add tabName
+				
+				_tab = uiObj.tabPages.item[tbTabs.tabPages.count - 1]
+				_tab.backcolor = ui.tabsBackColor
+				_tab.borderstyle = (dotnetclass "System.Windows.Forms.BorderStyle").none
+				
+				dotNet.addEventHandler _tab "mouseDown" mouseDownTabEvent
+				dotNet.addEventHandler _tab "mouseMove" mouseMoveTabEvent
+				dotNet.addEventHandler _tab "mouseUp" mouseUpTabEvent
+				dotNet.addEventHandler _tab "keyDown" keyDownTabEvent
+				
+				append tabPages (strTabItem name:tabName uiObj:_tab)
+				
+				if showTab then switchToTab tabName
+			),
+			
+			--	Elimina la pestaña con el nombre especificado
+			--------------------------------------------------------------------------------------
+			fn removeTab tab =
+			(
+				--	Borramos todos los selectores e imágenes primero
+				for _selector in tab.getAllItems() do
+					tab.uiObj.controls.remove _selector.uiObj
+				
+				--	Borramos el tabItem
+				deleteItem tabPages (findItem tabPages tab)
+				
+				--	Borramos la solapa del interface
+				uiObj.tabPages.remove tab.uiObj
+			),
+			
+			--	Elimina la pestaña con el nombre especificado
+			--------------------------------------------------------------------------------------
+			fn clear =
+			(
+				for t=this.tabPages.count to 1 by -1 do --hacia atrás siempre para borrar
+					this.removeTab this.tabPages[t]
+				addTab "Body" --Obligamos a tener una, igual que en el init
+			),
+			
+			--	Inicia los Tabs
+			--------------------------------------------------------------------------------------
+			fn init =
+			(
+				uiObj = tbTabs
+				uiObj.backColor = tabsBackColor
+				ui.tabs = this 
+				addTab "Body"
+			)
+		)
+
+		--++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+		--	UI PRINCIPAL
+		--++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+		
+		--------------------------------------------------------------------------------------
+		--	STRUCT principal que contiene todo el interface
+		--------------------------------------------------------------------------------------
+		struct strUI
+		(
+			---------------------------------------
+			--	PROPIEDADES
+			---------------------------------------
+			
+			type = #UI,				--	tipo de elemento de interface
+			uiObj = undefined,		--	objeto gráfico que representa el elemento de interface
+			editMode = #animator,	--	modo de edición del interface. 
+			mode = #idle,			--	modo de trabajo del UI. Indica si está moviendo objetos, escalándolos, inactivo, etc.
+			
+			selItems = #(),			--	elementos de  ITEMS seleccionados 
+			
+			uiItems = #(),			--	Todos los elementos de interface fijos
+			activeItems = #(),		--	elementos de tipo UIITEMS o ITEMS que se están manipulando actualmente
+			
+			copyPasteBuffer = #(),
+			
+			filterItems = #selectors,	--	Modo de edición. Indica si estamos manipulando #selectors o #images
+			
+			hScale = 1.0,			--	escala horizontal del interface
+			vScale = 1.0,			--	escala vertical del interface
+			
+			offset = [0,0],			--	desplazamiento global del interface
+
+			--	viewPanel
+			viewPanelName = "synopticViewPanel",
+			previousViewPanel = 0,
+			previousRenderWidth = 0,
+			previousRenderHeight = 0,
+			
+			--	Tabs
+			tabs = undefined,		--	Fichas de synóptico
+			tabsBackColor 		= (dotnetclass "System.Drawing.Color").fromArgb 100 100 100,
+			
+			--	configuración del transformator
+			transformator = undefined,		--	pieza auxiliar de transformación
+			transformatorUIobjName = "transformatorItem",		
+			transformatorFillColor = (dotnetclass "System.Drawing.Color").Transparent,
+			transformatorBorderColor = (dotNetClass "System.Drawing.Color").fromARGB 180 180 180,
+			transformatorBorderSize = 3,
+			
+			--	configuración del regionSquare
+			regionSquare = undefined,
+			regionSquareUIobjName = "regionSquareItem",
+			regionSquareFillColor = (dotnetclass "System.Drawing.Color").Transparent,
+			regionSquareBorderColor = (dotNetClass "System.Drawing.Color").fromARGB 255 0 0,--80 80 80,
+			regionSquareBorderSize = 1,
+			
+			--	configuración de elementos selector
+			selectorUIobjName = "selectorItem",		
+			selectorFillColor = defaultColors[4],
+			selectorHighlightColor = (dotNetClass "System.Drawing.Color").fromARGB 230 230 230,
+			selectorBorderColor = defaultColors[1],
+			selectorBorderSize = 1,
+			selectedSelectorBorderSize = 1,
+			selectorWidth = 20,
+			selectorHeight = 20,
+			
+			--	configuración de elementos image
+			imageUIobjName = "imageItem",		
+			imageFillColor = defaultColors[1],
+			imageBorderSize = 0,
+			selectedImageBorderSize = 1,
+			imageBorderColor = defaultColors[1],
+			imageWidth = 20,
+			imageHeight = 20,
+			
+			--	configuración de la barra de simetría
+			symmetryBar = undefined,		--	objeto de interface
+			symmetryBarUIobjName = "symmetryBar",
+			symmetryBarBorderColor = (dotNetClass "System.Drawing.Color").fromARGB 50 50 0 ,
+			symmetryBarWidth = 2,
+			symmetryBarBorderSize = 1,
+			symmetryBarColor = (dotNetClass "System.Drawing.Color").fromARGB 210 210 0 ,
+			
+			symmetryBarHandleUIobjName = "symmetryBar",
+			symmetryBarHandleHeight = 20,
+			symmetryBarHandleWidth = 20,
+			
+			
+			---------------------------------------
+			--	FUNCIONES
+			---------------------------------------
+
+			--------------------------------------------------------------------------------------
+			fn getControls type:undefined =
+			(
+				_controls = #()
+				_tabObj = tabs.selectedTab.uiObj
+				
+				case type of
+				(
+					#ui: _controls = (for i = 1 to _tabObj.controls.count where _tabObj.controls.item[i-1].name == symmetryBarUIobjName collect _tabObj.controls.item[i-1])
+					#selector: _controls = (for i = 1 to _tabObj.controls.count where _tabObj.controls.item[i-1].name == selectorUIobjName collect _tabObj.controls.item[i-1])
+					#image: _controls = (for i = 1 to _tabObj.controls.count where _tabObj.controls.item[i-1].name == imageUIobjName collect _tabObj.controls.item[i-1])
+					default: _controls = (for i = 1 to _tabObj.controls.count collect _tabObj.controls.item[i-1])
+				)
+				
+				_controls
+			),
+			
+			--------------------------------------------------------------------------------------
+			fn addItem itemType =
+			(
+				_newItem = undefined 
+				
+				case itemType of
+				(
+					#symmetryBar:
+					(
+						_newItem = strSymmetryBar()
+						_newItem.init()
+						append uiItems _newItem
+					)
+					
+					#transformator:
+					(
+						_newItem = strTransformatorItem()
+						_newItem.init()
+						append uiItems _newItem
+					)
+					
+					#regionSquare:
+					(
+						_newItem = strRegionSquareItem()
+						_newItem.init()
+						append uiItems _newItem
+					)
+					
+					#tabs:
+					(
+						_newItem = strTabsCollection()
+						_newItem.init()
+					)
+				)
+				
+				_newItem
+			),
+			
+			--------------------------------------------------------------------------------------
+			--	Crea selectores para los nodos pasados en NODES. Los mete en el espacio definido por 
+			--	el item de tipo image pasado por parámetro
+			--------------------------------------------------------------------------------------
+			fn createSelectorsFromNodes nodes =
+			(
+				_uiObj = tbTabs
+				
+				--	Para cada objeto seleccionado calculamos su proyección 2D y creamos un selector
+				--	Este algoritmo está extraido de la ayuda de Maxscript: How to... develop a vertex renderer
+				for _obj in nodes do
+				(
+					--	convertimos las coordenadas del objeto 3D a coordenadas 2D de pantalla
+
+					if ui.isViewportPrepared() then --modo nuevo
+					(
+						-- SNIPET FROM http://forums.cgsociety.org/archive/index.php/t-705504.html
+						--------------------------------------------------------------------------
+						fn get2DPoint pos yTop:false = -- takes a point3 value as input
+						(
+							local sX = gw.getWinSizeX() as float -- Get WinSize X
+							local sY = gw.getWinSizeY() as float -- Get WinSize X
+
+							local rPA = renderPixelAspect -- Get Render Pixel Aspect
+
+							local rX = RenderWidth as float -- Get Render Pixels X
+							local rY = RenderHeight as float -- Get Render Pixels Y
+
+							rY = rY * ( 1 / rPA ) -- Correct for aspect ratio
+
+							local rratio = ( sX / rX ) / (sY / rY) -- Get Ratio
+							if rratio >= 1. then ( -- If Ratio is bigger than 1 then
+							local ratio = sY / rY -- Use Y ratio for calculations
+							) else (	
+							local ratio = sX / rX -- Else use X ratio for calculations
+							) -- end if
+
+							local xMin = ( sX - ( rX * ratio ) ) / 2 -- Get x minimum value
+							local yMin = ( sY - ( rY * ratio ) ) / 2 -- Get y minimum value
+
+							gw.setTransform (matrix3 1) -- Set gw View transform to zero
+
+							local p = gw.TransPoint ( pos ) -- Get 3D point in 2D screenspace
+
+							local x = ( p.x - xMin ) / ( sX - ( xMin * 2) ) -- Convert View space to Render space for X
+							local y = ( p.y - yMin ) / ( sY - ( yMin * 2 ) ) -- idem for Y
+							if not yTop then y = 1 - y -- if [0,0] should be at the top then set Ytop true
+							[x,y] -- return a floating point2 value
+						) -- end get2DPoint
+						--------------------------------------------------------------------------
+
+						_screenProps = (get2DPoint _obj.transform.pos)
+						_screenProps.x = amin (amax _screenProps.x 0.05) 0.95
+						_screenProps.y = amin (amax (1 - _screenProps.y) 0.05) 0.95
+						_screenCoords = _screenProps * [_uiObj.width, _uiObj.height]
+					)
+					else --modo antiguo
+					(
+						_pos = _obj.transform.pos * viewport.getTM()
+						_screenOrigin = mapScreenToView [0,0] 10 [_uiObj.width, _uiObj.height]
+						_screenEnd = mapScreenToView [_uiObj.width, _uiObj.height] 10 [_uiObj.width, _uiObj.height]
+						_worldSize = _screenOrigin - _screenEnd
+						_xAspect = _uiObj.width/(abs _worldSize.x)
+						_yAspect = _uiObj.height/(abs _worldSize.y)
+						_screenCoords = point2 ((_xAspect * (_pos.x - _screenOrigin.x)) + _uiObj.location.x) (-(_yAspect * (_pos.y - _screenOrigin.y)) +  _uiObj.location.y)
+					)
+					
+					_newItem = ui.tabs.selectedTab.addSelector [_screenCoords.x, _screenCoords.y] 
+					_newItem.obj = _obj
+					
+					if lb.nc.ncOK _obj.name then
+					(
+						_parts = (filterString _obj.name "_")
+						_side = _parts[4]
+						_objName = _parts[5]
+						
+						_newItem.fillColor = (dotnetclass "system.drawing.color").fromArgb _obj.wirecolor.r _obj.wirecolor.g _obj.wirecolor.b
+						
+						--if _side == NC_locationLeft then _newItem.fillColor = defaultColors[3]
+						--if _side == NC_locationRight then _newItem.fillColor = defaultColors[4]
+						--if _side == NC_locationMiddle then _newItem.fillColor = defaultColors[5]
+						--if _objName == NC_base then _newItem.fillColor = defaultColors[7]
+						
+						_newItem.update()
+					)
+				)
+			),
+			
+			--------------------------------------------------------------------------------------
+			--	Crea un render con el tamaño máximo que admite el interface y lo añade como imageItem
+			--------------------------------------------------------------------------------------
+			fn createImageFromRender =
+			(
+				_scaleFactor = 1.0
+				_oldBgColor = backgroundColor
+				
+				setWaitCursor()
+				
+				if renderWidth > renderHeight and renderWidth > ui.tabs.selectedTab.uiObj.width then _scaleFactor = (ui.tabs.selectedTab.uiObj.width as float / renderWidth ) 
+				if renderwidth < renderHeight and renderHeight > ui.tabs.selectedTab.uiObj.height then _scaleFactor = (ui.tabs.selectedTab.uiObj.height as float / renderHeight) 
+				_renderWidth = renderWidth * _scaleFactor
+				_renderHeight = renderHeight * _scaleFactor
+				
+				backgroundColor = (color ui.tabsBackcolor.r ui.tabsBackcolor.g ui.tabsBackcolor.b) + [10,10,10]
+				
+				_bmp = render outputWidth:_renderWidth outputHeight:_renderHeight vfb:off
+				_imageItem = ui.tabs.selectedTab.addImage image:_bmp
+				
+				backgroundColor = _oldBgColor
+				
+				setArrowCursor()
+				
+				_imageItem
+			),
+			
+			--------------------------------------------------------------------------------------
+			--	Crea un render con el tamaño máximo que admite el interface y lo añade como imageItem
+			--------------------------------------------------------------------------------------
+			fn createImageFromViewport =
+			(
+				_scaleFactor = 1.0
+				_scaleFactorX = 1.0
+				_scaleFactorY = 1.0
+				_oldRenderSize = [renderWidth, renderHeight]
+				_oldDisplaySafeFrames = displaySafeFrames
+				_oldSelection = getCurrentSelection()
+				_bmp = undefined
+				
+				--	Deseleccionamos todos los objetos para capturar la imagen del viewport limpia
+				deselect objects
+				displaySafeFrames = true
+				completeRedraw()
+				_bmp = lb.viewport.getViewportSafeFrameDib()
+				displaySafeFrames = _oldDisplaySafeFrames
+				
+				--	Calculamos el tamaño que puede tener la imagen para que no sea mayor que el interface
+				if _bmp.width > _bmp.Height and _bmp.Width > ui.tabs.selectedTab.uiObj.width then _scaleFactorX = (ui.tabs.selectedTab.uiObj.width as float / _bmp.Width ) 
+				if _bmp.width < _bmp.Height and _bmp.Height > ui.tabs.selectedTab.uiObj.height then _scaleFactorY = (ui.tabs.selectedTab.uiObj.height as float / _bmp.Height)
+				if _scaleFactorX < _scaleFactorY then _scaleFactor = _scaleFactorX else _scaleFactor = _scaleFactorY
+				
+				_renderWidth = _bmp.Width * _scaleFactor
+				_renderHeight = _bmp.Height * _scaleFactor
+				
+				--	copiamos el bitmap capturado a otro con el tamaño correcto para que se escale
+				_newBmp = bitmap _renderWidth _renderHeight
+				copy  _bmp _newBmp
+				_bmp = _newBmp
+				_imageItem = ui.tabs.selectedTab.addImage image:_bmp
+				
+				--	Restauramos la selección y tamaño de render antiguos
+				select _oldSelection
+				
+				_imageItem
+			),
+			
+			--	Elimina los items pasados por parámetro
+			--------------------------------------------------------------------------------------
+			fn removeItems items =
+			(
+				_allItems = ui.tabs.selectedTab.getAllItems()
+				_items = if classOf items == array then items 
+								else if items == #all then _allItems
+								else #(items)
+				
+				for i = _items.count to 1 by -1 do
+				(
+					_item = _items[i]
+					_itemList = if _item.type == #selector then ui.tabs.selectedTab.selectorItems else ui.tabs.selectedTab.imageItems
+					_index = findItem _itemList _item
+					_selIndex = findItem ui.tabs.selectedTab.selectedItems _item
+					
+					if _index != 0 then
+					(
+						tabs.selectedTab.uiObj.controls.remove _itemList[_index].uiObj	--	borrado del objeto de interface
+						deleteItem _itemList _index		--	borrado del item del listado del tab
+						
+						if _selIndex != 0 then deleteItem ui.tabs.selectedTab.selectedItems _selIndex	--	si el item estaba seleccionado lo eliminamos también de la lista de selección
+					)
+					
+				)
+				
+				transformator.update()
+			),
+			
+			--	Copy de los Selectors seleccionados
+			--------------------------------------------------------------------------------------
+			fn copyItems = 
+			(
+				this.copyPasteBuffer = #()
+				
+				for _item in this.tabs.selectedTab.selectedItems do
+					append this.copyPasteBuffer (copy _item)
+			),
+			
+			--	Cut de los Selectors seleccionados
+			--------------------------------------------------------------------------------------
+			fn cutItems = 
+			(
+				this.copyItems()
+				
+				this.removeItems this.tabs.selectedTab.selectedItems
+			),
+			
+			--	Paste de los Selectors contenidos en el copyPasteBuffer
+			--------------------------------------------------------------------------------------
+			fn pasteItems = 
+			(
+				_newItems = #()
+
+				_center = [0, 0]
+				for _item in this.copyPasteBuffer do _center += _item.pos
+				_center /= this.copyPasteBuffer.count
+				
+				for _item in this.copyPasteBuffer do
+				(
+					_offset = _item.pos - _center
+					_pos = mousePos + _offset
+					_newSelector = ui.tabs.selectedTab.addSelector _pos size:_item.size fillColor:_item.fillColor borderColor:_item.borderColor assignedObj:_item.obj text:_item.text
+					append _newItems _newSelector
+				)
+				
+				this.selectItems _newItems
+			),
+
+			--	Paste de los Selectors contenidos en el copyPasteBuffer
+			--------------------------------------------------------------------------------------
+			fn pasteProperties prop = 
+			(
+				if this.copyPasteBuffer.count > 0 do
+				(
+					for _item in this.tabs.selectedTab.selectedItems do
+					(
+						if prop == #size or prop == #posAndSize do
+							_item.size = this.copyPasteBuffer[1].size
+						if prop == #pos or prop == #posAndSize do
+							_item.pos = this.copyPasteBuffer[1].pos
+						_item.update()
+					)
+
+					transformator.update()
+				)
+			),
+			
+			--	Activa o desactiva los  ITEMS pasados por parámetro 
+			--------------------------------------------------------------------------------------
+			fn setItemsEnabled type state =
+			(
+				_items = #()
+				
+				for _tab in ui.tabs.tabPages do
+				(
+					case type of
+					(
+						#ui: _items = uiItems
+						#selectors: _items = _tab.selectorItems
+						#selected: _items = _tab.selectedItems
+						#images: _items = _tab.imageItems
+						#all: _items = uiItems + _tab.getAllItems()
+					)
+					
+					if not state and type != #ui then
+					(
+						for i = _tab.selectedItems.count to 1 by -1 do
+							this.deselectItems _tab.selectedItems[i]
+					)
+				)
+				
+				for _item in _items do _item.uiObj.enabled = state
+			),
+			
+			
+
+			--------------------------------------------------------------------------------------
+			-- Actualiza el cuadro de texto que muestra la informacion del item seleccionado y cambia el boton que lo selecciona en la escena
+			--------------------------------------------------------------------------------------
+			fn updateSelectedItemInfoInUI =
+			(
+
+				-- para riggers
+				if editMode == #rigger then 
+				(
+					-- El texto que rellenara el cuadro de texto
+					_objectNewText = ""
+					_itemNewText = ""
+
+					-- Activamos el boton de seleccionar elemento
+					btnPickObject.enabled = (ui.filterItems == #selectors and ui.tabs.selectedTab.selectedItems.count == 1)
+
+					-- tomamos el primer elemento seleccionado que haya
+					if ui.tabs.selectedTab.selectedItems.count == 1 do 
+					(
+						_selItem = ui.tabs.selectedTab.selectedItems[1]
+						_itemNewText = _selItem.text
+					)
+					
+					if btnPickObject.enabled and _selItem != undefined do
+					(
+						_selItem = ui.tabs.selectedTab.selectedItems[1]
+
+						if _selItem.obj != undefined do
+						(
+							_objName = _selItem.obj.name 
+							
+							if lb.nc.ncOK _objName then
+							(
+								_objName = ((lb.nc.getnamepart _objName 4) + "_" + (lb.nc.getnamepart _objName 5))
+								_objectNewText = _objName
+							)
+							else 
+								lb.message.show ("WARNING: Object name is not valid after NC check: " + _objName)  type:#message modal:true
+						)
+					)
+
+					edtObjName.enabled = ( _objectNewText != "" )
+					edtObjName.text = _objectNewText 
+					edtSelectorText.text = _itemNewText
+				)
+
+				-- Para animadores
+				else if editMode == #animator then 
+				(
+					updateConstraintsUI updateList:true clearSelections:true
+				)
+				
+			),
+
+			--	Deselecciona los ITEMS pasados por parámetro
+			--------------------------------------------------------------------------------------
+			fn deselectItems items = 
+			(
+
+				_allItems = ui.tabs.selectedTab.selectorItems +  ui.tabs.selectedTab.imageItems
+				_items = if classOf items == array then items 
+								else if items == #all then _allItems
+								else #(items)
+				_itemsObjects = #()
+								
+				
+				--	IMPORTANTE: desactivamos los callbacks para que no reaccionen a la selección de piezas
+				lb.synopticBox.rollMain.removeSceneEvents()
+				
+				for _item in _items where _item.selected do
+				(
+					if _item.obj != undefined do 
+					(
+						_nodeName = _item.obj
+
+						appendIfUnique _itemsObjects _nodeName
+					)
+
+					_item.uiObj.flatAppearance.borderColor = _item.borderColor
+					_item.selected = false
+					_item.uiObj.update()
+					
+					_tabIndex = (findItem ui.tabs.tabPages _item.tab)
+					_itemNum = (findItem ui.tabs.tabPages[_tabIndex].selectedItems _item)
+					if _itemNum != 0 then deleteItem ui.tabs.tabPages[_tabIndex].selectedItems _itemNum
+				)
+				
+				if ui.editMode == #animator then 
+					deselect _itemsObjects 
+				
+				transformator.update()
+				
+				updateSelectedItemInfoInUI()
+				
+				--	restablecemos los callbacks una vez terminada la selección
+				lb.synopticBox.rollMain.createSceneEvents()
+
+
+			),
+			
+
+			-------------------------------------
+			-- setOption : True o False, si queremos o no hacerlo
+			-- assetName : El nombre del asset ( marty{std-std} o chr_marty{std-std}, por ejemplo )
+			-------------------------------------
+			fn setTransparentHead setOption _assetName  =
+			(
+				-- Ejemplo: chr_mike{std-std}_mesh_x_head_pc_f
+				_objectType = lb.nc.NC_classMesh -- mesh
+				_objectName = lb.nc.NC_ANIM_head -- TODO: No es del todo correcto
+				_specialFlag = lb.nc.NC_pcCache -- pc
+				_aditionalFlags = lb.nc.NC_frozenFlag -- f
+
+				-- Obtengo el nombre de la cabeza usando el Naming Convention
+				_headMeshNodeName = lb.nc.getCharNodeName _assetName _objectType _objectName _aditionalFlags specialFlag:_specialFlag
+
+				-- Obtengo el nodo del mesh de la cabeza de la escena
+				_headMeshNode = getNodeByName _headMeshNodeName
+
+				-- Si el nodo de la cabeza existe, lo pongo en modo X-Ray
+				if _headMeshNode != undefined do 
+					_headMeshNode.xray = setOption
+			),
+
+			------------------------------------------------
+			-- Hace un zoom clasico de Max (usando la letra Z en el viewport o F con el modo de Maya), 
+			-- Pero al hacerlo con los assets puestos en modo skin, no funciona, puesto que seleccionamos el puppet por debajo y esta oculto.
+			-- Mostramos los items ocultos y luego los volvemos a ocultar.
+			-- Y hacemos el zoom a esa, regresando a lo que estaba seleccionado.
+			---------------------------------------------------
+			fn zoomSelectedOverride = 
+			(
+				_selectedObjects = ui.tabs.selectedTab.selectedItems
+				
+				with undo off
+				(
+					-- guardo los elementos que estan ocultos de la lista elegida
+					_hiddenItems = for _item in _selectedObjects where _item.obj.isHidden collect _item.obj
+
+					-- Los muestro
+					_hiddenItems.isHidden = false
+				
+
+					-- Hacemos zoom en piezos items seleccionados
+					max zoomext sel
+
+					-- volvemos a ocultar los items que estaban ocultos
+					_hiddenItems.isHidden = true
+				)
+
+			),
+
+			-------------------------------------------------------------------
+			--@fn: undefined | selectItems | Selecciona los ITEMS pasados por parámetro
+			--@param: bool | selectObjets | Si se quieren seleccionar no solo los items del sinoptico, pero los objetos de la escena relacionados
+			--------------------------------------------------------------------------------------
+			fn selectItems items clearSelection:true selectObjects:true selectObjectSet:false selectDescendants:false= 
+			(
+
+				--	IMPORTANTE: desactivamos los callbacks para que no reaccionen a la selección de piezas
+				lb.synopticBox.rollMain.removeSceneEvents()
+				
+				_allItems = ui.tabs.selectedTab.getAllItems()
+				_items = if classOf items == array then items -- si es un array pasado
+						else if items == #none then #() -- si no se pasa ninguno
+						else if items == #all then _allItems -- si se seleccionan todos
+						else #(items) -- es un item solo
+
+				_lockedItems = for i=1 to _items.count where _items[i].locked collect _items[i]
+				_itemsObjects = #()
+				
+				-- Primero limpiar la seleccion si se ha pedido
+				if clearSelection then
+				(
+					this.deselectItems #all;
+					
+					if editMode == #animator and selectObjects do
+						deselect objects
+				)
+				
+				-- Para cada item a seleccionar
+				for _item in _items do
+				(
+					_item.selected = true
+					if _item.obj != undefined then 
+						appendIfUnique _itemsObjects _item.obj
+					
+					_item.uiObj.flatAppearance.borderColor = this.selectorHighlightColor
+					_item.uiObj.update()
+				)
+
+				if ui.editMode == #animator and selectObjects then
+					selectMore _itemsObjects
+				
+				if editMode == #rigger do
+					btnLock.checked = _lockedItems.count > 0 and _lockedItems.count == _items.count
+
+				-- Actualizo la lista interna de items seleccionados
+				tabs.selectedTab.selectedItems = for _item in _allItems where _item.selected collect _item
+				
+				transformator.update()
+				updateSelectedItemInfoInUI()
+				
+				--	restablecemos los callbacks una vez terminada la selección
+				lb.synopticBox.rollMain.createSceneEvents()
+				
+			),
+			
+			------------------------------------------------
+			--@fn: undefined | syncSelection | Refresca la selección de piezas en función de la selección de viewport.
+			------------------------------------------------
+			fn syncSelection =
+			(
+				if this.editMode == #animator do
+				(
+					_selection = getCurrentSelection()
+					
+					-- Limpiamos los items seleccionados para actualizarlos
+					this.tabs.selectedTab.selectedItems = #()
+					
+					for _item in this.tabs.selectedTab.selectorItems do
+					(
+						_selected = (findItem _selection _item.obj) != 0
+						
+						_item.selected = _selected
+						
+						-- Si esta seleccionado
+						if _selected then
+						(
+							-- lo añadimos a la lista de seleccionados del tab
+							appendIfUnique this.tabs.selectedTab.selectedItems _item
+							-- Cambiamos el borde
+							_item.uiObj.flatAppearance.borderColor = this.selectorHighlightColor
+						)
+						else 
+							_item.uiObj.flatAppearance.borderColor = _item.borderColor
+					)
+					
+					
+					--	Actualización del botón ikFk
+					if _selection.count > 0 and _selection[1].modifiers.count > 0 then
+					(
+						m = _selection[1].modifiers[1]
+						lb.synopticBox.rollmain.btnFkIkSnap.enabled = (lb.customAttributes.hasAttribute m #fkIkSnaps) or (lb.customAttributes.hasAttribute m #indirectFkIkSnaps)
+						lb.synopticBox.rollmain.btnFkIkMatch.enabled = lb.synopticBox.rollmain.btnFkIkSnap.enabled and ((isProperty m.custAttributes[#fkIkSnaps] #fkIkMatch) or ((isProperty m.custAttributes[#indirectFkIkSnaps] #fkIkMatch)))
+					)
+					else
+					(
+						lb.synopticBox.rollmain.btnFkIkSnap.enabled = false
+						lb.synopticBox.rollmain.btnFkIkMatch.enabled = false
+					)
+
+					updateSelectedItemInfoInUI()
+				)
+			),
+			
+			--------------------------------------------------------------------------------------
+			--@fn: undefined | syncSelection |	Pone a los  ITEMS pasados por parámetro el forecolor o backcolor especificado
+			--------------------------------------------------------------------------------------
+			fn setItemsColor items fillColor:undefined borderColor:undefined = 
+			(
+				for _item in items do
+				(
+					if fillColor != undefined then	_item.setFillColor fillColor
+					if borderColor != undefined then _item.setBorderColor borderColor
+				
+					_item.update()
+				)
+			),
+			
+			--------------------------------------------------------------------------------------
+			--@fn: undefined | moveItems |	Mueve los items pasados un offset respecto a su posicion actual
+			--------------------------------------------------------------------------------------
+			fn moveItems items offset =
+			(
+				_allItems = ui.tabs.selectedTab.getAllItems()
+				_items = if classOf items == array then items 
+								else if items == #all then _allItems
+								else #(items)
+				
+				--	el transformator marca los límites que pueden moverse los items. 
+				--	Es el primero que choca contra los bordes. Calculamos el offset
+				--	real a partir de él y eso es lo que desplazamos el resto de items
+				_oldTransformatorPos = transformator.pos
+				transformator.move offset
+				_realOffset = transformator.pos - _oldTransformatorPos
+				
+				for _item in items do
+					_item.move _realOffset 
+				
+				for _image in ui.tabs.selectedTab.imageItems do _image.refresh()
+				
+			),
+			
+			--------------------------------------------------------------------------------------
+			--@fn: undefined | alignItems | Alínea a los  ITEMS pasados por parámetro horizontal o verticalmente
+			--@param: tipo | alignItems | Puede valer #hz_lef, #hz_center, #hz_right, #vt_top, #vt_center, #vt_bottom
+			--------------------------------------------------------------------------------------
+			fn alignItems items alignType = 
+			(
+				_type = alignType as string
+				
+				_type = filterString _type "_"
+
+				_symmetry = btnSymmetryBar.checked
+				
+				if items.count > 0 then
+				(
+					case _type[1] of
+					(
+						"hz":
+						(
+							_newXpos = undefined
+							
+							case _type[2] of
+							(
+								"left": 
+								(
+									if _symmetry then
+									(
+										_dis = -9999999
+										for _item in items do if _item.pos.x + _item.size.x > _dis do _dis = _item.pos.x + _item.size.x
+										for _item in items do _item.setPos [_item.pos.x - _dis + ui.symmetryBar.xPos + (_item.size.x / 2), _item.pos.y]
+									)
+									else
+									(
+										_newXpos = 9999999
+										for _item in items where _item.uiObj.location.x < _newXpos do _newXpos = _item.uiObj.location.x
+										for _item in items do _item.setPos [_newXpos + (_item.size.x / 2),_item.pos.y]
+									)
+								)
+								"center":
+								(
+									if _symmetry then
+									(
+										_newXpos = ui.symmetryBar.xPos
+									)
+									else
+									(
+										_sum = 0
+										for _item in items do _sum += _item.pos.x
+										_newXpos = _sum / items.count
+									)
+									for _item in items do _item.setPos [_newXpos ,_item.pos.y]
+								)
+								"right":
+								(
+									if _symmetry then
+									(
+										_dis = 9999999
+										for _item in items do if _item.pos.x < _dis do _dis = _item.pos.x
+										for _item in items do _item.setPos [_item.pos.x - _dis + ui.symmetryBar.xPos + (_item.size.x / 2), _item.pos.y]
+									)
+									else
+									(
+										_newXpos = -9999999
+										for _item in items where (_item.uiObj.location.x + _item.size.x) > _newXpos do _newXpos = (_item.uiObj.location.x + _item.size.x)
+										for _item in items do _item.setPos [_newXpos - (_item.size.x / 2),_item.pos.y]
+									)
+								)
+							)
+							
+							
+						)
+						
+						"vt":
+						(
+							_newXpos = undefined
+							
+							case _type[2] of
+							(
+								"top": 
+								(
+									_newYpos = 9999999
+									for _item in items where _item.uiObj.location.y < _newYpos do _newYpos = _item.uiObj.location.y
+									for _item in items do _item.setPos [_item.pos.x, _newYpos + (_item.size.y / 2)]
+								)
+								"center":
+								(
+									_sum = 0
+									for _item in items do _sum += _item.pos.y
+									_newYpos = _sum / items.count
+									for _item in items do _item.setPos [_item.pos.x, _newYpos]
+								)
+								"bottom":
+								(
+									_newYpos = -9999999
+									for _item in items where (_item.uiObj.location.y + _item.size.y) > _newYpos do _newYpos = (_item.uiObj.location.y + _item.size.y)
+									for _item in items do _item.setPos [_item.pos.x, _newYpos - (_item.size.y / 2)]
+								)
+							)
+						)
+					)
+					
+					transformator.update()
+				)
+			),
+
+			---------------------------------------------------------------------------			
+			fn compareItemPositions item1 item2 =
+			(
+				case of
+				(
+					(item2[1] < item1[1]): 1
+					(item2[1] > item1[1]): -1
+					default: 0
+				)
+			),
+			
+			--	Separa equitativamente los objetos seleccionados teniendo en cuenta sus centros o bordes
+			--	DISTTYPE: Puede valer #leftBorder, #hzCenter, #rightBorder, #Top, #vtCenter, #bottom
+			--------------------------------------------------------------------------------------
+			fn distributeItems items distType = 
+			(
+				_values = #()
+				
+				--	Recopilamos todas las posiciones de los elementos a recolocar.
+				--	Creamos un array que guarda subarrays de dos elementos: posición e item
+				for i = 1 to items.count do
+				(
+					_value = 0
+					_item = items[i]
+					
+					case distType of
+					(
+						#leftBorder: 		_value = _item.uiObj.location.x
+						#hzCenter: 		_value = _item.pos.x
+						#rightBorder:	_value = (_item.uiObj.location.x + _item.uiObj.width)
+						
+						#top: 				_value = _item.uiObj.location.y
+						#vtCenter: 		_value = _item.pos.y
+						#bottom:			_value = (_item.uiObj.location.y + _item.uiObj.height)
+					)
+					
+					append _values #(_value, _item)
+				)
+				
+				--	ordenamos de menor a mayor posición los items
+				qsort _values compareItemPositions
+				
+				--	calculamos el salto de posición que tiene que haber de un item a otro
+				_totalDistance = _values[_values.count][1] - _values[1][1]
+				_step = _totalDistance / (_values.count - 1)
+				_fistItemValue = _values[1][1]
+				
+				--	Recolocamos todos los elementos menos los que se encuentran en los extremos
+				for i = 2 to (_values.count - 1) do
+				(
+					_item = _values[i][2]
+					_newValue = (_fistItemValue + (_step * (i-1)))
+					_newPos = _item.pos
+					
+					--	recalculamos su nueva posición siempre con respecto a su centro,
+					--	que es como trabaja la función setPos del item
+					case distType of
+					(
+						#leftBorder: 		_newPos.x = _newValue + (_item.size.x/2)
+						#hzCenter: 		_newPos.x = _newValue
+						#rightBorder:	_newPos.x = _newValue - (_item.size.x/2)
+						
+						#top: 				_newPos.y = _newValue + (_item.size.y/2)
+						#vtCenter: 		_newPos.y = _newValue
+						#bottom:			_newPos.y = _newValue - (_item.size.y/2)
+					)
+					
+					_item.setPos _newPos
+				)
+				
+				transformator.update()
+			),
+			
+			--	Crea un objeto simétrico a ITEM según la barra de simetría
+			--------------------------------------------------------------------------------------
+			fn symmetryItems items =
+			(
+				_newItems = #()
+				
+				for _item in (for _it in items collect _it) do --deepcopy
+				(
+					_newXpos = _item.pos.x + (2 * (symmetryBar.xPos - _item.pos.x))
+					_newItem = ui.tabs.selectedTab.addSelector [_newXpos, _item.pos.y]
+					_newItem.size = _item.size
+					_newItem.fillColor = _item.uiObj.backcolor
+					_newItem.borderColor = _item.borderColor
+					_newItem.text = _item.text
+						
+					if _item.obj != undefined then
+					(
+						_oppositeObject = lb.rig.getOppositeObject _item.obj
+						if _oppositeObject != undefined then
+						(
+							_newItem.obj = _oppositeObject
+							_newItem.fillColor = (dotnetclass "system.drawing.color").fromArgb _oppositeObject.wirecolor.r _oppositeObject.wirecolor.g _oppositeObject.wirecolor.b
+						)
+					)
+					
+					_newItem.update()
+					
+					append _newItems _newItem
+				)
+				
+				selectItems _newItems
+				
+				_newItems
+			),
+
+			--	Crea un objeto simétrico a ITEM según la barra de simetría
+			--------------------------------------------------------------------------------------
+			fn moveToSymmetry items =
+			(
+				_movedItems = #()
+
+				for _item in items where _item.obj != undefined do
+				(
+					_oppositeObject = lb.rig.getOppositeObject _item.obj
+
+					if _oppositeObject != undefined then
+					(
+						for _opItem in ui.tabs.selectedTab.selectorItems where _opItem.obj == _oppositeObject do
+						(
+							_opItem.pos.x = _item.pos.x + (2 * (symmetryBar.xPos - _item.pos.x))
+							_opItem.pos.y = _item.pos.y
+							_opItem.size = _item.size
+							_opItem.update()
+							append _movedItems _opItem
+						)
+				
+					)
+				)
+				
+				selectItems _movedItems
+				
+				_movedItems
+			),
+
+			-- Des/Bloquea los elementos seleccionados
+			--------------------------------------------------------------------------------------
+			fn changeItemsBlockStatus items =
+			(
+				for _item in items do _item.locked = btnLock.checked
+			),
+			
+			
+			--	Cambia los childIndex de los elementos para que se dibujen antes o después
+			--	TYPE puede valer #bringToFront, #sendToBack, #moveForward o #moveBackwards
+			--------------------------------------------------------------------------------------
+			fn setItemsOrder items type =
+			(
+				_minChildIndex = 99999999			--	Mínimo childIndex de los elementos que vamos a ordenar
+				_maxChildIndex = 0					--	Máximo childIndex de los elementos que vamos a ordenar
+				_minPossibleChildIndex = 99999999	-- 	Mínimo childIndex que pueden adquirir los elementos que intentamos ordenar
+				_maxPossibleChildIndex = 0			-- 	Míáximo childIndex que pueden adquirir los elementos que intentamos ordenar
+				
+				_selectorItems = tabs.selectedTab.selectorItems
+				
+				--if filterItems == #images then
+				(
+					--	Buscamos el mínimo y máximo índice que pueden tener las imágenes, que coinciden con el
+					--	índice mínimo y máximo de todas las imágenes actuales de la escena
+					for _item in _selectorItems do
+					(
+						_indexTMP = tabs.selectedTab.uiobj.controls.getchildindex _item.uiObj
+						
+						if _indexTMP < _minPossibleChildIndex then _minPossibleChildIndex = _indexTMP
+						if _indexTMP > _maxPossibleChildIndex then _maxPossibleChildIndex = _indexTMP
+					)
+					
+					--	Recopilamos el mínimo y máximo índice de las imágenes que hay que ordenar y todos los índices actuales
+					_itemsIndex = #()
+					
+					for _item in items do
+					(
+						_indexTMP = (tabs.selectedTab.uiobj.controls.getchildindex _item.uiObj)
+						append _itemsIndex _indexTMP
+						
+						if _indexTMP < _minChildIndex then _minChildIndex = _indexTMP
+						if _indexTMP > _maxChildIndex then _maxChildIndex = _indexTMP
+					)
+					
+					--	llevamos al fondo el transformator para que no moleste su índice al ordenar
+					tabs.selectedTab.uiobj.controls.setChildIndex ui.transformator.uiObj 1000
+					
+					case type of 
+					(
+						#bringToFront:
+						(
+							_unitsToMove = _minPossibleChildIndex - _minChildIndex
+							
+							for i = 1 to items.count do 
+								tabs.selectedTab.uiobj.controls.setchildindex items[i].uiObj (_itemsIndex[i] + _unitsToMove)
+						)
+						
+						#sendToBack:
+						(
+							_unitsToMove = _maxPossibleChildIndex - _maxChildIndex
+							
+							for i = 1 to items.count do 
+								tabs.selectedTab.uiobj.controls.setchildindex items[i].uiObj (_itemsIndex[i] + _unitsToMove)
+						)
+						
+						#moveForward:
+						(
+							if _minChildIndex > _minPossibleChildIndex then
+								for i = 1 to items.count do 
+									tabs.selectedTab.uiobj.controls.setchildindex items[i].uiObj (_itemsIndex[i] - 1)
+						)
+						
+						#moveBackwards:
+						(
+							if _maxChildIndex < _maxPossibleChildIndex then
+								for i = 1 to items.count do 
+									tabs.selectedTab.uiobj.controls.setchildindex items[i].uiObj (_itemsIndex[i] + 1)
+						)
+					)
+					
+					transformator.updateChildIndex()
+				)
+			),
+			
+			--	Indica el tipo de items que se pueden seleccionar en el interface
+			--	TYPE puede valer #selectors o #images
+			--------------------------------------------------------------------------------------
+			fn setItemsFilter type =
+			(
+				_transformatorChildIndex = 0
+				_tab = ui.tabs.selectedTab
+				
+				if type == #selectors then
+				(
+					--btnFilterSelectors.checked = true
+					--btnFilterImages.checked = false
+					
+					setItemsEnabled #images false
+					setItemsEnabled #selectors true
+				)
+				else
+				(
+					--btnFilterSelectors.checked = false
+					--btnFilterImages.checked = true
+					
+					setItemsEnabled #images true
+					setItemsEnabled #selectors false
+				)
+				
+				regionSquare.update()
+				
+				filterItems = type
+			),
+
+			-- Setea el tamaño del viewport para que sea mas facil encuadrar al crear desde la escena
+			------------------------------------------------------------------------------------------
+			fn prepareViewport =
+			(
+				this.previousViewPanel = ViewPanelManager.GetActiveViewPanelIndex()
+
+				_currentType = viewport.getType()
+				_currentMT = viewport.GetTM()
+
+				_viewPanelIndex = this.viewPanelIndex()
+				if _viewPanelIndex == 0 then
+					_viewPanelIndex = ViewPanelManager.CreateViewPanel this.viewPanelName #layout_1 true
+				else
+					ViewPanelManager.SetActiveViewPanel _viewPanelIndex
+
+				if this.previousViewPanel == _viewPanelIndex do
+					this.previousViewPanel = 0
+				this.previousRenderWidth = renderWidth
+				this.previousRenderHeight = renderHeight
+
+				displaySafeFrames = true
+				renderWidth = parent.rollMain.tbTabs.size.width
+				renderHeight = parent.rollMain.tbTabs.size.height
+				viewport.SetRenderLevel #smooth
+				viewport.setType _currentType
+				if _currentType == #view_persp_user or _currentType == #view_iso_user do
+					viewport.setTM _currentMT
+				max zoomext sel
+			),
+
+			-- Restaura el valor del viewport anterior
+			------------------------------------------------------------------------------------------
+			fn restoreViewport =
+			(
+				_viewPanelIndex = this.viewPanelIndex()
+				if _viewPanelIndex > 0 do
+					ViewPanelManager.DestroyViewPanel _viewPanelIndex
+				if this.previousViewPanel > 0 do
+					ViewPanelManager.SetActiveViewPanel this.previousViewPanel
+				if this.previousRenderWidth > 0 do
+					renderWidth = this.previousRenderWidth
+				if this.previousRenderHeight > 0 do
+					renderHeight = this.previousRenderHeight
+				this.previousViewPanel = 0
+			),
+
+			-- Devuelve si hemos preparado el viewport anteriormente
+			------------------------------------------------------------------------------------------
+			fn viewPanelIndex =
+			(
+				for i = 1 to ViewPanelManager.GetViewPanelCount() do
+					if (ViewPanelManager.GetViewPanelName i) == this.viewPanelName do
+						return i
+				return 0
+
+			),
+
+			-- Devuelve si hemos preparado el viewport anteriormente
+			------------------------------------------------------------------------------------------
+			fn isViewportPrepared =
+			(
+				return this.viewPanelIndex() > 0
+
+			),
+			
+			--	Inicializa el interface
+			--------------------------------------------------------------------------------------
+			fn init =
+			(
+				--	configuramos toda la barra de selección de asset
+				dgAssetIcons.allowUsertoaddRows = false
+				dgAssetIcons.allowUserToResizeRows = false
+				dgAssetIcons.allowUserToResizeColumns = false
+				
+				dgAssetIcons.ColumnHeadersVisible = false	--para que las colunas no tengan titulo
+				dgAssetIcons.rowheadersvisible = false		--para que las filas no tengan titulo
+				
+				dgAssetIcons.foreColor = (dotNetClass "System.Drawing.Color").black
+				dgAssetIcons.backGroundColor = ui.tabsBackcolor								-- color del fondo
+				dgAssetIcons.GridColor = dgAssetIcons.foreColor
+				dgAssetIcons.font = dotnetobject "system.drawing.font" (dotnetobject "System.Drawing.FontFamily" "Arial") 7.5					
+				dgAssetIcons.readonly = true
+				dgAssetIcons.ShowCellToolTips = true
+				--	quitamos las barras de scroll propias del dataGrid y le asignamos una propia para regular su tamaño
+				dgAssetIcons.scrollBars = (dotNetClass "System.Windows.Forms.ScrollBars").none --hace que no tenga scroll
+				/*dgAssetIconsHscroll.parent = dgAssetIcons
+				dgAssetIconsHscroll.location.x = 0
+				dgAssetIconsHscroll.location.y =dgAssetIcons.height - dgAssetIconsHscroll.height*/
+				
+				--	tabs
+				tabs = addItem #tabs
+				
+				--	symmetryBar
+				symmetryBar = addItem #symmetryBar
+				
+				--	transformator
+				transformator = addItem #transformator
+				
+				--	regionSquare
+				regionSquare = addItem #regionSquare
+
+				--	viewPanel
+				previousViewPanel = 0
+				previousRenderWidth = renderWidth
+				previousRenderHeight = renderHeight
+				
+				--	Selectores de color
+				_dgControls = #(dgFillColor, dgBorderColor)
+				_dgControls[1].name = "fillColorSelector"
+				_dgControls[2].name = "borderColorSelector"
+				
+				for _dg in _dgControls do
+				(
+					_dg.multiSelect = false
+					_dg.readOnly = true
+					_dg.allowUsertoaddRows = false
+					_dg.allowUserToResizeRows = false
+					_dg.allowUserToResizeColumns = false
+					_dg.ColumnHeadersVisible = false	--para que las colunas no tengan titulo
+					_dg.rowheadersvisible = false		--para que las filas no tengan titulo
+					_dg.GridColor = (dotNetClass "System.Drawing.Color").fromARGB 0 0 0
+					_dg.borderStyle = (dotNetClass "System.Windows.Forms.borderStyle").none
+					_dg.defaultCellStyle.alignment = (dotNetClass "System.Windows.Forms.DataGridViewContentAlignment").middleCenter
+					_dg.scrollBars = (dotNetClass "System.Windows.Forms.ScrollBars").none --hace que no tenga scroll
+					
+					_newColumn = dotNetObject "system.windows.forms.DataGridViewTextBoxColumn"
+					_newColumn.width = 14
+					
+					for i = 1 to defaultColors.count do _dg.columns.add (copy _newColumn)
+					
+					_dg.rows.add()
+					_dg.rows.item[0].height = 18
+					
+					for i = 1 to defaultColors.count do
+					(
+						_bgCol =  defaultColors[i]
+						_fgCol = (dotNetClass "System.Drawing.Color").black
+						
+						if (_bgCol.r + _bgCol.g + _bgCol.b) < 256 then _fgCol = (dotNetClass "System.Drawing.Color").white
+						
+						_dg.rows.item[0].cells.item[i-1].style.backColor = _bgCol
+						_dg.rows.item[0].cells.item[i-1].style.selectionBackColor = _bgCol
+						_dg.rows.item[0].cells.item[i-1].style.foreColor = _fgCol
+					)
+				)
+	
+				-- estilo no editable del combobox de los selection sets
+				cbSelectionSets.dropDownStyle = (dotnetclass "System.Windows.Forms.ComboBoxStyle").DropDownList
+				
+				setItemsFilter #selectors
+			),
+			
+			--	redibuja el interface y todos los controles que contiene
+			--------------------------------------------------------------------------------------
+			fn refresh =
+			(
+				for _item in uiItems do _item.refresh()
+				tabs.uiObj.refresh()
+			)
+		)	--	strUI
+		
+		
+		-----------------------------------------------------------------------------------------------------------------------------
+		--  FUNCIONES
+		-----------------------------------------------------------------------------------------------------------------------------
+				
+		fn compareControlsIndex item1 item2 tabIndex:undefined =
+		(
+			_index1 = ui.tabs.tabPages[tabIndex].uiobj.controls.getChildIndex item1.uiObj
+			_index2 = ui.tabs.tabPages[tabIndex].uiobj.controls.getChildIndex item2.uiObj
+			_result = 0
+			
+			if _index1 > _index2 then _result = 1
+			if _index1 < _index2 then _result = -1
+				
+			_result
+		)
+		
+		--------------------------------------------------------------------------------------
+		--	Guarda el esquema de SynopticBox
+		--------------------------------------------------------------------------------------
+		fn saveSynopticScheme filename =
+		(
+			_xmlDoc = lb.xml.newXmlDoc()
+			_xmlDoc.path = filename
+			_xmlRootNode = _xmlDoc.root
+			_items  = ui.getControls type:#selector
+			
+			setWaitCursor()
+			
+			_xmlSynopticNode = _xmlRootNode.newChild "synopticScheme"
+			_xmlSynopticNode.setProperty "formatVersion" "1.0"
+			_xmlSynopticNode.setProperty "numTabs" ui.tabs.tabPages.count
+			
+			for i = 1 to ui.tabs.tabPages.count do
+			(
+				_xmlTabNode = _xmlSynopticNode.newChild "tab" 
+				_xmlTabNode.setProperty "num" i
+				_xmlTabNode.setProperty "name" ui.tabs.tabPages[i].name
+				_xmlTabNode.setProperty "numSelectors" ui.tabs.tabPages[i].selectorItems.count
+				
+				--	Ordenamos los controles según su índice para que se ordenen bien al crearse
+				_selectorItems = ui.tabs.tabPages[i].selectorItems
+				qsort _selectorItems compareControlsIndex tabIndex:i
+				
+				--	Guardamos los selectores del Tab actual
+				for j = _selectorItems.count to 1 by -1 do
+				(
+					_item =  _selectorItems[j]
+					
+					_xmlItemNode = _xmlTabNode.newChild "selectorItem" 
+					_xmlItemNode.setProperty "num" j
+					_xmlItemNode.setProperty "pos" _item.pos
+					_xmlItemNode.setProperty "size" _item.size
+					_xmlItemNode.setProperty "fillColor" [_item.fillColor.r,_item.fillColor.g, _item.fillColor.b]
+					_xmlItemNode.setProperty "borderColor" [_item.borderColor.r,_item.borderColor.g, _item.borderColor.b]
+					_xmlItemNode.setProperty "objectName" (if _item.obj != undefined then _item.obj.name else undefined)
+					_xmlItemNode.setProperty "text" _item.text
+					_xmlItemNode.setProperty "locked" _item.locked
+					_xmlItemNode.setProperty "isIKFKSwitch" _item.isIKFKSwitch
+				)
+			)
+			_xmlDoc.save()
+			
+			setArrowCursor()
+		)
+		
+		--------------------------------------------------------------------------------------
+		--	Carga el esquema de Synoptic Box
+		--------------------------------------------------------------------------------------
+		fn loadSynopticScheme filename =
+		(
+			_xmlDoc = lb.xml.load filename
+			_xmlRootNode = _xmlDoc.root
+			_assetType = if selectedAsset != undefined then selectedAsset.type else undefined
+			_assetName = if selectedAsset != undefined then selectedAsset.name else undefined
+			
+			if _xmlDoc != undefined then
+			(
+				setWaitCursor()
+				ui.tabs.uiObj.suspendLayout()
+				ui.tabs.uiObj.pos.x = -1000
+				--------------------------------------
+				--	Establecemos el número de tabs
+				--------------------------------------
+				_xmlSynopticNode = _xmlRootNode.getNode "synopticScheme"
+				_numTabs = (_xmlSynopticNode.getProperty "numTabs") as integer
+				
+				_tabDifference = _numTabs - ui.tabs.tabPages.count
+				
+				--	Dependiendo de si sobran o faltan tabs los añadimos o quitamos
+				for i = 1 to _tabDifference do ui.tabs.addTab ("tab" + (i as string)) showTab:false
+				for i = _tabDifference to -1 do ui.tabs.removeTab (ui.tabs.tabPages[ui.tabs.tabPages.count])
+				
+				--------------------------------------
+				--	Rellenamos cada tab
+				--------------------------------------
+				_xmlTabNodes = _xmlSynopticNode.getNodes "tab"
+				
+				for i = 1 to _xmlTabNodes.count do
+				(
+					_tab = ui.tabs.tabPages[i]
+					_tabName = (_xmlTabNodes[i].getProperty "name")
+					_tab.setName _tabName
+					
+					_numSelectors = (_xmlTabNodes[i].getProperty "numSelectors") as integer
+					_numSelectorsDifference = _numSelectors - ui.tabs.tabPages[i].selectorItems.count
+					
+					--	Dependiendo de si sobran o faltan selectors los añadimos o quitamos
+					for i = 1 to _numSelectorsDifference do _tab.addSelector [-10,10]
+					for i = _numSelectorsDifference to -1 do _tab.removeSelector (_tab.selectorItems[_tab.selectorItems.count])
+					
+					for _item in ui.tabs.tabPages[i].selectorItems do _item.obj = undefined
+					
+					_xmlSelectorNodes = _xmlTabNodes[i].getNodes "selectorItem"
+					
+					for j = 1 to _xmlSelectorNodes.count do
+					(
+						_pos = (execute (_xmlSelectorNodes[j].getProperty "pos"))
+						_size = (execute (_xmlSelectorNodes[j].getProperty "size"))
+						_fillColor = execute (_xmlSelectorNodes[j].getProperty "fillColor")
+						_fillColor = (dotnetclass "system.drawing.color").fromArgb _fillcolor[1] _fillcolor[2] _fillcolor[3]
+						_borderColor = execute (_xmlSelectorNodes[j].getProperty "borderColor")
+						_borderColor = (dotnetclass "system.drawing.color").fromArgb _borderColor[1] _borderColor[2] _borderColor[3]
+						_text = (_xmlSelectorNodes[j].getProperty "text")
+						_locked = (_xmlSelectorNodes[j].getProperty "locked")
+						_isIKFKSwitch = (_xmlSelectorNodes[j].getProperty "isIKFKSwitch")
+						
+						_objName = (_xmlSelectorNodes[j].getProperty "objectName")
+						_obj = undefined
+						
+						--	por si estamos cargando un sinóptico de otro personaje, reemplazamos
+						--	los prefijos por los del personaje actual.
+						if _objName != undefined and _assetType != undefined then 
+						(
+							if lb.nc.ncOK _objName then 
+							(
+								_objName = lb.nc.replaceNamePart _objName 1 (_assetType)
+								_objName = lb.nc.replaceNamePart _objName 2 (_assetName)
+							)
+						)
+						
+						--	capturamos el objeto según su nombre
+						if _objName != undefined then
+							_obj = getNodeByName _objName
+						
+						--	asignamos al selector todas las propiedades cargadas.
+						_selectorItem = _tab.selectorItems[j]
+						_selectorItem.obj = _obj
+						
+						if _pos != OK then _selectorItem.pos = _pos
+						if _size != OK then _selectorItem.size = _size
+						if _fillColor != OK then _selectorItem.fillColor = _fillColor
+						if _borderColor != OK then _selectorItem.borderColor = _borderColor
+						if _text != undefined then _selectorItem.text = _text
+						if _locked != undefined then _selectorItem.locked = _locked == "true"
+						if _isIKFKSwitch != undefined then _selectorItem.isIKFKSwitch = _isIKFKSwitch == "true"
+						
+						_tab.uiObj.controls.setChildIndex _selectorItem.uiObj 0
+						_selectorItem.update()
+					)
+				)
+				
+				lb.synopticBox.rollMain.ui.syncSelection()
+				
+				ui.tabs.uiObj.resumeLayout()
+				ui.tabs.uiObj.pos.x = 0
+				setArrowCursor()
+			)
+		)
+
+
+		--------------------------------------------------------------------------------------
+		-- Actualiza con la lista de seleccion sets actual el combobox con los items necesarios
+		--------------------------------------------------------------------------------------
+		fn updateSelectionSetsComboBox =
+		(
+			-- Borro la lista del combobox
+			cbSelectionSets.items.clear()
+
+			-- Añadimos el dummy text que se seleccionara cuando empezamos y cuando falla algo
+			cbselectionSets.items.add _selectionSetDummyText
+
+			-- Añadimos todos los elementos de la lista interna
+			for _set in _selectionSets do 
+				cbSelectionSets.items.add _set.name
+
+			-- Añadimos el item final que sirve para añadir items nuevos
+			cbSelectionSets.items.add _addSelectionSetString
+
+			-- Establecemos el primer indice (el del dummy)
+			cbSelectionSets.selectedIndex = 0
+		)
+
+		--------------------------------------------------------------------------------------
+		--	Cargamos el XML de los grupos de selección rellenando la lista interna
+		--------------------------------------------------------------------------------------
+		fn loadSelectionSets filename =
+		(
+			-- vacio los grupos de seleccion
+			free _selectionSets
+
+			_xmlDoc = lb.xml.load filename
+
+			if _xmlDoc == undefined do return false
+
+			_xmlRootNode = _xmlDoc.root
+			_assetType = if selectedAsset != undefined then selectedAsset.type else undefined
+			_assetName = if selectedAsset != undefined then selectedAsset.name else undefined
+			
+			if _xmlDoc != undefined then
+			(
+				_xmlSynopticNode = _xmlRootNode.getNode "selectionSets"
+				
+				-- Para cada SET
+				_xmlSetNodes = _xmlSynopticNode.getNodes "selectionSet"
+				for i = 1 to _xmlSetNodes.count do
+				(
+					-- Obtenemos el nombre del set
+					_setName = (_xmlSetNodes[i].getProperty "name")
+
+					-- Creo el nuevo set y le ponemos el nombre
+					_newSet = _selectionSet()
+					_newSet.name = _setName
+
+					-- Para cada NODO del set
+					_xmlNodeNodes = _xmlSetNodes[i].getNodes "node"
+					for j = 1 to _xmlNodeNodes.count do 
+					(
+						-- Obtengo el nombre del nodo
+						_nodeName = (_xmlNodeNodes[j].getProperty "name")
+
+						-- Busco el elemento en la escena actual 
+						_node = getNodeByName _nodeName
+
+						-- Lo añado al set
+						if _node != undefined do 
+							append _newSet.objectList _node
+					)
+
+					-- Si el set tiene algun nodo, entonces es valido y lo añadimos
+					if _newSet.objectList.count > 0 do 
+						append _selectionSets _newSet
+				)
+			
+			)
+
+			-- Actualizo el combobox
+			updateSelectionSetsComboBox()
+
+		)
+
+		--------------------------------------------------------------------------------------
+		--	Guardamos el XML de los grupos de selección actuales
+		--------------------------------------------------------------------------------------
+		fn saveSelectionSets filename =
+		(
+			-- TODO: Hacer esto de manera que modifique el XML existente. Es mas rapido
+
+			-- Si estamos en layout esto no funcionara
+			if (findString filename ":layout") != undefined do return false
+
+
+			_xmlDoc = lb.xml.newXmlDoc()
+			_xmlDoc.path = filename
+			_xmlRootNode = _xmlDoc.root
+						
+			_xmlSetsNode = _xmlRootNode.newChild "selectionSets"
+			for i = 1 to _selectionSets.count do
+			(
+				_set = _selectionSets[i]
+
+				_xmlSetNode = _xmlSetsNode.newChild "selectionSet"
+				_xmlSetNode.setProperty "name" _set.name 
+
+				for j = 1 to _set.objectList.count do 
+				(
+					_xmlNodeNode = _xmlSetNode.newChild "node"
+					_node = _set.objectList[j]
+					_xmlNodeNode.setProperty "name" _node.name
+				)
+				
+			)
+			_xmlDoc.save()
+
+			return true
+		)
+
+		
+		--------------------------------------------------------------------------------------
+		-- Muesta, oculta, habilita o inhabilita controles de interface según el estado actual
+		--------------------------------------------------------------------------------------
+		fn updateInterface =
+		(
+			_commonControls = #(tbTabs, rMenu, dgAssetIcons, dgAssetIconsHscroll,btnHelp)
+			_animatorControls = #(	btnKey, btnUnkey, btnZero, btnDeleteAllAnimation, chkApplyToSet, btnKeyTangents, 
+									lblSelectionSets, cbSelectionSets,btnDeleteSelectionSet,btnLoadSelectionSet,
+									btnSelectBodyAnimNodes, btnSelectFacialAnimNodes, btnSelectAllAnimNodes, btnSelectSet, btnSelectOpposite, btnSelectMoreOpposite, btnFkIkSnap, btnFkIkMatch,
+									btnTrackView, channelBoxGroup, turboSmoothGroup,displayGroup, assetManagerGroup, 
+									ckbCopyPastePosture, ckbCopyPasteTrack, btnCopy, btnPaste, btnPasteOpposite,
+									btnLoadAnimation, btnSaveAnimation, spnInsertAt, btnTurboSmoothOn, btnTurboSmoothOff, btnHeadXRAYToggle,btnTrajectoryToggle,
+									btnHide, btnShow, btnUnhideAll, btnSolo, chkaffectAllAssets, chkaffectDependentAssets,
+									btnConnection, btnVMpuppet, btnVMpuppetHead, btnVMhead, btnVMskin, btnVMskinBox, chkaffectFFDs, chkaffectHair, chkDisSecPuppets, chkShowExtraControls,
+									constraintsGroup, btnConstraintsAddLink, btnConstraintsLinkToWorld, btnConstraintsDeleteLink, ckbConstraintsSyncLinkTime, constraintsSnapGroup, btnConstraintsSnapPrevLinkToThis, btnConstraintsSnapThisLinkToPrev, spnConstraintsLinkStartTime,lvConstraintsLinks)
+									/*,animlayersGroupBox, btnEnableAnimLayers, btnDisableAnimLayers, btnAddAnimLayer, btnRemoveAnimLayer, btnSetActiveAnimLayer, btnCollapseAnimLayers, lvAnimLayers, lblAnimLayerWeight,spnAnimLayerWeight)*/
+			_riggerControls = for _control in lb.synopticBox.rollMain.controls where findItem (_commonControls + _animatorControls) _control == 0 collect _control
+			
+			_hiddenControls = #(animlayersGroupBox, btnEnableAnimLayers, btnDisableAnimLayers, btnAddAnimLayer, btnRemoveAnimLayer, btnSetActiveAnimLayer, btnCollapseAnimLayers, lvAnimLayers, lblAnimLayerWeight,spnAnimLayerWeight)
+
+			case ui.editMode of
+			(
+				#animator:
+				(
+					_riggerControls.visible = false
+					_animatorControls.visible = true
+					minRollWidth = leftColumnWidth + rightColumnWidth		
+				)
+				
+				#rigger:
+				(
+					_animatorControls.visible = false
+					_riggerControls.visible = true
+					minRollWidth = leftColumnWidth
+
+					lb.synopticBox.rollMain.ui.updateSelectedItemInfoInUI()
+					
+					lb.synopticBox.rollMain.captureColors()
+				)
+			)
+			
+			-- al final ocultamos los que no queremos ocultar y que se han mostrado en cualquier caso
+			_hiddenControls.visible = false
+
+			lb.synopticBox.rollMain.height = btnMoveForward.pos.y + dgBorderColor.height + 10		
+		)
+		
+		--------------------------------------------------------------------------------------
+		--	Crea el menú al pulsar con el botón derecho del ratón sobre el interface
+		--------------------------------------------------------------------------------------
+		fn createRMenu pos menuType =
+		(
+			_rMenuItems = #()
+			
+			rMenu.items.clear()
+			rMenu.rendermode = (dotnetclass "System.Windows.Forms.ToolStripRenderMode").system
+			
+			if ui.editMode == #rigger then
+			(
+				case menuType of
+				(
+					#selectors:
+					(
+						_miAssignToSelectedObject = (dotnetobject "System.Windows.Forms.ToolStripMenuItem" "Assign To Selected Object" )
+						_miPickObject = (dotnetobject "System.Windows.Forms.ToolStripMenuItem" "Pick Object" )
+						_miRemoveObject = (dotnetobject "System.Windows.Forms.ToolStripMenuItem" "Remove Object" )
+						_miSelectAssignedObjects = (dotnetobject "System.Windows.Forms.ToolStripMenuItem" "Select Assigned Object(s)" )
+						_miSelectUnassignedSelectors = (dotnetobject "System.Windows.Forms.ToolStripMenuItem" "Select Unassigned Selectors" )
+						_miToggleIKFKSwitcher = (dotnetobject "System.Windows.Forms.ToolStripMenuItem" "Toggle IKFK switcher" )
+						_miDeleteSelectors = (dotnetobject "System.Windows.Forms.ToolStripMenuItem" "Delete Selector(s)"  )
+						_miCutSelectors = (dotnetobject "System.Windows.Forms.ToolStripMenuItem" "Cut Selector(s)"  )
+						_miCopySelectors = (dotnetobject "System.Windows.Forms.ToolStripMenuItem" "Copy Selector(s)"  )
+						_miPasteSelectors = (dotnetobject "System.Windows.Forms.ToolStripMenuItem" "Paste Selector(s)"  )
+						_miPasteSelectorSize = (dotnetobject "System.Windows.Forms.ToolStripMenuItem" "Paste Selector Size"  )
+						_miPasteSelectorPos = (dotnetobject "System.Windows.Forms.ToolStripMenuItem" "Paste Selector Position"  )
+						_miSwitchToAnimatorMode = (dotnetobject "System.Windows.Forms.ToolStripMenuItem" "Switch To Animator Mode"  )
+						
+						append _rMenuItems _miAssignToSelectedObject
+						append _rMenuItems _miPickObject
+						append _rMenuItems _miRemoveObject
+						append _rMenuItems _miSelectAssignedObjects
+						append _rMenuItems _miSelectUnassignedSelectors
+						append _rMenuItems _miToggleIKFKSwitcher
+						append _rMenuItems (dotnetobject "System.Windows.Forms.ToolStripSeparator")
+						append _rMenuItems _miDeleteSelectors
+						append _rMenuItems (dotnetobject "System.Windows.Forms.ToolStripSeparator")
+						append _rMenuItems _miCutSelectors
+						append _rMenuItems _miCopySelectors
+						append _rMenuItems _miPasteSelectors
+						append _rMenuItems _miPasteSelectorSize
+						append _rMenuItems _miPasteSelectorPos
+						append _rMenuItems (dotnetobject "System.Windows.Forms.ToolStripSeparator")
+						append _rMenuItems _miSwitchToAnimatorMode
+						
+						--	añadimos todos los items al menú
+						for i = 1 to _rMenuItems.count do rMenu.items.add _rMenuItems[i]
+						
+						--	Inhabilitamos las opciones que no puedan ser utilizadas
+						if (getCurrentSelection()).count != 1 then (_miAssignToSelectedObject.enabled = false)
+						if ui.tabs.selectedTab.selectedItems.count != 1 then (_miAssignToSelectedObject.enabled = _miPickObject.enabled = false)
+						if ui.tabs.selectedTab.selectedItems.count < 1 then
+						(
+							_miRemoveObject.enabled = false
+							_miDeleteSelectors.enabled = false
+							_miToggleIKFKSwitcher.enabled = false
+							_miCutSelectors.enabled = false
+							_miCopySelectors.enabled = false
+						)
+						else
+						(
+								_miToggleIKFKSwitcher.checked = ui.tabs.selectedTab.selectedItems[1].isIKFKSwitch
+						)
+						if ui.copyPasteBuffer.count == 0 then _miPasteSelectors.enabled = false
+					)
+					
+					#images:
+					(
+						append _rMenuItems "Bring To Front" 
+						append _rMenuItems "Send To Back" 
+						append _rMenuItems "Move Forward" 
+						append _rMenuItems "Move Backwards" 
+						append _rMenuItems (dotnetobject "System.Windows.Forms.ToolStripSeparator")
+						append _rMenuItems "Delete Image(s)" 
+						append _rMenuItems (dotnetobject "System.Windows.Forms.ToolStripSeparator")
+						append _rMenuItems ("Switch To Animator Mode")
+						
+						--	añadimos todos los items al menú
+						for i = 1 to _rMenuItems.count do rMenu.items.add _rMenuItems[i]
+					)
+					
+					#symmetryBar:
+					(
+						append _rMenuItems "Reset Bar"
+						
+						--	añadimos todos los items al menú
+						for i = 1 to _rMenuItems.count do rMenu.items.add _rMenuItems[i]
+					)
+
+					#createSelectors:
+					(
+						if ui.isViewportPrepared() then
+							append _rMenuItems "Restore viewport"
+						else
+							append _rMenuItems "Prepare viewport"
+						
+						--	añadimos todos los items al menú
+						for i = 1 to _rMenuItems.count do rMenu.items.add _rMenuItems[i]
+					)
+				)
+			)
+			else if ui.editMode == #animator then
+			(
+				if keyboard.controlPressed then append _rMenuItems ("Switch To Rigger Mode")
+				for i = 1 to _rMenuItems.count do rMenu.items.add _rMenuItems[i]
+			)
+			
+			rMenu.Show pos.x pos.y
+		)
+		
+		--------------------------------------------------------------------------------------
+		--	Establece el modo de trabajo de la herramienta y activa y desactiva los controles 
+		--	de interface necesarios
+		--------------------------------------------------------------------------------------
+		fn setEditMode editMode askPassword:true =
+		(
+			ui.editMode = editMode
+
+			if ui.editMode != #animator and ui.editMode != #rigger do ui.editMode = #animator
+
+			if ui.editMode == #rigger and askPassword do
+			(
+				--------------------------------------------------ROLLOUT---------------------------------------------------------
+				rollout rollRIGauthorize "Authorize"
+				(
+					local authCode = "oio14"
+					--------------------------------------------------------------------------------------------------
+					------------------------------------------ CONTROLES ------------------------------------------ 
+					--------------------------------------------------------------------------------------------------
+					
+					GroupBox grpId "Enter password" pos:[5,5] width:160 height:67
+					dotNetControl edtPassword "System.Windows.Forms.textbox" pos:[15,32] width:140 height:16
+					
+					button btnOk "Ok" pos:[55,72] width:55 height:25
+					button btnCancel "Cancel" pos:[110,72] width:55 height:25
+					
+					----------------------------------------------------------------------------------------
+					--  comprueba si el password es correcto y permite cerrar o no el rollout de autorización
+					----------------------------------------------------------------------------------------
+					fn checkPassword =
+					(
+						if edtPassword.text != authCode then
+						(
+							lb.synopticBox.rollMain.ui.editMode = #animator
+							messageBox "Password incorrect."
+							edtPassword.text = ""
+							setFocus edtPassword
+						)
+						else
+						(
+							lb.synopticBox.rollMain.ui.editMode = #rigger
+							destroyDialog rollRIGauthorize
+						)
+					)
+					
+					---------------------------------------------
+					on rollRIGauthorize open do
+					(
+						edtPassword.passwordChar = "•"
+						edtPassword.acceptsReturn = true
+						setFocus edtPassword
+					)
+					
+					---------------------------------------------
+					on btnOk pressed do
+						checkPassword()
+					
+					---------------------------------------------
+					on edtPassword keyUp events do
+					(
+						key = events.keydata.tostring()
+						case key of
+						(
+							--"ShiftKey" : (ckbRelAbs.checked = false; ckbRelAbs.caption = "rel")
+							"Return":
+								checkPassword()
+							"Escape":
+							(
+								lb.synopticBox.rollMain.ui.editMode = #animator
+								destroyDialog rollRIGauthorize
+							)
+						)
+					)
+					
+					---------------------------------------------
+					on btnCancel pressed do
+					(
+						lb.synopticBox.rollMain.ui.editMode = #animator
+						destroyDialog rollRIGauthorize
+					)
+				)
+				--------------------------------------------------ROLLOUT END-----------------------------------------------------
+				_pos = getDialogPos lb.synopticBox.rollMain
+				_posX = _pos.x + lb.synopticBox.rollMain.width/2 - 80
+				_posY = _pos.y + lb.synopticBox.rollMain.height/2
+				createDialog rollRIGauthorize pos:[_posX,_posY] modal:true
+			)
+			
+			case ui.editMode of
+			(
+				#animator:
+				(
+					ui.deselectItems #all
+					ui.setItemsFilter #selectors
+					
+					--	deseleccionamos todas las herramientas
+					ui.mode = #idle
+					
+					--	Ocultamos la barra de simetría
+					ui.symmetryBar.uiObj.visible = false
+					ui.symmetryBar.barObj.visible = false
+					btnSymmetryBar.checked = false
+					
+					--	Inhabilitamos los selectores que no tengan objeto asignado
+					for _tab in ui.tabs.tabPages do
+						for _selector in _tab.selectorItems where _selector.obj == undefined do
+							_selector.uiObj.enabled = false
+				)
+				
+				#rigger:
+				(
+					if btnMove.checked then ui.mode = #transformTool
+					if btnAddSelector.checked then ui.mode = #addSelectorsTool
+					
+					--	Habilitamos todos los selectores para su edición
+					for _tab in ui.tabs.tabPages do
+						for _selector in _tab.selectorItems do
+							_selector.uiObj.enabled = true
+				)
+			)
+			
+			ui.transformator.update()
+			
+			-- Actualizamos la interfaz para que muestre unos controles u otros
+			updateInterface()
+
+			-- Actualizamos el tamaño a uno muy pequeño para que lo lleve al tamaño minimo
+			lb.synopticBox.rollMain.resize [10,10]
+
+			-- Recreamos la pila de undo-redo
+			_commandStack = commandStack()
+
+		)
+		
+		--------------------------------------------------------------------------------------
+		--	Establece el modo de trabajo de la herramienta y activa y desactiva los controles 
+		--	de interface necesarios
+		--------------------------------------------------------------------------------------
+		fn setMode mode =
+		(
+			_toolButtons = #(btnAddSelector, btnMove)
+			for _t in _toolButtons do _t.checked = false
+			
+			case mode of
+			(
+				#addSelectorsTool: 
+				(
+					ui.setItemsFilter #selectors
+					btnAddSelector.checked = true
+				)
+				
+				#transformTool: 
+				(
+					btnMove.checked = true
+				)
+			)
+			
+			ui.mode = mode
+			ui.transformator.update()
+		)
+		
+		
+		---------------------------------------------------------------------------
+		--rellena el gridView de iconos
+		---------------------------------------------------------------------------
+		fn fillAssetIcons =
+		(
+			synopticSceneAssets = parent.getSynopticAssets()
+			_cellWidth = 25
+			_cellHeight = 25
+			
+			lb.synopticBox.disableRefreshInterface()
+			
+			prevSelectedAsset = selectedAsset
+			
+			dgAssetIcons.columns.clear() --limpia las columnas
+			
+			if synopticSceneAssets.count <= 8 then
+			(
+				dgAssetIconsHscroll.enabled = false
+			)
+			else
+			(
+				dgAssetIconsHscroll.enabled = true
+				_large = (100 - (synopticSceneAssets.count - 8)*25)
+				dgAssetIconsHscroll.LargeChange = if _large < 10 then 10 else _large
+				dgAssetIconsHscroll.SmallChange = 25
+			)
+
+			--	Añadimos columnas de tipo texto o imagen dependiendo de si los assets tienen o no icono
+			for _asset in synopticSceneAssets do
+			(
+				_icon = lb.asset.getAssetIcon _asset
+				
+				if _icon != undefined then
+					dgAssetIcons.columns.add (dotnetobject "System.Windows.Forms.DataGridViewImageColumn")
+				else --no hay icono
+					dgAssetIcons.columns.add (dotnetobject "System.Windows.Forms.DataGridViewTextBoxColumn")
+				
+				dgAssetIcons.columns.item[dgAssetIcons.columns.count - 1].ToolTipText = _asset.fullname
+				dgAssetIcons.columns.item[dgAssetIcons.columns.count - 1].width = _cellWidth
+			)
+			
+			--	Añadimos la fila de celdas
+			if dgAssetIcons.rows.count == 0 and dgAssetIcons.columns.count > 0 then
+			(
+				row = (dotnetobject "System.Windows.Forms.DataGridViewRow")
+				row.height = _cellHeight
+				dgAssetIcons.rows.add row 
+			)
+			
+			--	Para cada asset añadimos su icono en caso de que exista y configuramos el color de fondo de su celda
+			for i = 1 to synopticSceneAssets.count do
+			(
+				_asset = synopticSceneAssets[i]
+				_icon = lb.asset.getAssetIcon _asset
+				
+				--elige el color de fondo de la linea
+				_cellDotNetColor = undefined
+				_cellColor = undefined
+				
+				case _asset.type of
+				(
+					(lb.nc.NC_chrPrefix):
+					(
+						_cellDotNetColor = (dotNetClass "System.Drawing.Color").fromargb lb.asset.chrAssetColor.x lb.asset.chrAssetColor.y lb.asset.chrAssetColor.z
+						_cellColor = lb.asset.chrAssetColor as color
+					)
+					
+					(lb.nc.NC_prpPrefix):
+					(
+						_cellDotNetColor = (dotNetClass "System.Drawing.Color").fromargb lb.asset.prpAssetColor.x lb.asset.prpAssetColor.y lb.asset.prpAssetColor.z
+						_cellColor = lb.asset.prpAssetColor as color
+					)
+					
+					(lb.nc.NC_sprPrefix):
+					(
+						_cellDotNetColor = (dotNetClass "System.Drawing.Color").fromargb lb.asset.sprAssetColor.x lb.asset.sprAssetColor.y lb.asset.sprAssetColor.z
+						_cellColor = lb.asset.sprAssetColor as color
+					)
+					
+					(lb.nc.NC_setPrefix):
+					(
+						_cellDotNetColor = (dotNetClass "System.Drawing.Color").fromargb lb.asset.setAssetColor.x lb.asset.setAssetColor.y lb.asset.setAssetColor.z
+						_cellColor = lb.asset.setAssetColor as color
+					)
+					
+					(lb.nc.NC_fxPrefix):
+					(
+						_cellDotNetColor = (dotNetClass "System.Drawing.Color").fromargb lb.asset.fxAssetColor.x lb.asset.fxAssetColor.y lb.asset.fxAssetColor.z
+						_cellColor = lb.asset.fxAssetColor as color
+					)
+				)--case
+				
+				--	Asignamos al fondo de la celda el color que le corresponda según el tipo de asset que representa
+				dgAssetIcons.columns.item[i-1].defaultCellStyle.BackColor = _cellDotNetColor
+					
+				if _icon != undefined then
+				(
+					(dgAssetIcons.item (i-1) 0).ToolTipText = _asset.fullname 
+					(dgAssetIcons.item (i-1) 0).value = _icon
+				)
+				else --no hay icono
+				(
+					(dgAssetIcons.item (i-1) 0).ToolTipText = _asset.fullname 
+					(dgAssetIcons.item (i-1) 0).value = substring _asset.name 1 3
+				)
+			)
+			
+			if dgAssetIcons.columns.count != 0 then
+			(
+				_selectedIndex = 1
+				if prevSelectedAsset != undefined do
+					for i=1 to synopticSceneAssets.count do
+						if prevSelectedAsset.fullName == synopticSceneAssets[i].fullName do
+						(
+							_selectedIndex = i
+							exit
+						)
+
+				selectedAsset = synopticSceneAssets[_selectedIndex]
+				(dgAssetIcons.item 0 (_selectedIndex-1)).selected = true
+			)
+			
+			lb.synopticBox.enableRefreshInterface()
+			lb.synopticBox.rollMain.fillSynopticSqueme()
+		)
+		
+		---------------------------------------------------------------------------
+		--	rellena el esquema synóptico del personaje
+		---------------------------------------------------------------------------
+		fn fillSynopticSqueme =
+		(
+			if lb.synopticBox.refreshInterfaceFlag then
+			(
+				if selectedAsset != undefined then
+				(
+					_loadMsg = ""
+					_synopticFile = ""
+
+					--	Buscamos el sinóptico correspondiente al preset que tenemos cargado
+					_presetFile = ""
+					
+					for _node in selectedAsset.animNodesAll where _presetFile == "" and lb.nodeInfo.hasNodeInfo _node do
+					(
+						for _file in _node.nodeinfo.fileHistory where _presetFile == "" do
+						(
+							_base = lb.io.getBaseName _file
+							_lBase = for s in (lb.str.split _base ".") collect toLower s
+							if (findItem _lBase "prt") != 0 do
+								_presetFile = _base
+						)
+					)
+					
+					if _presetFile != "" do
+					(
+						_m = lb.re.matchObj _presetFile lb.nc.NC_filePresetRegExp
+						if _m.success do
+						(
+							_synopticFiles = #()
+							_replaces = dotNetObject "System.Collections.Hashtable"
+							_replaces.add "name" ((_m.Groups.Item("name")).value)
+							_replaces.add "presetPrefix" ((_m.Groups.Item("presetPrefix")).value)
+							_replaces.add "presetSuffix" ((_m.Groups.Item("presetSuffix")).value)
+							_replaces.add "subtype" ((_m.Groups.Item("subtype")).value)
+							_replaces.add "version" "??"
+							_replaces.add "pasandodemi" ((_m.Groups.Item("pasandodemi")).value) --solo para no repetir código
+							for _group in #("pasandodemi", "presetSuffix", "presetPrefix") where _synopticFiles.count == 0 do
+							(
+								if _replaces.Item[_group] == "std" do
+									continue
+								_replaces.remove _group
+								_replaces.add _group "std"
+								_baseFile = (lb.re.replaceGroupsInPattern (lb.nc.NC_filePresetRegExp) _replaces)
+								_synopticFile = selectedAsset.folder + "rig\\synoptic\\" + (substituteString _baseFile ".prt" ".syn")
+								_synopticFiles = getFiles _synopticFile
+							)
+
+							if _synopticFiles.count > 0 do
+							(
+								_presetVersion = (_m.Groups.Item("version")).value as integer
+								_foundVersion = 0
+								for _file in _synopticFiles do
+								(
+									_fileversion = (substring _file (_file.count-5) 2) as integer
+									if _fileversion <= _presetVersion and _foundVersion < _fileversion do
+									(
+										_foundVersion = _fileversion
+										_synopticFile = _file
+									)
+								)
+							)
+						)
+					)
+					
+					--	Buscamos el sinóptico que corresponde exactamente con el asset actual
+					if not doesFileExist _synopticFile then
+					(
+						_synopticFile = selectedAsset.folder + "rig\\synoptic\\" + selectedAsset.fullName + "_synoptic.syn"
+					)
+					
+					--	Si no existe, buscamos el del preset {*-std}
+					if not doesFileExist _synopticFile then
+					(
+						_synFiles = getFiles (selectedAsset.folder + "rig\\synoptic\\*.syn")
+						_assetNameParts = ""
+						_synFilesPrefix = ""
+
+						for i=1 to _synFiles.count do 
+						(
+							_synFilesParts = filterstring _synFiles[i] "\\"
+							_synFilesPrefix = filterString _synFilesParts[_synFilesParts.count] "_{-"
+							_assetNameParts = filterstring selectedAsset.fullName "_{-"
+							if _assetNameParts[3] == _synFilesPrefix[3] then
+							(
+								_synopticFile = selectedAsset.folder + "rig\\synoptic\\" + (filterstring selectedAsset.fullName "{}")[1] + "{" + _assetNameParts[3] + "-std}_synoptic.syn"
+								loadMsg = _assetNameParts[3] + "synoptic"
+							)
+						)
+					)
+					
+					--	Si tampoco existe, Localizaremos el base del objeto y buscaremos en la ruta relativa al asset del nodeInfo
+					if not doesFileExist _synopticFile then
+					(
+						_selectedAsset = synopticSceneAssets[dgAssetIcons.selectedCells.item[0].columnIndex +1 ]
+						_synPath = undefined
+						for _node in _selectedAsset.animNodesAll do 
+						(
+							if MatchPattern _node.name pattern: ("*_" + lb.nc.NC_ANIM_base + "_*") do 
+							(
+								if lb.nodeInfo.hasNodeInfo _node do 
+								(
+									_lastFileInfo = undefined
+									for _nodeInfo in _node.nodeInfo.fileHistory do 
+									(
+										_nodeInfoParts = FilterString _nodeInfo "."
+										if _nodeInfoParts[_nodeInfoParts.count] == "prt" do 
+										(
+											_lastFileInfo = _nodeInfo
+										)
+									)
+									_lastFileInfoParts = FilterString _lastFileInfo "\\"
+									_synPath = _lastFileInfoParts[1] + "\\" + _lastFileInfoParts[2] + "\\" + _lastFileInfoParts[3] + "\\" + _lastFileInfoParts[4] + "\\" + _lastFileInfoParts[5] + "\\" + lb.nc.NC_rigFolderName + "\\synoptic\\" + _selectedAsset.fullname + "_synoptic.syn"  
+								)
+							)
+						)
+						if _synPath != undefined do _synopticFile = _synPath
+						_loadMsg = "nodeInfo synoptic"
+					)
+
+					--	Si tampoco existe, buscamos el sinóptico genérico en Resource
+					if not doesFileExist _synopticFile then
+					(
+						_synopticFile = "R:\\resource\\technical\\max\\rigging\\synoptic\\" + selectedAsset.type + "_generic_synoptic.syn"
+						_loadMsg = "generic synoptic"
+					)
+					--print _synopticFile
+					--	Cargamos el synóptico si existe el fichero
+					if doesFileExist _synopticFile then
+					(
+						tbTabs.visible = true
+						tbTabs.pos.x = 0
+						loadSynopticScheme _synopticFile
+					)
+					else
+					(
+						_loadMsg = "No synoptic found"
+						tbTabs.visible = false
+						tbTabs.pos.x = -1000
+					)
+
+					-- Cargamos el selection set del nuevo personaje
+					if (selectedAsset != undefined) do
+					(
+						_startFolder = selectedAsset.folder + "rig\\synoptic\\"
+						_fileToLoad = _startFolder + selectedAsset.fullName + "_selectionset.ss"
+						loadSelectionSets _fileToLoad
+					)
+								
+					lblLoadMessage.text = _loadMsg
+				)
+				else
+				(
+					lblLoadMessage.text = ""
+					ui.tabs.clear()
+				)
+			)
+		)
+		
+		--------------------------------------------------------------------------------------
+		--  Pone en los selectors seleccionados el color activo en los controles de interface
+		--------------------------------------------------------------------------------------
+		fn selectColor uiControl =
+		(
+			_selectorItems = ui.tabs.selectedTab.selectedItems
+			
+			case uiControl.name of
+			(
+				"fillColorSelector": 
+				(
+					fillColor = uiControl.currentCell.style.backColor
+					ui.setItemsColor _selectorItems fillColor:fillColor
+					cpFillColor.color = [fillColor.r, fillColor.g, fillColor.b]
+					
+					for i = 1 to dgFillColor.rows.item[0].cells.count do dgFillColor.rows.item[0].cells.item[i-1].value = ""
+					dgFillColor.currentCell.value = "·"
+					
+					uiControl.clearSelection()
+				)
+				
+				"cpFillColor": 
+				(
+					fillColor = (dotnetclass "system.drawing.color").fromArgb cpFillColor.color.r cpFillColor.color.g cpFillColor.color.b
+					ui.setItemsColor _selectorItems fillColor:fillColor
+				)
+				
+				"borderColorSelector": 
+				(
+					borderColor = uiControl.currentCell.style.backColor
+					ui.setItemsColor _selectorItems borderColor:borderColor
+					cpBorderColor.color = [borderColor.r, borderColor.g, borderColor.b]
+					
+					for i = 1 to dgBorderColor.rows.item[0].cells.count do dgBorderColor.rows.item[0].cells.item[i-1].value = ""
+					dgBorderColor.currentCell.value = "·"
+					
+					uiControl.clearSelection()
+				)
+				
+				"cpBorderColor": 
+				(
+					borderColor = (dotnetclass "system.drawing.color").fromArgb cpBorderColor.color.r cpBorderColor.color.g cpBorderColor.color.b
+					ui.setItemsColor _selectorItems borderColor:borderColor
+				)
+			)
+		)
+		
+		--------------------------------------------------------------------------------------
+		--	Construye el rollout a partir de los valores de configuración del ini
+		--------------------------------------------------------------------------------------
+		fn captureColors =
+		(
+			-- Limpiamos la selección primero
+			for i = 1 to dgFillColor.rows.item[0].cells.count do dgFillColor.rows.item[0].cells.item[i-1].value = ""
+			for i = 1 to dgBorderColor.rows.item[0].cells.count do dgBorderColor.rows.item[0].cells.item[i-1].value = ""
+				
+			
+			if ui.filterItems == #selectors and ui.tabs.selectedTab.selectedItems.count > 0 then
+			(
+				_fillCol = ui.tabs.selectedTab.selectedItems[1].fillColor
+				_borderCol = ui.tabs.selectedTab.selectedItems[1].borderColor
+				
+				for i = 1 to dgFillColor.rows.item[0].cells.count where  dgFillColor.rows.item[0].cells.item[i-1].style.backColor == _fillCol do dgFillColor.rows.item[0].cells.item[i-1].value = "·"
+				for i = 1 to dgBorderColor.rows.item[0].cells.count where  dgBorderColor.rows.item[0].cells.item[i-1].style.backColor == _borderCol do dgBorderColor.rows.item[0].cells.item[i-1].value = "·"
+				
+				cpFillColor.color = [_fillCol.r, _fillCol.g, _fillCol.b]
+				cpBorderColor.color = [_borderCol.r, _borderCol.g, _borderCol.b]
+			)
+		)
+		
+		--------------------------------------------------------------------------------------
+		--	Eventos de key
+		--------------------------------------------------------------------------------------
+		fn keyDownProcess key =
+		(
+			_selItems = ui.tabs.selectedTab.selectedItems
+
+			if ui.editMode == #rigger then
+			(
+				_multiPixel = 5
+				
+				case key of
+				(
+					"Delete": ui.removeItems _selItems
+					"Up": ui.moveItems _selItems [0, -1]
+					"Down": ui.moveItems _selItems [0, 1]
+					"Right": ui.moveItems _selItems [1, 0]
+					"Left": ui.moveItems _selItems [-1, 0]
+					
+					"Up, Shift": ui.moveItems _selItems [0, -_multiPixel]
+					"Down, Shift": ui.moveItems _selItems [0, _multiPixel]
+					"Right, Shift": ui.moveItems _selItems [_multiPixel, 0]
+					"Left, Shift": ui.moveItems _selItems [-_multiPixel, 0]
+
+					"Z, Control": _commandStack.undoCommand()
+					"Y, Control": _commandStack.redoCommand()
+				)
+
+			)
+			else if ui.editMode == #animator then 
+			(
+				_objToSelect = for _it in _selItems collect _it.obj
+					
+				case key of
+				(
+					"Up":  lb.rig.jumpToVirtualParent _objToSelect
+					"Down": lb.rig.jumpToVirtualChildren _objToSelect
+					"Right": lb.rig.jumpToVirtualBrotherR _objToSelect
+					"Left": lb.rig.jumpToVirtualBrotherL _objToSelect
+					"Z": ui.zoomSelectedOverride()
+				)
+
+				setFocus tbTabs
+				
+			)
+			
+		)
+
+		----------------------------------------------------------------
+		-- Comprueba si hay un item seleccionado. en ese caso establece el tiempo del timeline al del item seleccionado
+		----------------------------------------------------------------
+		fn syncTimelineToSelectedConstraintTime =
+		(
+			-- Sincroniza el frame del timeline actual al frame del enlace
+			if lvConstraintsLinks.selectedItems.count == 1 do 
+			(
+				-- Obtenems el texto del item seleccionado
+				cellText = lvConstraintsLinks.selectedItems.item[0].text 
+
+				-- Obtenemos solamente el numero del frame
+				cellText = filterstring cellText "- "
+				if cellText.count > 0 do 
+				(
+					-- tratamos de convertirlo a entero
+					frameTime = cellText[1] as integer
+
+					-- si la conversion funciono, asignamos el tiempo del timeline a este
+					if frameTime != undefined do 
+						sliderTime = frameTime
+				)
+			)
+		)
+
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+			_id = ((parent.className + "_" + (substituteString parent.rollMain.name "Def" "")) as name)
+			callbacks.removescripts id:_id
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+
+			_id = ((parent.className + "_" + (substituteString parent.rollMain.name "Def" "")) as name)
+			--callbacks.addscript #filePreMerge 			"lb.synopticBox.disableRefreshInterface()" id:_id
+			--callbacks.addscript #filePreOpenProcess		"lb.synopticBox.disableRefreshInterface()" id:_id
+
+			--callbacks.addscript #filePostMerge "undo off (lb.synopticBox.rollMain.synopticSceneAssets = #(); lb.synopticBox.enableRefreshInterface(); lb.synopticBox.refreshInterface())" id:_id
+			--callbacks.addscript #filePostOpenProcess "undo off (lb.synopticBox.rollMain.synopticSceneAssets = #(); lb.synopticBox.enableRefreshInterface(); lb.synopticBox.refreshInterface())" id:_id
+			callbacks.addscript #selectionSetChanged "undo off (lb.synopticBox.rollMain.ui.syncSelection())" id:_id
+		)
+		
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollMainDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollMainDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--almacena posicion
+			lb.xml.setAttribute parent.cfgFile ("rollMain/pos") "x" (((getDialogPos rollMainDef).x) as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/pos") "y" (((getDialogPos rollMainDef).y) as string)
+			
+			--almacena tamaño
+			lb.xml.setAttribute parent.cfgFile ("rollMain/size") "width" (rollMainDef.width as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/size") "height" (rollMainDef.height as string)
+
+			--almacena modo
+			lb.xml.setAttribute parent.cfgFile ("rollMain/editMode") "value" (rollMainDef.ui.editMode as string)
+
+			-- Guardamos los cambios de selection sets solo si tiene sinoptico
+			if (selectedAsset != undefined) do 
+			(
+				_startFolder = selectedAsset.folder + "rig\\synoptic\\"
+				if doesFileExist _startFolder do 
+				(
+					_fileToSave = _startFolder + selectedAsset.fullName + "_selectionset.ss"
+
+					if _selectionSets.count > 0 then
+						saveSelectionSets _fileToSave
+					else 
+					(
+						if doesFileExist _fileToSave do 
+							deleteFile _fileToSave
+					)
+
+				)
+			)
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			_width = (lb.xml.getAttribute parent.cfgFile ("rollMain/size") "width") as integer
+			_height = (lb.xml.getAttribute parent.cfgFile ("rollMain/size") "height") as integer
+				
+			--posicion
+			_posX = (lb.xml.getAttribute parent.cfgFile ("rollMain/pos") "x") as integer
+			_posY = (lb.xml.getAttribute parent.cfgFile ("rollMain/pos") "y") as integer
+
+			--modo
+			_editMode = (lb.xml.getAttribute parent.cfgFile ("rollMain/editMode") "value") as name
+			
+
+			--establece minimos
+			if _width < minRollWidth then _width = minRollWidth
+			if _height < minRollHeight then _height = minRollHeight
+			if _posX < 0 then _posX = 0
+			if _posY < 0 then _posY = 0
+				
+			--aplica los valores
+			rollMainDef.width = _width
+			rollMainDef.height = _height
+			setDialogPos rollMainDef [_posX,_posY]
+			rollMainDef.setEditMode _editMode askPassword:false --si la herramienta se cerró siendo rigger, se mantiene así
+
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | getSelectedAssets | 
+		------------------------------------------------
+		fn getSelectedAssets =
+		(
+			asts = #()
+			
+			if chkaffectAllAssets.checked then
+			(
+				asts = synopticSceneAssets
+			)
+			else if selectedAsset != undefined do
+			(
+				if chkaffectDependentAssets.checked then
+					asts = (lb.asset.getDependencyGroup selectedAsset synopticSceneAssets)
+				else
+					asts = #(selectedAsset)
+			)
+			
+			asts			
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | snapFkIk | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn snapFkIk objs =
+		(
+			selSets = #()								-- 	sets por los que ya hemos pasado. Sirve para no hacer más de una vez snap en piezas de un mismo set.
+			newSelection = #()							--	objetos que quedarán seleccionados después del Snap
+			
+			removeSceneEvents()
+			disableSceneRedraw()
+			
+			undo "FkIk Snap" on
+			(
+				for o in objs do
+				(
+					_CA = if (isProperty o.modifiers[1] #fkIkSnaps) then  o.modifiers[1].custAttributes[#fkIkSnaps]
+							else if (isProperty o.modifiers[1] #indirectFkIkSnaps) then  o.modifiers[1].custAttributes[#indirectFkIkSnaps]
+					
+					if _CA != undefined then
+					(
+						objSets = lb.objectSets.get o
+						setFound = false
+						
+						--	miramos si ya habíamos trabajado con piezas del mismo set que la actual
+						for s in objSets do 
+							if (finditem selSets s != 0) then setFound = true
+							
+						--	si no se encuentra el set de la pieza hacemos el snap
+						if not setFound then
+							_CA.fkIkSnap()
+						
+						--	añadimos el objeto seleccionado a la selección final
+						for o in selection do appendIfUnique newSelection o
+						
+						--	anotamos los sets de la pieza para no volver a evaluarlos
+						for s in objSets do appendIfUnique selSets s
+					)
+				)
+			)
+			
+			--	creamos la nueva selección de objetos
+			select newSelection
+			enableSceneRedraw()
+			redrawViews()
+			
+			createSceneEvents()
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | setAllTurboSmooth | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn setAllTurboSmooth obj _state =
+		(
+			_turboSmoothMods = for i in obj.modifiers where (classof i == turbosmooth) collect i
+			if _turboSmoothMods.count > 0 then
+			(
+				for _tsMod in _turboSmoothMods do 
+				(
+					_tsMod.enabledInViews = _state 
+					_tsMod.enabledInRenders = true
+					_tsMod.enabled = true
+					
+				)
+			)
+			
+		)
+				
+		--++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+		--EVENTS
+		--++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+		
+		on tmClock tick do
+		(
+			if ui.editMode == #animator and objects.count != numObjects do
+				lb.synopticBox.refreshInterface()
+			numObjects = objects.count
+		)
+		
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollMain | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		--@gets: point2 | size | tamaño al que se ha redimensionado el rollout
+		------------------------------------------------
+		on rollMainDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollMain | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollMainDef open do
+		(
+			ui = strUI()
+			ui.init()
+
+			loadSettings()
+
+			createSceneEvents() --crea los callbacks
+
+			if parent.rollMain != undefined then resize [parent.rollMain.width, parent.rollMain.height]
+
+			dgAssetIcons.multiSelect = false
+			
+			lblLoadMessage.textAlign = (dotnetClass "System.Drawing.ContentAlignment").middleCenter
+			lblLoadMessage.backcolor = dgAssetIcons.backgroundColor
+			lblLoadMessage.forecolor = (dotnetclass "system.drawing.color").fromARGB 200 200 200
+			
+			initConstraintsListView()
+
+			lb.synopticBox.rollMain.fillAssetIcons()
+	
+			updateSelectionSetsComboBox()
+
+			updateConstraintsUI clearList:true clearSelections:true
+
+			-- Creamos la pila de undo-redo
+			_commandStack = commandStack()
+
+			--parent.refreshInterfaceFlag = true
+			gc()
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollMain | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollMainDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+			
+			parent.opened = false --indica que la herramienta está cerrada.
+			updateToolbarButtons()
+
+			-- desligamos la pila de undo-redo
+			_commandStack = undefined
+		)
+
+		----------------------------------------------------------------------------------
+		--actualiza el listado en funcion del valor del scroll
+		----------------------------------------------------------------------------------
+		on dgAssetIconsHscroll ValueChanged e do
+		(
+			newVal = (dgAssetIconsHscroll.value * 100.0)/(100 - dgAssetIconsHscroll.LargeChange)
+			newVal = ((dgAssetIcons.columns.count * 25) - (200))/100.0*newVal
+			if newVal >= 0 then dgAssetIcons.HorizontalScrollingOffset = newVal
+		)
+		
+		--------------------------------------------------------------------------------------
+		on dgAssetIcons selectionChanged events do
+		(
+			prevSelectedAsset = selectedAsset
+
+			_index = if dgAssetIcons.selectedCells.count > 0 then dgAssetIcons.selectedCells.item[0].columnIndex + 1 else undefined
+			if _index != undefined then
+				selectedAsset = synopticSceneAssets[_index]
+			else
+				selectedAsset = undefined
+			
+			_refresh = false
+			if prevSelectedAsset == undefined then
+				_refresh = true
+			else if selectedAsset == undefined then
+				_refresh = true
+			else if prevSelectedAsset.fullName != selectedAsset.fullName do
+				_refresh = true
+
+			if _refresh do
+			(
+				if (prevSelectedAsset != undefined) do
+				(
+					-- Guardamos los cambios de selection sets
+					_startFolder = prevSelectedAsset.folder + "rig\\synoptic\\"
+					if doesFileExist _startFolder do 
+					(
+						_fileToSave = _startFolder + prevSelectedAsset.fullName + "_selectionset.ss"
+					
+						if _selectionSets.count > 0 then
+							saveSelectionSets _fileToSave
+						else 
+						(
+							if doesFileExist _fileToSave do 
+								deleteFile _fileToSave
+						)
+					)
+				)
+
+				fillSynopticSqueme()
+			)
+					
+		)
+		
+		--------------------------------------------------------------------------------------
+		on dgAssetIcons mouseUp events do
+		(
+			_button = events.button.toString()
+			if _button == "Right" then
+				createRMenu mouse.screenPos ui.filterItems
+		)
+
+		--------------------------------------------------------------------------------------
+
+		on cbSelectionSets SelectedIndexChanged do
+		(
+			-- Obtengo los objetos seleccionados ahora mismo a traves del sinoptico y los añado
+			_uiSelItems = ui.tabs.selectedTab.selectedItems
+			_selItem = (cbSelectionSets.selectedItem as string)
+
+			-- Si el usuario quiere añadir un selection set pero no hay nada seleccionado volver al inicio
+			if _selItem == _addSelectionSetString and _uiSelItems.count == 0 then
+				cbSelectionSets.selectedIndex = 0
+
+			-- Si cambiamos al dummy, limpiar la seleccion
+			else if _selItem == _selectionSetDummyText then 
+				True
+				--clearSelection()
+
+			-- Si quiere añadir un selection set y tiene items seleccionados
+			else if _selItem == _addSelectionSetString and _uiSelItems.count > 0 then
+			(
+				_newName = lb.message.show "Write the name for the new set..." type:#queryString pos:undefined size:[300,75]
+
+				-- Si el nombre escrito es valido y no se ha cancelado y el item no existe ya con ese nombre
+				if (classof _newName != BooleanClass and _newName != #cancel and _newName != "" ) then
+				(
+					if not (cbSelectionSets.items.Contains _newName) then
+					(
+						_selectedObjects = #()
+
+						-- añado el objeto relacionado con el item del sinoptico
+						for _selItem in _uiSelItems where _selItem.obj != undefined do
+							append _selectedObjects _selItem.obj
+
+						-- añadimos el item al combo al final de la lista
+						_index = (cbSelectionSets.items.count - 1)
+						cbSelectionSets.items.insert _index _newName
+
+						-- creamos una estructura de datos del set añadido
+						_newSet = _selectionSet()
+						_newSet.name = _newName
+						append _selectionSets _newSet
+
+						-- Añado los objetos a la lista de objetos del set
+						for _selObj in _selectedObjects do 
+							append _newSet.objectList _selObj
+
+						-- cambiamos la seleccion al item que acabamos de añadir
+						cbSelectionSets.selectedIndex = (cbSelectionSets.items.count - 2)
+					)
+					else 
+						cbSelectionSets.selectedIndex = 0
+				)
+				else 
+					cbSelectionSets.selectedIndex = 0
+			)
+
+			-- Si cambiamos la seleccion a otra
+			else if _selItem != _addSelectionSetString and _selItem != _selectionSetDummyText then 
+			(
+				index =  cbSelectionSets.selectedIndex
+				item = _selectionSets[index]
+				
+				if (keyboard.controlPressed) then
+					selectMore item.objectList
+				else if (keyboard.altPressed) then 
+					deselect item.objectList
+				else 
+					select item.objectList
+			)
+
+		)
+		
+		--------------------------------------------------------------------------------------
+
+		on btnDeleteSelectionSet pressed do 
+		(
+			selIndex = cbSelectionSets.selectedIndex 
+			selText = cbSelectionSets.selectedItem
+
+			if selText != _addSelectionSetString and selText != _selectionSetDummyText do 
+			(
+				cbSelectionSets.items.removeAt selIndex
+				deleteItem _selectionSets selIndex -- el primer item es el dummy text.
+				cbSelectionSets.selectedIndex = 0 -- Inicializamos la seleccion
+			)
+		)
+
+		--------------------------------------------------------------------------------------
+
+		on btnLoadSelectionSet pressed do 
+		(
+			if selectedAsset != undefined do
+			(
+				_startFolder = selectedAsset.folder + "rig\\synoptic\\"
+				
+				_filename = getOpenFileName caption:"Load Selection Sets" filename:_startFolder historyCategory:"synopticBox" types:"Selection Set(*.ss)|*.ss" 
+				
+				if _filename != undefined then
+				(
+					-- cargo el archivo 
+					loadSelectionSets _filename
+				)
+
+			)
+
+		)
+	
+		--------------------------------------------------------------------------------------
+		on btnLoad pressed do
+		(
+			
+			_filename = getOpenFileName caption:"Save Synoptic Scheme" historyCategory:"synopticBox" types:"Synoptic Scheme(*.syn)|*.syn|All(*.*)|*.*" 
+			
+			if _filename != undefined then
+			(
+				loadSynopticScheme _filename
+				tbTabs.visible = true
+				tbTabs.pos.x = 0
+			)
+		)
+		
+		--------------------------------------------------------------------------------------
+		on btnSave pressed do
+		(
+			_candidateFilename = if selectedAsset != undefined then (selectedAsset.folder + "rig\\synoptic\\" +  selectedAsset.fullName + "_synoptic.syn")
+			_filename = getSaveFileName caption:"Save Synoptic Scheme" historyCategory:"synopticBox" types:"Synoptic Scheme(*.syn)|*.syn|All(*.*)|*.*" filename:_candidateFilename
+			
+			if _filename != undefined then
+			(
+				saveSynopticScheme _filename
+			)
+		)
+
+		--------------------------------------------------------------------------------------
+		on btnTurboSmoothOn pressed do
+		(
+			_nodes=selection as array
+			-- coge todos los 'assets' seleccionados
+			_selectedAssets = lb.asset.getAssetsFromNodes _nodes
+			
+			disableSceneRedraw()
+			-- por cada asset, coge todos los objetos tipo Mesh
+			for _ast in _selectedAssets do
+			(
+				-- coge todos los 'meshes' del asset del objeto seleccionado
+				_astMeshes = lb.asset.getAssetNodesByType _ast lb.nc.NC_classMesh
+				-- setAllTurboSmooth _astMeshes true
+				
+				-- y activa los turbosmooth
+				for i in _astMeshes do 
+				(	
+					setAllTurboSmooth i true
+				) 
+			)
+			enableSceneRedraw()
+			
+		
+		)
+		
+		--------------------------------------------------------------------------------------
+		on btnTurboSmoothOff pressed do
+		(
+			-- coge todos los 'assets' seleccionados
+			_nodes=selection as array
+			_selectedAssets = lb.asset.getAssetsFromNodes _nodes
+			
+			disableSceneRedraw()
+			-- por cada asset, coge todos los objetos tipo Mesh
+			for _ast in _selectedAssets do
+			(
+				-- coge todos los 'meshes' del asset del objeto seleccionado
+				_astMeshes = lb.asset.getAssetNodesByType _ast lb.nc.NC_classMesh
+				-- setAllTurboSmooth _astMeshes true
+				
+				-- y activa los turbosmooth
+				for i in _astMeshes do 
+				(	
+					setAllTurboSmooth i false
+				)
+			)
+			enableSceneRedraw()
+		)
+		
+		--------------------------------------------------------------------------------------
+
+		on btnHeadXRAYToggle changed val do 
+		(
+			if selectedAsset != undefined do 
+			(
+				_assetName = selectedAsset.fullName
+				
+				if _assetName != undefined and _assetName != "" do
+				(
+					if val == true then -- marcado
+						ui.setTransparentHead true _assetName
+					else -- sin marcar
+						ui.setTransparentHead false _assetName
+				)
+			)
+		)
+
+		-------------------------------------------------------------------------------------
+
+		on btnTrajectoryToggle pressed do 
+		(
+			if selectedAsset != undefined do 
+			(
+				_selNodes = getCurrentSelection()
+				for _node in _selNodes do 
+				(
+					if _node != undefined do 
+						setTrajectoryOn _node (if getTrajectoryOn _node then false else true)
+				)
+			)
+		)
+
+		--------------------------------------------------------------------------------------
+		on btnRenderImage pressed do
+		(
+			_imageItem = ui.createImageFromRender()
+			
+			--if chkAutoCreateSelectors.checked then
+					--ui.createSelectorsFromNodes (getCurrentSelection()) _imageItem
+		)
+		
+		--------------------------------------------------------------------------------------
+		on btnViewportImage pressed do
+		(
+			--ui.createSelectorsFromNodes (getCurrentSelection())
+		)
+
+		--------------------------------------------------------------------------------------
+		on btnKey pressed do
+		(
+			-- Creamos la clave a todas las pistas recolectadas
+			undo "Create Key" on
+			(
+				lb.animinfo.createAnimTracksKey (getCurrentSelection())
+			)
+		)
+		
+		------------------------------------------------------------
+		on btnUnKey pressed do
+		(
+			undo "Remove Key" on
+			(
+				lb.animinfo.removeAnimTracksKey (getCurrentSelection())
+			)			
+		)
+		
+		------------------------------------------------------------
+		on btnZero pressed do
+		(
+			undo "Set Zero Value" on
+			(
+				for o in selection do
+				(
+					_tracks = lb.animInfo.getTracksFromObject o
+					lb.animInfo.setTracksValue _tracks #default
+				)
+			)
+			
+			redrawViews()
+		)
+		
+		------------------------------------------------------------
+		on btnDeleteAllAnimation pressed do
+		(
+			undo "Delete animation" on
+			(
+				lb.animInfo.removeAnimTracksAnimation (getCurrentSelection())
+			)
+		)
+		
+		------------------------------------------------------------
+		on btnKeyTangents changed val do 
+		(
+			try destroyDialog rollCBkeyTangents catch()
+			
+			if val then
+			(
+				p = btnKeyTangents.pos + (getDialogPos rollMainDef) + [0,-25]
+				createDialog rollCBkeyTangents pos:p style:#(#style_border) modal:true
+				btnKeyTangents.checked = false
+			)
+		)
+
+		------------------------------------------------------------
+		on btnSelectBodyAnimNodes pressed do
+		(
+			local nodesToSelect = #()
+			if selectedAsset != undefined do
+				nodesToSelect = lb.asset.getAssetAnimNodes selectedAsset lb.nc.NC_classAnim excludeExtras:false
+			
+			if nodesToSelect.count > 0 then 
+				undo "Select Rig Nodes" on
+				(
+					clearSelection()
+					select nodesToSelect
+				)
+		)
+		
+		------------------------------------------------------------
+		on btnSelectFacialAnimNodes pressed do
+		(
+			local nodesToSelect = #()
+			if selectedAsset != undefined do
+				nodesToSelect = lb.asset.getAssetAnimNodes selectedAsset lb.nc.NC_classFacial excludeExtras:false
+			
+			if nodesToSelect.count > 0 then 
+				undo "Select Facial Nodes" on
+				(
+					clearSelection()
+					select nodesToSelect
+				)
+		)
+		
+		------------------------------------------------------------
+		on btnSelectAllAnimNodes pressed do
+		(
+			local nodesToSelect = #()
+			if selectedAsset != undefined do
+				nodesToSelect = lb.asset.getAssetAnimNodes selectedAsset #all excludeExtras:false
+			
+			if nodesToSelect.count > 0 then 
+				undo "Select Anim Nodes" on
+				(
+					clearSelection()
+					select nodesToSelect
+				)
+		)
+		
+		------------------------------------------------------------
+		on btnSelectSet pressed do
+		(
+			-- 			local nodesToSelect = #()
+			-- 			if selectedAsset != undefined do
+			-- 				nodesToSelect = lb.asset.getAssetAnimNodes selectedAsset #all excludeExtras:false
+
+			-- 			undo "Select Objects In Set" on
+			-- 				select (lb.objectSets.getNodesInSameObjectSet nodesToSelect)
+
+			undo "Select Objects In Set" on
+				select (lb.objectSets.getNodesInSameObjectSet (getCurrentSelection()))
+				
+		)
+		
+		------------------------------------------------------------
+		on btnSelectOpposite pressed do
+		(
+			oppositeObjects = #()
+			for o in selection do
+			(
+				obj = lb.rig.getOppositeObject o
+				if obj != undefined then append oppositeObjects obj
+			)
+			
+			undo "Select Opposite" on 
+				select oppositeObjects
+		)
+		
+		------------------------------------------------------------
+		on btnSelectMoreOpposite pressed do
+		(
+			oppositeObjects = #()
+			for o in selection do
+			(
+				obj = lb.rig.getOppositeObject o
+				if obj != undefined then append oppositeObjects obj
+			)
+			
+			undo "Add Opposite To Selection" on
+				selectMore oppositeObjects
+		)
+		
+		------------------------------------------------------------
+		on btnFkIkSnap pressed do
+		(
+			selObjs = for o in selection collect o		--	objetos seleccionados.
+			snapFkIk selObjs
+		)
+		
+		------------------------------------------------------------
+		on btnFkIkMatch pressed do
+		(
+			selObjs = for o in selection collect o		--	objetos seleccionados.
+			selSets = #()										-- 	sets por los que ya hemos pasado. Sirve para no hacer más de una vez snap en piezas de un mismo set.
+			newSelection = #()								--	objetos que quedarán seleccionados después del Snap
+			
+			removeSceneEvents()
+			disableSceneRedraw()
+			
+			undo "FkIk Match" on
+			(
+				for o in selObjs do
+				(
+					_CA = if (isProperty o.modifiers[1] #fkIkSnaps) then  o.modifiers[1].custAttributes[#fkIkSnaps]
+							else if (isProperty o.modifiers[1] #indirectFkIkSnaps) then  o.modifiers[1].custAttributes[#indirectFkIkSnaps]
+					
+					if _CA != undefined then
+					(
+						objSets = lb.objectSets.get o
+						setFound = false
+						
+						--	miramos si ya habíamos trabajado con piezas del mismo set que la actual
+						for s in objSets do 
+							if (finditem selSets s != 0) then setFound = true
+							
+						--	si no se encuentra el set de la pieza hacemos el snap
+						if not setFound then
+							_CA.fkIkMatch()
+						
+						--	añadimos el objeto seleccionado a la selección final
+						for o in selection do appendIfUnique newSelection o
+						
+						--	anotamos los sets de la pieza para no volver a evaluarlos
+						for s in objSets do appendIfUnique selSets s
+					)
+				)
+			)
+			
+			--	creamos la nueva selección de objetos
+			select newSelection
+			enableSceneRedraw()
+			
+			createSceneEvents()
+		)
+
+		------------------------------------------------------------
+		on btnTrackView pressed do
+		(
+			t = (trackviews.getTrackView TVname)
+			
+			t.interactiveUpdate = true
+			t.manualNavigation  = false
+			
+			t.clearFilter #all
+					
+			--	Activamos los filtros específicos
+ 			trackviews.setFilter TVname #selectedTracks
+			trackviews.setFilter TVname #selectedObjects #noRedraw
+			trackviews.setFilter TVname #objects #noRedraw
+			trackviews.setFilter TVname #visibilityTracks  #noRedraw
+			trackviews.setFilter TVname #transforms #noRedraw
+			trackviews.setFilter TVname #position #noRedraw
+			trackviews.setFilter TVname #rotation #noRedraw
+			trackviews.setFilter TVname #scale #noRedraw
+			
+			trackviews.setFilter TVname #curveX #noRedraw
+			trackviews.setFilter TVname #curveY #noRedraw
+			trackviews.setFilter TVname #curveZ #noRedraw
+			
+			trackviews.setFilter TVname #positionX #noRedraw
+			trackviews.setFilter TVname #positionY #noRedraw
+			trackviews.setFilter TVname #positionZ #noRedraw
+			trackviews.setFilter TVname #rotationX #noRedraw
+			trackviews.setFilter TVname #rotationY #noRedraw
+			trackviews.setFilter TVname #rotationZ #noRedraw
+			
+			trackviews.setFilter TVname TVname #modifiedObjects #noRedraw
+			trackviews.setFilter TVname TVname #baseObjects
+			t.expandTracks()
+			
+			t.setEditMode #editFCurves
+		)
+
+		------------------------------------------------------------
+		on ckbCopyPastePosture changed val do
+		(
+			if not val then 
+				ckbCopyPastePosture.checked = true
+			else
+				ckbCopyPasteTrack.checked = false
+		)
+		
+		------------------------------------------------------------
+		on ckbCopyPasteTrack changed val do
+		(
+			if not val then 
+				ckbCopyPasteTrack.checked = true
+			else
+				ckbCopyPastePosture.checked = false
+		)
+
+		------------------------------------------------------------
+		on btnCopy pressed do lb.animInfo.copyAnimTracks allTracks:true
+			
+		------------------------------------------------------------
+		on btnPaste pressed do
+		(
+			lb.animInfo.pasteAnimTracks type:(if ckbCopyPastePosture.checked then pasteType = #posture else #track)
+		)
+		
+		------------------------------------------------------------
+		on btnPasteOpposite pressed do
+		(
+			lb.animInfo.pasteOppositeAnimTracks type:(if ckbCopyPastePosture.checked then pasteType = #posture else #track)
+		)
+
+		------------------------------------------------------------
+		on btnLoadAnimation pressed do
+		(
+			if selectedAsset != undefined do
+			(
+				if not (lb.misc.passAssetCheck CHK_NCuniqueNamesTask fix:false) do
+				(
+					lb.message.show "Duplicate names found. Aborting" type:#message pos:undefined size:[300,75] modal:true
+					return undefined
+				)
+		
+				nodes = lb.asset.getAssetAnimNodes selectedAsset #all
+				nodesToRename = lb.asset.getAssetNodesByType selectedAsset lb.nc.NC_classAnimatable
+				
+				--pregunta por el fichero de donde queremos cargar la animacion
+				file = getOpenFileName caption:("Load Animation to " + selectedAsset.fullname) types:"animation(*.xaf)|*.xaf|Todos los formatos (*.*)|*.*|"
+				
+				--una vez obtenidos los nodos animables de el asset actual, cargamos su animacion
+				if file != undefined then
+					if (lb.asset.loadAnimation file nodes nodesToRename relative:false insert:true insTime:spnInsertAt.value) then
+						lb.message.show ("Animation loaded successfully") type:#message pos:undefined size:[300,75] modal:true
+			)
+		)
+
+		------------------------------------------------------------
+		on btnSaveAnimation pressed do
+		(
+			if selectedAsset != undefined do
+			(
+				if not (lb.misc.passAssetCheck CHK_NCuniqueNamesTask fix:false) do
+				(
+					lb.message.show "Duplicate names found. Aborting" type:#message pos:undefined size:[300,75] modal:true
+					return undefined
+				)
+
+				_assetFolder = if selectedAsset.folder != "" then selectedAsset.folder else maxFilePath
+				_drive = (filterString _assetFolder "\\:")[1] + "\\"
+				_pj = lb.project.getProjectByRoot _drive
+				_projectId = if _pj != undefined then _pj.getId() else (lb.project.getProjectByRoot "z:\\").getId()
+						
+				nodes = lb.asset.getAssetAnimNodes selectedAsset #all
+				nodesToRename = lb.asset.getAssetNodesByType selectedAsset lb.nc.NC_classAnimatable
+				
+				--pregunta por el fichero donde queremos guardar la animacion
+				file = getSaveFileName caption:("Save Animation from " + selectedAsset.fullname) types:"animation(*.xaf)|*.xaf|Todos los formatos (*.*)|*.*|"
+				
+				--una vez obtenidos los nodos animables de el asset actual, guardamos su animacion
+				if file != undefined do
+					if (lb.asset.saveAnimation file nodes nodesToRename	saveSegment:true segInterval:animationRange projectId:_projectId) then
+						lb.message.show ("Animation saved successfully") type:#message pos:undefined size:[300,75] modal:true
+			)
+		)
+		----------------------------------------------------------------------------------
+		on btnHide pressed do
+		(
+			--Activamos la pestaña de crear para que vaya más fluido
+			max create mode
+			
+			assetsToChangeVis = getSelectedAssets()
+			
+			with undo off
+			(
+				for a in assetsToChangeVis do
+					lb.asset.hideAsset a
+			)
+		)
+
+		----------------------------------------------------------------------------------
+		on btnShow pressed do
+		(
+			--Activamos la pestaña de crear para que vaya más fluido
+			max create mode
+			
+			assetsToChangeVis = getSelectedAssets()
+			
+			with undo off
+			(
+				for a in assetsToChangeVis do
+					if lb.asset.getAssetvismode a == "" then
+						lb.asset.resetAsset a
+			)
+		)
+
+		----------------------------------------------------------------------------------
+		on btnUnhideAll pressed do 
+		(
+			--Activamos la pestaña de crear para que vaya más fluido
+			max create mode
+			
+			with undo off
+				for ast in synopticSceneAssets do
+					if lb.asset.getAssetvismode ast == "" then
+						lb.asset.resetAsset ast
+		)
+				
+		----------------------------------------------------------------------------------
+		on btnSolo pressed do
+		(
+			--Activamos la pestaña de crear para que vaya más fluido
+			max create mode
+			
+			assetsToChangeVis = getSelectedAssets()
+			
+			with undo off
+			(
+				for a in assetsToChangeVis do
+					if (lb.asset.getAssetvismode a) == "" then
+						lb.asset.resetAsset a	
+				
+				if assetsToChangeVis.count != 0 then
+					lb.asset.isolateAssets assetsToChangeVis synopticSceneAssets
+			)
+		)
+
+		----------------------------------------------------------------------------------
+ 		on btnConnection pressed do
+		(
+			--Activamos la pestaña de crear para que vaya más fluido
+			max create mode
+			suspendEditing()
+			
+			assetsToChangeVis = getSelectedAssets()
+			
+			with undo off
+				for a in assetsToChangeVis do
+					lb.asset.setAssetSkinConnectionMode a
+			
+			setCommandPanelTaskMode #modify
+
+			resumeEditing()
+			completeRedraw()
+			
+		)
+
+		----------------------------------------------------------------------------------
+		--actualiza el modo de visualizacion del asset seleccionado
+		----------------------------------------------------------------------------------
+		on btnVMpuppet pressed do
+		(
+			--Activamos la pestaña de crear para que vaya más fluido
+			max create mode
+			
+			assetsToChangeVis = getSelectedAssets()
+			
+			with undo off
+				for a in assetsToChangeVis do
+					lb.asset.setAssetPuppetMode a disableSecPuppets:(not chkDisSecPuppets.checked)
+				
+			setCommandPanelTaskMode #modify
+
+			completeRedraw()
+		)
+		
+		----------------------------------------------------------------------------------
+		--actualiza el modo de visualizacion del asset seleccionado
+		----------------------------------------------------------------------------------
+		on btnVMpuppetHead pressed do
+		(
+			--Activamos la pestaña de crear para que vaya más fluido
+			max create mode
+			
+			assetsToChangeVis = getSelectedAssets()
+			
+			with undo off
+				for a in assetsToChangeVis do
+				(
+					lb.asset.setAssetPuppetHeadMode a disableFFDs:(not chkaffectFFDs.checked) disableHair:(not chkaffectHair.checked) disableSecPuppets:(not chkDisSecPuppets.checked)
+					lb.asset.showExtraControls a #facial _hide:(not chkShowExtraControls.checked)
+					lb.asset.showExtraControls a #connect _hide:(not chkShowExtraControls.checked)
+				)
+			
+			setCommandPanelTaskMode #modify
+
+			completeRedraw()
+		)
+		
+		----------------------------------------------------------------------------------
+		--actualiza el modo de visualizacion del asset seleccionado
+		----------------------------------------------------------------------------------
+		on btnVMhead pressed do
+		(
+			--Activamos la pestaña de crear para que vaya más fluido
+			max create mode
+			
+			assetsToChangeVis = getSelectedAssets()
+			
+			with undo off
+				for a in assetsToChangeVis do
+				(
+					lb.asset.setAssetHeadMode a disableFFDs:(not chkaffectFFDs.checked) disableHair:(not chkaffectHair.checked)
+					lb.asset.showExtraControls a #facial _hide:(not chkShowExtraControls.checked)
+				)
+			
+			setCommandPanelTaskMode #modify
+
+			completeRedraw()
+		)
+		
+		----------------------------------------------------------------------------------
+		--actualiza el modo de visualizacion del asset seleccionado
+		----------------------------------------------------------------------------------
+		on btnVMskin pressed do
+		(
+			--Activamos la pestaña de crear para que vaya más fluido
+			max create mode
+			
+			assetsToChangeVis = getSelectedAssets()
+			
+			with undo off
+				for a in assetsToChangeVis do
+				(
+					lb.asset.setAssetSkinMode a
+					lb.asset.showExtraControls a #all _hide:(not chkShowExtraControls.checked)
+				)
+			
+			setCommandPanelTaskMode #modify
+			
+			completeRedraw()
+		)
+		
+		----------------------------------------------------------------------------------
+		--actualiza el modo de visualizacion del asset seleccionado
+		----------------------------------------------------------------------------------
+		on btnVMskinBox pressed do
+		(
+			--Activamos la pestaña de crear para que vaya más fluido
+			max create mode
+			suspendEditing()
+			
+			assetsToChangeVis = getSelectedAssets()
+			
+			with undo off
+				for a in assetsToChangeVis do
+				(
+					lb.asset.setAssetSkinBoxMode a disableSecPuppets:(not chkDisSecPuppets.checked)
+					lb.asset.showExtraControls a #anim _hide:(not chkShowExtraControls.checked)
+					lb.asset.showExtraControls a #connect _hide:(not chkShowExtraControls.checked)
+				)
+			
+			setCommandPanelTaskMode #modify
+			
+			resumeEditing()
+			completeRedraw()
+		)
+		
+		--------------------------------------------------------------------------------------
+		on btnCreateSelectors pressed do
+		(
+			ui.createSelectorsFromNodes (getCurrentSelection())
+		)
+
+		--------------------------------------------------------------------------------------
+		on btnCreateSelectors rightclick do
+		(
+			createRMenu mouse.screenPos #createSelectors
+		)
+		
+		--------------------------------------------------------------------------------------
+		on btnFilterSelectors changed state do
+		(
+			_filterType = if state then #selectors else #images
+			ui.setItemsFilter _filterType
+			btnFilterImages.checked = not state
+		)
+		
+		--------------------------------------------------------------------------------------
+		on btnFilterImages changed state do
+		(
+			_filterType = if state then #images else #selectors
+			ui.setItemsFilter _filterType
+			
+			btnFilterSelectors.checked = not state
+		)
+		
+		--------------------------------------------------------------------------------------
+		on tbTabs selectedIndexChanged events do
+		(
+			if tbTabs.selectedTab != undefined do
+			(
+				-- Seleccionamos el nuevo tab
+				ui.tabs.switchToTab tbTabs.selectedTab.text
+			)
+		)
+		
+		
+		--------------------------------------------------------------------------------------
+		on btnAddTab pressed do
+		(
+			ui.tabs.addTab "New synoptic"
+		)
+
+		--------------------------------------------------------------------------------------
+		on btnRemoveTab pressed do
+		(
+			if (ui.tabs.tabPages.count > 1) then
+			(
+				if queryBox ("Are you sure you want to remove \"" + tbTabs.selectedTab.text + "\" synoptic scheme?") then
+					ui.tabs.removeTab ui.tabs.selectedTab
+			)
+			else
+				messageBox "Can't remove tab. At least one tab must exist."
+		)		
+		
+		------------------------------------------------------------
+		on tbTabs keyDown events do
+		(
+			_key = events.keydata.tostring()
+			keyDownProcess _key
+			events.Handled = true
+		)
+		
+		------------------------------------------------------------
+		on btnAddSelector changed state do
+		(
+			if state then
+				setMode #addSelectorsTool
+			else
+				setMode #idle
+		)
+		
+		--------------------------------------------------------------------------------------
+		on btnRemoveSelector pressed do
+		(
+			ui.removeItems ui.tabs.selectedTab.selectedItems
+		)
+		
+		------------------------------------------------------------
+		on btnMove changed state do
+		(
+			if state then
+				setMode #transformTool
+			else
+				setMode #idle
+		)
+		
+		------------------------------------------------------------
+		on btnSymmetryBar changed state do
+		(
+			ui.symmetryBar.update()
+		)
+		
+		------------------------------------------------------------
+		on btnSymmetry pressed do
+		(
+			ui.symmetryItems ui.tabs.selectedTab.selectedItems
+		)
+
+		------------------------------------------------------------
+		on btnMoveToSym pressed do
+		(
+			ui.moveToSymmetry ui.tabs.selectedTab.selectedItems
+		)
+
+		------------------------------------------------------------
+		on btnLock changed state do
+		(
+			ui.changeItemsBlockStatus ui.tabs.selectedTab.selectedItems
+		)
+		
+		------------------------------------------------------------
+		on btnPickObject picked obj do
+		(
+			ui.tabs.selectedTab.selectedItems[1].assignObject obj
+		)
+		
+		------------------------------------------------------------
+		on btnAlignHzCenter pressed do
+		(
+			ui.alignItems ui.tabs.selectedTab.selectedItems #hz_center
+		)
+		
+		------------------------------------------------------------
+		on btnAlignHzRight pressed do
+		(
+			ui.alignItems ui.tabs.selectedTab.selectedItems #hz_right
+		)
+		
+		------------------------------------------------------------
+		on btnAlignHzLeft pressed do
+		(
+			ui.alignItems ui.tabs.selectedTab.selectedItems #hz_left
+		)
+		
+		------------------------------------------------------------
+		on btnAlignVtTop pressed do
+		(
+			ui.alignItems ui.tabs.selectedTab.selectedItems #vt_top
+		)
+		
+		------------------------------------------------------------
+		on btnAlignVtCenter pressed do
+		(
+			ui.alignItems ui.tabs.selectedTab.selectedItems #vt_center
+		)
+		
+		------------------------------------------------------------
+		on btnAlignVtBottom pressed do
+		(
+			ui.alignItems ui.tabs.selectedTab.selectedItems #vt_bottom
+		)
+			
+		------------------------------------------------------------
+		on btnBringToFront pressed do
+		(
+			ui.setItemsOrder ui.tabs.selectedTab.selectedItems #bringToFront
+		)
+		
+		------------------------------------------------------------
+		on btnSendToBack pressed do
+		(
+			ui.setItemsOrder ui.tabs.selectedTab.selectedItems #sendToBack
+		)
+		
+		------------------------------------------------------------
+		on btnMoveForward pressed do
+		(
+			ui.setItemsOrder ui.tabs.selectedTab.selectedItems #moveForward
+		)
+		
+		------------------------------------------------------------
+		on btnMoveBackwards pressed do
+		(
+			ui.setItemsOrder ui.tabs.selectedTab.selectedItems #moveBackwards
+		)
+		------------------------------------------------------------
+		on edtSelectorText entered txt do
+		(
+			for _item in ui.tabs.selectedTab.selectedItems do
+				_item.setText txt
+		)
+		
+		------------------------------------------------------------
+		on edtSelectorText changed txt do
+		(
+			edtSelectorText.text = toUpper txt
+		)
+		
+		------------------------------------------------------------
+		on dgFillColor selectionChanged events do
+		(
+			selectColor dgFillColor
+		)
+		
+		------------------------------------------------------------
+		on dgBorderColor selectionChanged events do
+		(
+			selectColor dgBorderColor
+		)
+		
+		------------------------------------------------------------
+		on cpFillColor changed col do
+		(
+			selectColor cpFillColor
+		)
+		
+		------------------------------------------------------------
+		on cpBorderColor changed col do
+		(
+			selectColor cpBorderColor
+		)
+		
+		------------------------------------------------------------
+		on edtTabName entered txt do
+		(
+			ui.tabs.selectedTab.setName txt
+		)
+		
+		------------------------------------------------------------
+		on rMenu itemclicked events do
+		(
+			_itemName = (events.clickeditem.tostring())
+			menuItemClickedProcess _itemName
+		)
+
+
+		------------------------------------------------
+		--@event: picked | almacena el mundo virtual
+		------------------------------------------------
+		on pckVirtualWorld picked obj do
+		(
+			if isValidNode obj then
+			(
+				linkVirtualWorld = obj
+				pckVirtualWorld.caption = obj.name
+			)
+		)
+
+		------------------------------------------------
+		--@event: pressed | crea el link constraint
+		------------------------------------------------		
+		on btnConstraintAdd pressed do
+		(
+			_nodes = getCurrentSelection()
+			
+			lb.links.pointConstraint.add _nodes
+			
+			for n in _nodes do
+				lb.links.pointConstraint.addTarget n undefined frameNo:0
+			
+		)--on
+
+		------------------------------------------------
+		--@event: pressed | elimina el link constraint
+		------------------------------------------------		
+		on btnContraintRemove pressed do
+		(	
+			_nodes = getCurrentSelection()
+			lb.links.pointConstraint.remove _nodes	
+		)--on
+
+		------------------------------------------------
+		--@event: pressed | añade un link constraint a la pieza elegida
+		------------------------------------------------
+		on btnConstraintsAddLink pressed do
+		(
+			btnConstraintsAddLink.enabled = false
+			
+			if lb.links.pointConstraint.addLink() then
+				updateConstraintsUI updateList:true clearSelections:true --redibuja el listado
+			else
+				lb.message.show "Chosen object not valid, point link not created." type:#message pos:undefined size:[300,75] modal:true
+
+			btnConstraintsAddLink.enabled = true
+		)
+
+		---------------------------------------------------------------------------
+		--añade un nuevo lincaje al mundo
+		---------------------------------------------------------------------------
+		on btnConstraintsLinkToWorld pressed do
+		(
+			btnConstraintsLinkToWorld.enabled = false
+			
+			if lb.links.pointConstraint.addLinkToWorld() then
+				updateConstraintsUI updateList:true clearSelections:true --redibuja el listado
+			else
+				lb.message.show "Link to world could not be made!." type:#message pos:undefined size:[300,75] modal:true
+
+			btnConstraintsLinkToWorld.enabled = true			
+		)
+		
+		---------------------------------------------------------------------------
+		--elimina el lincaje seleccionado	
+		---------------------------------------------------------------------------
+		on btnConstraintsDeleteLink pressed do
+		(
+			btnConstraintsDeleteLink.enabled = false
+
+			selIts = lvConstraintsLinks.selectedItems
+			
+			if selIts.count > 0 then
+			(
+				-- obtenemos la lista de indices seleccionados
+				-- OJO: Hay que cambiar la numeracion de dotNet a la de Max
+				indexes = for i = 0 to ( selIts.count - 1 ) collect (selIts.item[i].index + 1) 
+				sort indexes
+
+				-- vamos del final al principio para que los indices no cambien de los elementos
+				failed = false
+
+				for i in indexes.count to 1 by -1 do
+				(
+					index = indexes[i]
+
+					if (lb.links.pointConstraint.deleteLink index) then
+						updateConstraintsUI updateList:true clearSelections:true --redibuja el listado
+					else
+						failed = true
+
+				)
+
+				if failed do
+					lb.message.show "ERROR: Some links could not be deleted!" type:#message pos:undefined size:[300,75] modal:true
+			)
+			else
+				lb.message.show "ERROR: Select at least an item from the list" type:#message pos:undefined size:[300,75] modal:true
+			
+
+			btnConstraintsDeleteLink.enabled = true		
+		)
+
+		---------------------------------------------------------------------------
+		--hace snap del link anterior con el actual, para poder ir retificando animación.
+		---------------------------------------------------------------------------
+		on btnConstraintsSnapPrevLinkToThis pressed do
+		(
+			btnConstraintsSnapPrevLinkToThis.enabled = false
+			
+			if lvConstraintsLinks.selectedItems.count == 1 then --si hay algun elemento seleccionado
+			(
+				--obtiene el indice del seleccionado
+				index = (lvConstraintsLinks.selectedItems.item[0].index + 1) 
+				
+				-- Debe ser al menos el segundo de la lista
+				if index > 1 then 
+				(
+					if lb.links.pointConstraint.snapPrevLinkToThis index then
+						updateConstraintsUI updateList:true clearSelections:false
+					else
+						lb.message.show "Link could not be snapped." type:#message pos:undefined size:[300,75] modal:true
+				)
+				else
+					lb.message.show "To snap previous link to the selected one you have to select at least the second in the list." type:#message pos:undefined size:[300,75] modal:true
+			)
+			else 
+				lb.message.show "Please, select only one link from the list." type:#message pos:undefined size:[300,75] modal:true
+
+			btnConstraintsSnapPrevLinkToThis.enabled = true	
+		)
+		
+		---------------------------------------------------------------------------
+		--hace snap del link actual con el anterior, para poder ir retificando animación.
+		---------------------------------------------------------------------------
+		on btnConstraintsSnapThisLinkToPrev pressed do
+		(
+			btnConstraintsSnapThisLinkToPrev.enabled = false
+			
+			if lvConstraintsLinks.selectedItems.count == 1 then --si hay algun elemento seleccionado
+			(
+				--obtiene el indice del seleccionado
+				index = (lvConstraintsLinks.selectedItems.item[0].index + 1) 
+				
+				-- Debe ser al menos el segundo de la lista
+				if index > 1 then 
+				(
+					if lb.links.pointConstraint.snapThisLinkToPrev index then
+						updateConstraintsUI updateList:true clearSelections:false
+					else
+						lb.message.show "Link could not be snapped." type:#message pos:undefined size:[300,75] modal:true
+				)
+				else
+					lb.message.show "To snap selected link to previous you have to select at least the second in the list." type:#message pos:undefined size:[300,75] modal:true
+			)
+			else 
+				lb.message.show "Please, select only one link from the list." type:#message pos:undefined size:[300,75] modal:true
+
+			btnConstraintsSnapThisLinkToPrev.enabled = true	
+		)
+		
+		---------------------------------------------------------------------------
+		--mueve una clave de lincaje
+		---------------------------------------------------------------------------
+		on spnConstraintsLinkStartTime buttonup cancel do
+		(
+			--si no es una cancelacion de boton derecho
+			--solo lo hace si hay algun target seleccionado en el listado
+			if not cancel do 
+			(
+				if lvConstraintsLinks.selectedItems.count == 1 then
+				(
+					newFrame = spnConstraintsLinkStartTime.value --nuevo frame de start
+					index = (lvConstraintsLinks.selectedItems.item[0].index + 1) --indice del target seleccionado
+
+					if lb.links.pointConstraint.setLinkStartTime index newFrame then
+					(
+						updateConstraintsUI updateList:true clearSelections:false
+
+						-- Mover el timeline para el nuevo frame
+						if ckbConstraintsSyncLinkTime.checked do
+							syncTimelineToSelectedConstraintTime()
+					)
+					else
+						lb.message.show "Start time could not be changed." type:#message pos:undefined size:[300,75] modal:true
+				)
+				else 
+					lb.message.show "Please, select only one link from the list." type:#message pos:undefined size:[300,75] modal:true
+			)
+		)
+		
+		---------------------------------------------------------------------------
+		--mueve una clave de lincaje
+		---------------------------------------------------------------------------
+		on spnConstraintsLinkStartTime entered spinning cancel do
+		(
+			-- OJO: 
+			-- ESTE CODIGO ES EL MISMO QUE LA FUNCION spnConstraintsLinkStartTime EXCEPTO EL CONTROL DE SPINNING
+
+			--si no es una cancelacion de boton derecho
+			--solo lo hace si hay algun target seleccionado en el listado
+			if not cancel and not spinning  do 
+			(
+				if lvConstraintsLinks.selectedItems.count == 1 then
+				(
+					newFrame = spnConstraintsLinkStartTime.value --nuevo frame de start
+					index = (lvConstraintsLinks.selectedItems.item[0].index + 1) --indice del target seleccionado
+
+					if lb.links.pointConstraint.setLinkStartTime index newFrame then
+					(
+						updateConstraintsUI updateList:true clearSelections:false
+
+						-- Mover el timeline para el nuevo frame
+						if ckbConstraintsSyncLinkTime.checked do
+							syncTimelineToSelectedConstraintTime()
+					)
+					else
+						lb.message.show "Start time could not be changed." type:#message pos:undefined size:[300,75] modal:true
+				)
+				else 
+					lb.message.show "Please, select only one link from the list." type:#message pos:undefined size:[300,75] modal:true
+			)
+		)
+		
+		---------------------------------------------------------------------------
+		--rellena el spinner starTime con el frame de lincaje del target seleccionado
+		---------------------------------------------------------------------------
+		on lvConstraintsLinks ItemSelectionChanged events do
+		(
+			updateConstraintsUI updateList:false
+
+			if ckbConstraintsSyncLinkTime.checked do
+				syncTimelineToSelectedConstraintTime()
+		)
+
+		---------------------------------------------------------------------------
+		-- Abre el navegador y accede a la web de explicacion de la tool
+		---------------------------------------------------------------------------
+		on btnHelp pressed do 
+		(
+			ShellLaunch "C:\\Program Files\\Internet Explorer\\iexplore.exe" @"http://www.toolslb.com/doku.php?id=tools:synopticbox"
+		)
+	
+	)--rollMainDef
+
+	--++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+	-- 	STRUCT ITEM VALUES: Almacena todos los valores antes
+	--	de modificarlo para poder restaurarlos posteriormente
+	--++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+	struct strItemValues
+	(
+		type = undefined,
+		pos = [0,0],		--	posición en pixels del control. Relativo al listView en que están contenidos.
+		size = [0,0],		--	ancho en pixels del control
+		pivot = undefined
+	)--strItemValues
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: synopticBox | Contiene la herramienta.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct tl_synopticBox
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,					--@var: category | Categoria de la tool.
+		className = lb.getFileToolName (getThisScriptFilename() as string),	--@var: className | Nombre de la tool.
+		description = "Synoptic Box",		--@var: description | Descripcion de la tool.
+		
+		cfgFile = (lb.config.getToolsIniPath()) + (lb.getFileToolName (getThisScriptFilename() as string)) + ".cfg",	--@var: cfgFile | Archivo de configuracion de la tool.
+
+		iconPath = lb.config.getIconsPath(), --@var : iconpath | Ruta de iconos de las herramientas de 3dsMax
+			
+		opened = false,			--@var: opened | Indica si la herramienta está abierta.
+			
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		refreshInterfaceFlag = true,
+			
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--ROLLOUTS
+		------------------------------------------------------------------------------------------------
+		
+		rollMain = rollMainDef,	--@var: rollMain | Almacena el rollout principal de la herramienta.
+			
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+
+		--------------------------------------------------------------------------------------
+		--	Devuelve un listado de elementos de tipo strItemValues con los valores
+		--	de cada ITEM pasado en el parámetro ITEMS
+		--------------------------------------------------------------------------------------
+		fn getValues items = 
+		(
+			_valuesList = #()
+			_items = if classOf items == array then items else #(items)
+			
+			for _item in _items do
+			(
+				_values = strItemValues()
+				_values.type = _item.type
+				_values.pos = _item.pos
+				_values.size = _item.size
+				
+				if _item.type == #transformator then _values.pivot = _item.pivot
+				
+				append _valuesList _values
+			)
+			
+			_valuesList
+		),
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: boolean | isOpen | Devuelve información true o false, si la herramienta está abierta o cerrada.
+		------------------------------------------------
+		fn isOpen =
+		(
+			this.opened
+		),
+
+		------------------------------------------------
+		--@fn: array | getSynopticAssets | Devulelve los assets susceptibles de tener sinoptico
+		------------------------------------------------
+		fn getSynopticAssets =
+		(
+			return (lb.asset.getSceneAssets type:lb.nc.NC_chrPrefix) + (lb.asset.getSceneAssets type:lb.nc.NC_prpPrefix) + (lb.asset.getSceneAssets type:lb.nc.NC_sprPrefix)
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | refreshInterface | Refresca el interface inicial de la herramienta
+		------------------------------------------------
+		fn refreshInterface =
+		(
+			if refreshInterfaceFlag then
+			(	
+				--this.rollMain.createSceneEvents()
+				_refresh = false
+				_currentSceneAssets = for _sa in this.rollMain.synopticSceneAssets collect _sa.fullName
+				_newSceneAssets = for _sa in this.getSynopticAssets() collect _sa.fullName
+				
+				if _newSceneAssets.count != _currentSceneAssets.count do _refresh = true
+				
+				for _saName in _currentSceneAssets where _refresh == false do
+					if (findItem _newSceneAssets _saName) == 0 do _refresh = true
+				if _refresh do
+					this.rollMain.fillAssetIcons()
+			)
+		),
+
+		--------------------------------------------------------------------------------------
+		--	Deshabilita el resize para evitar que salte antes que el evento de updateExistingClips
+		--------------------------------------------------------------------------------------
+		fn disableRefreshInterface =
+		(
+			refreshInterfaceFlag = false
+		),
+
+		--------------------------------------------------------------------------------------
+		--	Deshabilita el resize para evitar que salte antes que el evento de updateExistingClips
+		--------------------------------------------------------------------------------------
+		fn enableRefreshInterface =
+		(
+			refreshInterfaceFlag = true
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | createInterface | Crea el interface inicial de la herramienta
+		------------------------------------------------
+		fn createInterface =
+		(
+			--crea el interface, lo redimensiona y lo reposiciona
+			createDialog this.rollMain lockwidth:false lockheight:false pos:[-10000,0] style:#(#style_toolwindow, #style_titlebar, #style_sysmenu, #style_resizing)
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | destroyInterface | Destruye el interface de la herramienta.
+		------------------------------------------------
+		fn destroyInterface =
+		(
+			destroyDialog this.rollMain --cierra la herramienta.			
+		),--destroyInterface
+		
+		------------------------------------------------
+		--@fn: undefined | run | Lanza la herramienta.
+		------------------------------------------------
+		fn run =
+		(
+			this.createInterface() --crea el interface.
+			this.opened = true --indica que la herramienta está abierta
+		),--execute
+		
+		------------------------------------------------
+		--@fn: undefined | close | Cierra la herramienta.
+		------------------------------------------------
+		fn close =
+		(
+			free _selectionSets
+			this.destroyInterface() --destruye el interface.
+			this.opened = false --indica que la herramienta está cerrada.
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addTool this --añade la tool a la libreria principal	
+		)		
+		
+	)--tl_synopticBox
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------	
+	
+	tl_synopticBox() --crea la herramienta
+)

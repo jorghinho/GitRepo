@@ -1,0 +1,1170 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--@Desc: Herramienta para crear Sprites.
+------------------------------------------------------------------------------------------------------------------------------------------------
+(
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollMain | Contiene la herramienta plantilla.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollMainDef "Sprites"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) --@var: string | parent | Herramienta o rolllout del que depende y/o contiene el rollout actual
+		
+		local minRollWidth = 161		--@var: integer | minRollWidth | Ancho mínimo de la herramienta.
+		local minRollHeight = 572		--@var: integer | minRollHeight | Alto mínimo de la herramienta.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		struct tl_structSprite 
+		(
+			format,
+			support,
+			bool=false,
+			typeObject=0,
+			file,
+			name,
+			type,
+			dir,
+			map,
+			multimMatStd,
+			multimMatCount,
+			width,
+			height,
+			tileHorizontal,
+			tileVertical,
+			start,
+			end,
+			speed,
+			numberFiles,
+			loop=true
+		)
+
+		local info = tl_structSprite() --@var: struct | info | **format:** Formato del recurso que se va a usar: Sprite, secuencia de imagenes o vídeo Mov. \\ **support:** True o false si hay un soporte creado previamente donde se aplica el Sprite o si hay que crearlo. \\ **bool:** Almacena un boleano que nos dice si se ha elegido un recurso apto para el Sprite o no. Si no es apto, no ejecuta la acción. \\ **typeObject:** Almacena 0,1,2 dependiendo si crea un plano, un cross o nada. \\ **file:** Almacena la ruta del recurso. \\ **name:** Nombre del recurso.  \\ **type:** Tipo del recurso (jpg, png,mov...). \\ **dir:** Directorio donde esta almacenado el recurso. \\ **map:** Almacena el bitmap que usaremos en el Sprite. \\ **multimMatStd:** Almacena el multimaterial del sprite. \\ **multimMatCount:** Almacena la cantidad materiales usados en el multimaterial. \\ **width:** Ancho del recurso. \\ **height:** Alto del recurso. \\ **tileHorizontal:** Tiling horizontal usado para el Sprite. \\ **tileVertical:** Tiling vertical usado para el Sprite. \\ **start:** Frame en el que comienza. \\ **end:** Frame en el que acaba. \\ **speed:** Velocidad a la que cambia de imagenes. \\ **numberFiles:** Número de archivos usados. \\ **loop:** Cantidad de vueltas que da al Sprite.
+
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		GroupBox grInfo "Sprite info: " pos:[5,5] width:148 height:186
+		dotNetControl infoView "System.Windows.Forms.ListView" pos:[11,20] width:136 height:165
+		GroupBox grpResource "Sprite resource: " pos:[6,194] width:148 height:115
+		radiobuttons optRsrc "Option resource" pos:[15,211] width:108 height:62 enabled:true labels:#("Sprite image", "Sequence images", "Video MOV")
+		button bopen "Open resource " pos:[12,277] width:135 height:22
+		GroupBox grOption "Sprite resource option: " pos:[5,312] width:148 height:124
+		spinner hor "Horizontal: " pos:[25,334] width:119 height:16 enabled:true range:[-100,100,1] type:#integer
+		spinner ver "Vertical: " pos:[37,355] width:107 height:16 enabled:true range:[-100,100,1] type:#integer
+		spinner spe "Speed: " pos:[41,376] width:103 height:16 enabled:true range:[-100,100,1] type:#integer
+		spinner str "Start: " pos:[47,397] width:97 height:16 enabled:true range:[-1e+006,1e+006,1] type:#integer
+		checkbox loop "Loop" pos:[100,417] width:40 height:16 enabled:true checked:true
+		GroupBox grpCreate "Sprite create option: " pos:[6,438] width:148 height:55
+		radioButtons typeCreate "Type object:" pos:[15,454] width:56 height:46 labels:#("Plane", "Cross") enabled:true
+		button _run "Create a new Sprite" pos:[5,495] width:148 height:45 enabled:true
+		button btnHalp pos:[128,542] width:25 height:25 tooltip:"Tool help" images:#((lb.config.getCustomIconsPath()) + "miscIcons001_16i.bmp", undefined, 50, 25, 25, 26, 26, true) 
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+
+		------------------------------------------------
+		--@fn: undefined | actionButton | Cambia la accion del boton si seleccionamos un objeto en la escena
+		------------------------------------------------
+		fn actionButton = 
+		(
+			s = getcurrentselection()
+			if s.count == 1 and (superclassof s[1]) == GeometryClass then
+			(
+				_run.text = "Create Sprite in selection"
+				typeCreate.enabled = false 
+			)
+			else 
+			(
+				_run.text = "Create a new Sprite"
+				typeCreate.enabled = true 
+			)
+			
+		)
+
+		------------------------------------------------
+		--@fn: undefined | updateInfo | Muestra la informacion del Struct en un listview.
+		--@gets: struct | info | Toda la informacion del Sprite esta almacenada en este struct.
+		------------------------------------------------
+		fn updateInfo info = 
+		(
+			-- limpar informacion de la lista 
+			infoView.columns.clear()
+			infoView.items.clear()
+			
+			-- variables para rellenar la lista
+			details = #()
+			Columns = #("Param","Detail") 
+			
+			-- construimos las columas de la vista con los siguietes parametros
+			infoView.view=(Dotnetclass "System.Windows.forms.view").details
+			infoView.GridLines=true
+			infoView.columns.add Columns[1] 50
+			infoView.columns.add Columns[2] (136-55)	
+			
+			-- preparamos la informaicon para meterla en la lista.
+			detail1=dotNetObject "System.Windows.Forms.ListViewItem" "Name"
+			if info.name != undefined then 
+				detail1.subitems.add info.name 
+			else 
+				detail1.subitems.add "--"
+			append details detail1	
+			
+			detail2=dotNetObject "System.Windows.Forms.ListViewItem" "Width"
+			if info.width != undefined then 
+				detail2.subitems.add info.width 
+			else 
+				detail2.subitems.add "--"
+			append details detail2	
+			
+			detail5=dotNetObject "System.Windows.Forms.ListViewItem" "Height"
+			if info.height != undefined then 
+				detail5.subitems.add info.height 
+			else 
+				detail5.subitems.add "--"
+			append details detail5	
+			
+			detail3=dotNetObject "System.Windows.Forms.ListViewItem" "Tile Horz"
+			if info.tileHorizontal != undefined then 
+				detail3.subitems.add (info.tileHorizontal as string) 
+			else 
+				detail3.subitems.add "--"
+			append details detail3
+			
+			detail4=dotNetObject "System.Windows.Forms.ListViewItem" "Tile Vert"
+			if info.tileVertical != undefined then 
+				detail4.subitems.add (info.tileVertical as string) 
+			else 
+				detail4.subitems.add "--"
+			append details detail4
+			
+			detail4=dotNetObject "System.Windows.Forms.ListViewItem" "Nº Imgs"
+			if info.numberFiles != undefined then 
+				detail4.subitems.add (info.numberFiles as string) 
+			else 
+				detail4.subitems.add "--"
+			append details detail4
+			
+			detail5=dotNetObject "System.Windows.Forms.ListViewItem" "Start FX"
+			if info.start != undefined then 
+				detail5.subitems.add (info.start  as string) 
+			else 
+				detail5.subitems.add "--"
+			append details detail5
+			
+			detail6=dotNetObject "System.Windows.Forms.ListViewItem" "End FX"
+			if info.end != undefined then 
+				detail6.subitems.add (info.end  as string) 
+			else 
+				detail6.subitems.add "--"
+			append details detail6
+
+			-- rellenamos la lista
+			infoView.items.addRange details
+		)
+
+		------------------------------------------------
+		--@fn: undefined | generateInfo | Crea la base del Sprite según su tipologia. Prepara el material y las imagenes que aplicaran en la construccion y completa el struct info.
+		--@gets: struct | info | Toda la informacion del Sprite esta almacenada en este struct.
+		--@gets: String | type | Se detalla el tipo de Sprite para configurar la solución correcta.
+		------------------------------------------------
+		fn generateInfo info type: =
+		(
+			if type == #sprite do
+			(	
+				-- variables
+				local idMat = 1
+				info.dir = ""
+				info.format = "sprite"
+				
+				-- acciones para generar informacion y elementos necesarios (materiales, bitmaps,...)
+				_filetype = filterstring info.file "."
+				_mapString = filterstring info.file "\\"
+				info.type = _filetype[_filetype.count]
+				
+				for i = 1 to _mapString.count-1 do 
+					info.dir += (_mapString[i]+"\\")
+				
+				info.numberFiles = 1
+				info.name = _mapString[_mapString.count]
+				info.multimMatStd = multimaterial numsubs:info.numberFiles name:(info.name + "_Multimaterial")
+				info.multimMatCount = info.numberFiles
+				info.map = Bitmaptexture fileName:info.file
+				info.height = info.map.bitmap.height as string
+				info.width = info.map.bitmap.width as string
+				info.tileHorizontal = (info.map.bitmap.width/info.map.bitmap.height)
+				info.tileVertical = 1
+				info.speed = 1
+				info.start = slidertime
+				info.end = info.start+((info.tileHorizontal*info.tileVertical)*info.numberFiles*info.speed)
+				-- añadimos tantos materiales y bitmaps como corresponda.
+				for n = 1 to info.numberFiles do 
+				(
+
+					mat = standard diffusemap:info.map showInViewport:true name:(info.name + "_id_" + (idMat as string))
+					info.multimMatStd[n] = mat
+
+					if mat.diffusemap.bitmap.hasAlpha  == true do
+					(
+						_mapAlpha = Bitmaptexture fileName:info.file rgbOutput:1
+						mat.opacityMap = _mapAlpha
+					)
+					idMat += 1
+				)
+				
+				-- hacemos update de la informacion
+				hor.enabled = true
+				ver.enabled = true
+				spe.enabled = true
+				str.enabled = true
+				hor.value = info.tileHorizontal
+				ver.value = info.tileVertical
+				spe.value = info.speed
+				str.value = info.start
+				updateInfo info
+			)
+			if  type == #sequence do
+			(
+				-- variables
+				local idMat = 1
+				info.dir = ""
+				info.format = "sequence"
+				
+				-- acciones para generar informacion y elementos necesarios (materiales, bitmaps,...)
+				_filetype = filterstring info.file "."
+				_mapString = filterstring info.file "\\"
+				info.type = _filetype[_filetype.count]
+				
+				for i = 1 to _mapString.count-1 do 
+					info.dir += (_mapString[i]+"\\")
+				
+				arr = getFiles (info.dir + "*." + info.type)
+				info.numberFiles = arr.count
+				info.name = _mapString[_mapString.count]
+				info.multimMatStd = multimaterial numsubs:info.numberFiles name:(info.name + "_Multimaterial")
+				info.multimMatCount = info.numberFiles
+				info.map = Bitmaptexture fileName:info.file
+				info.height = info.map.bitmap.height as string
+				info.width = info.map.bitmap.width as string
+				info.tileHorizontal = (info.map.bitmap.width/info.map.bitmap.height)
+				info.tileVertical = 1
+				info.speed = 1
+				info.start = slidertime
+				info.end = info.start+((info.tileHorizontal*info.tileVertical)*info.numberFiles*info.speed)
+				
+				-- añadimos tantos materiales y bitmaps como corresponda.
+				for n = 1 to info.numberFiles do 
+				(
+					map = Bitmaptexture fileName:arr[n]
+					mat = standard diffusemap:map showInViewport:true name:(info.name + "_id_" + (idMat as string))
+					info.multimMatStd[n] = mat
+					
+					if mat.diffusemap.bitmap.hasAlpha  == true do
+					(
+						_mapAlpha = Bitmaptexture fileName:arr[n] rgbOutput:1
+						mat.opacityMap = _mapAlpha
+					)
+					idMat += 1
+				)
+				
+				-- hacemos update de la informacion
+				hor.enabled = false
+				ver.enabled = false
+				spe.enabled = true
+				str.enabled = true
+				hor.value = info.tileHorizontal
+				ver.value = info.tileVertical
+				spe.value = info.speed
+				str.value = info.start
+				updateInfo info
+			)
+			if  type == #mov do
+			(
+				-- variables
+				local idMat = 1
+				local formatExport = "png"
+				local ffmpegDir = lb.config.getExePath()
+				info.speed = "24"
+				info.dir = ""
+				info.format = "Mov (sequence)"
+				
+				-- acciones para generar informacion y elementos necesarios (materiales, bitmaps,...)
+				_filetype = filterstring info.file "."
+				_mapString = filterstring info.file "\\"
+				info.type = _filetype[_filetype.count]
+				
+				for i = 1 to _mapString.count-1 do 
+					info.dir += (_mapString[i]+"\\")
+				
+				info.name = _mapString[_mapString.count]
+				
+				local n = filterstring info.name "."
+				exportFolder = (info.dir + n[1] + "_seq\\")
+				
+				if doesFileExist exportFolder != true do 
+					makeDir exportFolder
+					
+				--configuramos la salida
+				saveAs = (exportFolder + n[1] + "_%3d." + formatExport) as string
+				
+				-- creamos un mapa temporal para sacar la informacion de resolucion del video
+				mapTemp = Bitmaptexture fileName:info.file 
+				info.height = mapTemp.bitmap.height as string
+				info.width = mapTemp.bitmap.width as string
+				mapTemp = undefined
+				
+				-- construimos la linea de comando
+				cmdLine = ("ffmpeg -i " + info.file + " -r " + info.speed + " -s " + info.width + "x" + info.height + " -vcodec png -pix_fmt rgb32 -y -aspect 16:9 " + saveAs)
+
+				-- Nos situamos en la carpeta del FFMEG
+				oldCurrentDir = sysInfo.currentdir
+				sysInfo.currentDir = ffmpegDir
+
+				-- ejecutamos la linea de comando y dejamos la carpeta donde estaba
+				hiddenDOSCommand cmdLine
+				sysInfo.currentdir = oldCurrentDir
+				
+				-- configuramos para crear array de materiales y bitmaps con la conversiorn de mov > imgs
+				arr = getFiles (exportFolder + "*." + formatExport)
+				info.numberFiles = arr.count
+				info.tileHorizontal = (info.width as integer/info.height as integer)
+				info.tileVertical = 1
+				info.speed = 1
+				info.start = slidertime
+				info.end = info.start+((info.tileHorizontal*info.tileVertical)*info.numberFiles*info.speed)
+				
+				-- añadimos tantos materiales y bitmaps como corresponda.
+				info.multimMatStd = multimaterial numsubs:info.numberFiles name:(info.name + "_Multimaterial")
+				info.multimMatCount = info.numberFiles
+				info.map = Bitmaptexture fileName:arr[1]
+				
+				for n = 1 to info.numberFiles do 
+				(
+					map = Bitmaptexture fileName:arr[n]
+					mat = standard diffusemap:map showInViewport:true name:(info.name + "_id_" + (idMat as string))
+					info.multimMatStd[n] = mat
+	
+					if mat.diffusemap.bitmap.hasAlpha  == true do
+					(
+						_mapAlpha = Bitmaptexture fileName:arr[n] rgbOutput:1
+						mat.opacityMap = _mapAlpha
+					)
+					idMat += 1
+				)
+			
+				-- hacemos update de la informacion
+				hor.enabled = false
+				ver.enabled = false
+				spe.enabled = true
+				str.enabled = true
+				hor.value = info.tileHorizontal
+				ver.value = info.tileVertical
+				spe.value = info.speed
+				str.value = info.start
+				updateInfo info
+			)
+			info.bool = true
+		)
+
+		------------------------------------------------
+		--@fn: undefined | checklayer | Chequea si existe la capa donde se ubicara el Sprite, y si no existe la crea. 
+		------------------------------------------------
+		fn checklayer =
+		(
+			if (LayerManager.getLayerFromName "_auxObj-Sprite_") == undefined then 
+			(
+				l = LayerManager.newLayerFromName "_auxObj-Sprite_"
+				l.current = true
+				return l
+			)
+			else 
+			(
+				l = LayerManager.getLayerFromName "_auxObj-Sprite_"
+				l.current = true
+				return l
+			)
+		)
+
+		------------------------------------------------
+		--@fn: undefined | addAttr | Crea el customAttribute que se aplicara al elemento Sprite y con el cual se puede configurar su comportamiento
+		--@gets: modifier | modifier | Modificador al cual se aplicara el customAttribute.
+		------------------------------------------------
+		fn addAttr modifier =
+		(
+			def = attributes SpriteAttributes
+			(
+				parameters pOptionsSprite rollout:rOptionsSprite
+				(
+					fxImg  type:#integer ui:spImg
+					fxFrm  type:#integer ui:spFrm
+					fxVrt  type:#integer ui:spVrt
+					fxstr  type:#integer ui:spnStr
+					fxcounter  type:#integer
+					fxloop type:#Integer ui:spnLoop
+				)
+				rollout rOptionsSprite "Options Sprite: " width:162 height:240
+				(
+
+					GroupBox grOptions "Options : " pos:[7,6] width:147 height:149
+					spinner spImg "Horizontal: " pos:[26,26] width:119 height:16 range:[-100,100,1] type:#integer
+					spinner spVrt "Vertical:  " pos:[35,47] width:110 height:16 range:[-100,100,1] type:#integer
+					spinner spFrm "Speed: " pos:[42,68] width:103 height:16 range:[-100,100,1] type:#integer
+					spinner spnStr "Start: " pos:[48,89] width:97 height:16 range:[-1e+006,1e+006,1] type:#integer
+					spinner spnLoop "loop: " pos:[52,110] width:93 height:16 range:[0,10000,1] type:#integer enabled:true
+					label infoLabel "loop.value 0 = infinite loop" pos:[16,133] width:131 height:16  enabled:false
+				)
+			)
+			custAttributes.add modifier def
+		)
+
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout y rellena la informacion del listview en el rollout.
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+			callbacks.addscript #selectionSetChanged "lb.sprites.rollmain.actionButton()" id:#selectObjectForSprite
+			updateInfo info
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+			callbacks.removescripts id:#selectObjectForSprite
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollMainDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollMainDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--almacena posicion
+			lb.xml.setAttribute parent.cfgFile ("rollMain/pos") "x" (((getDialogPos rollMainDef).x) as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/pos") "y" (((getDialogPos rollMainDef).y) as string)
+			
+			--almacena tamaño
+			lb.xml.setAttribute parent.cfgFile ("rollMain/size") "width" (rollMainDef.width as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/size") "height" (rollMainDef.height as string)
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			_width = undefined 
+			_height = undefined 
+			_posX = undefined 
+			_posY = undefined
+
+			if doesFileExist parent.cfgFile do 
+			(
+				--------------------------------------------------------------------------------
+				--Los parametros de la tool leídos del xml de config van aqui
+
+				-- ancho y alto del rollout
+				_width = (lb.xml.getAttribute parent.cfgFile ("rollMain/size") "width") as integer
+				_height = (lb.xml.getAttribute parent.cfgFile ("rollMain/size") "height") as integer
+					
+				--posicion
+				_posX = (lb.xml.getAttribute parent.cfgFile ("rollMain/pos") "x") as integer
+				_posY = (lb.xml.getAttribute parent.cfgFile ("rollMain/pos") "y") as integer
+
+
+				--------------------------------------------------------------------------------
+			)	
+			
+			--establece minimos
+			if _width == undefined then _width = minRollWidth
+			else if _width < minRollWidth then _width = minRollWidth
+			
+			if _height == undefined then _height = minRollHeight
+			else if _height < minRollHeight then _height = minRollHeight
+			
+			if _posX == undefined then _posX = 0
+			else if _posX < 0 then _posX = 0
+			
+			if _posY == undefined then _posY = 0
+			if _posY < 0 then _posY = 0
+				
+			--aplica los valores
+			rollMainDef.width = _width
+			rollMainDef.height = _height
+			setDialogPos rollMainDef [_posX,_posY]
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+
+		------------------------------------------------	
+		--@event: bopen | Abre un cuadro de dialogo para seleccionar el recurso que se va a usar.
+		--@control: rollout | rollMain | Elemento que selecciona el recurso.
+		------------------------------------------------
+		on bopen pressed do
+		(
+			if optRsrc.state == 1 then 
+			(
+				info.file = getOpenFileName caption:"Select Sprite image" types:"Sprite images PNG (*.png)|*.png|Sprite images JPG(*.jpeg)|*.jpeg|"
+				if info.file !=  undefined do 
+					generateInfo info type:#sprite
+			)
+			if optRsrc.state == 2 then 
+			(
+				info.file = getOpenFileName caption:"Select Sprite sequence" types:"Sequence images PNG# (*.png)|*.png|Sequence images JPG#(*.jpeg)|*.jpeg|"
+				if info.file !=  undefined do 
+					generateInfo info type:#sequence
+			)
+			if optRsrc.state == 3 then 
+			(
+				info.file = getOpenFileName caption:"Select Sprite Video" types:"Video MOV (*.mov)|*.mov|"
+				if info.file !=  undefined do 
+					generateInfo info type:#mov
+			)
+		)
+
+		------------------------------------------------	
+		--@event: hor | Numero de imagenes que va a tilear.
+		--@control: rollout | rollMain | Almacena en el struct el numero de tilling horizontal de la imagen y refresca la informacion en el listview.
+		------------------------------------------------
+		on hor changed value do 
+		(
+			info.tileHorizontal = hor.value 
+			info.end = info.start+((info.tileHorizontal*info.tileVertical)*info.numberFiles*info.speed)
+			updateInfo info
+		)
+
+		------------------------------------------------	
+		--@event: ver | Numero de imagenes que va a tilear.
+		--@control: rollout | rollMain | Almacena en el struct el numero de tilling verticales de la imagen y refresca la informacion en el listview.
+		------------------------------------------------
+		on ver changed value do 
+		(
+			info.tileVertical = ver.value 
+			info.end = info.start+((info.tileHorizontal*info.tileVertical)*info.numberFiles*info.speed)
+			updateInfo info
+		)
+
+		------------------------------------------------	
+		--@event: str | frame en el que empieza el Sprite.
+		--@control: rollout | rollMain | Almacena en el struct el frame en el que empieza el bucle del sprite y refresca la informacion en el listview.
+		------------------------------------------------
+		on str changed value do 
+		(
+			info.start = str.value 
+			info.end = info.start+((info.tileHorizontal*info.tileVertical)*info.numberFiles*info.speed)
+			updateInfo info
+		)
+
+		------------------------------------------------	
+		--@event: spe | Velocidad a la que cambia las imagenes.
+		--@control: rollout | rollMain | Almacena en el struct la velocidad a la que va a cambiar las imagenes imagen y refresca la informacion en el listview.
+		------------------------------------------------
+		on spe changed value do 
+		(
+			info.speed =spe.value 
+			info.end = info.start+((info.tileHorizontal*info.tileVertical)*info.numberFiles*info.speed)
+			updateInfo info
+		)
+
+		------------------------------------------------	
+		--@event: loop | Numero de vueltas que dará el Sprite.
+		--@control: rollout | rollMain | Almacena en el struct el número de vueltas en total al cambiar las imagenes imagen y refresca la informacion en el listview.
+		------------------------------------------------
+		on loop changed state do
+		(
+			if loop.state == true then 
+				info.loop = true
+			else 
+				info.loop = false
+		)
+
+		------------------------------------------------	
+		--@event: _run | Crea el Sprite usando la información recopilada en el struct
+		--@control: rollout | rollMain | Genera el Sprite según la configuración almacenada en el struct. se crean elementos y se configuran los modificadores y los controles para generar el objeto.
+		------------------------------------------------
+		on _run pressed do
+		(	
+			if info.bool == true then 
+			(
+				local l = checklayer()
+				local element=#()
+				local fxmod1 = UVW_xform name:"CustomUV"
+				local fxModEmpty = EmptyModifier()
+				
+				if _run.text == "Create a new Sprite" do 
+				(
+					info.support = true
+					case typeCreate.state of
+					(
+						1: info.typeObject = 1
+						2: info.typeObject = 2
+					)
+				)
+				
+				if _run.text == "Create Sprite in selection" do 
+				(
+					info.support = false
+					info.typeObject = 0
+				)
+				
+				if info.typeObject == 0 do
+				(
+					resource = getcurrentselection()
+					fxgeo = copy resource[1]
+					addmodifier fxgeo (push push_value:0.1)
+				)
+				
+				if info.typeObject == 1 do
+					if optRsrc.state == 1 then 
+						fxgeo = plane lengthsegs:1 widthsegs:1 width:((info.width as integer)*0.1) length:((info.width as integer)*0.1) name:(uniquename "Sprite_Geo_") wirecolor:black
+					else
+						fxgeo = plane lengthsegs:1 widthsegs:1 width:((info.width as integer)*0.1) length:((info.height as integer)*0.1) name:(uniquename "Sprite_Geo_") wirecolor:black
+					
+
+				if info.typeObject == 2 do
+				(
+					if optRsrc.state == 1 then 
+					(
+						fxgeo = plane lengthsegs:1 widthsegs:1 width:((info.width as integer)*0.1) length:((info.width as integer)*0.1) name:(uniquename "Sprite_Geo_") wirecolor:black
+						fxgeoCross = plane lengthsegs:1 widthsegs:1 width:((info.width as integer)*0.1) length:((info.width as integer)*0.1) name:(uniquename "Sprite_Geo_") wirecolor:black
+					)
+					else
+					(
+						fxgeo = plane lengthsegs:1 widthsegs:1 width:((info.width as integer)*0.1) length:((info.height as integer)*0.1) name:(uniquename "Sprite_Geo_") wirecolor:black
+						fxgeoCross = plane lengthsegs:1 widthsegs:1 width:((info.width as integer)*0.1) length:((info.height as integer)*0.1) name:(uniquename "Sprite_Geo_") wirecolor:black
+					)
+					
+					resetXForm fxgeoCross
+					fxgeoCross.modifiers[#XForm].gizmo.rotation = (quat 0 0.707107 0 0.707107)
+					
+					convertToMesh fxgeo
+					meshop.attach fxgeo fxgeoCross
+				)
+				
+				resetXForm fxgeo
+				l.addnode fxgeo
+				fxgeo.material = info.multimMatStd
+				
+				-- elementos 
+				if info.format == "sprite" do 
+				(
+					local fxmod2 = UVW_xform name:"AnimateUV"
+					
+					addmodifier fxgeo fxmod1
+					fxgeo.modifiers[#CustomUV].U_Tile = (100/ info.tileHorizontal)*0.01
+					fxgeo.modifiers[#CustomUV].V_Tile = (100/info.tileVertical)*0.01
+					fxgeo.modifiers[#CustomUV].V_Offset = (1-(100/info.tileVertical)*0.01)
+					
+					-- añadimos modificadores y atributos
+					addmodifier fxgeo fxmod2
+					addmodifier fxgeo fxModEmpty
+					addAttr fxModEmpty 
+					
+					-- marcamos el loop si es necesario
+					if info.loop == true then 
+						fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxloop = 0
+					else 
+						fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxloop = 1
+					
+					fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxImg.controller = bezier_float ()
+					fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxFrm.controller = bezier_float ()
+					fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxVrt.controller = bezier_float ()
+					fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxstr.controller = bezier_float ()
+					fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxloop.controller = bezier_float ()
+					fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxcounter.controller = bezier_float ()
+					
+					fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxstr = info.start
+					fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxImg =  info.tileHorizontal
+					fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxVrt = info.tileVertical
+					fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxFrm = info.speed
+					fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxcounter = info.numberFiles
+					
+					local codeU = "
+					param1 = f-(fxStart+fxSpeed)
+					param2 = fxSpeed
+					param3 = (100/fxWidth)*0.01
+
+					param11 = f-(fxStart+(abs fxSpeed))
+					param22 = (abs fxSpeed)
+					param33 = ((100/fxWidth)*0.01)
+
+					lngLong = fxStart+(((fxWidth*fxHeight)*(abs fxSpeed))*fxLoop)
+					lngShort = fxStart+(((fxWidth*fxHeight)/fxSpeed)*fxLoop)
+
+					if fxLoop == 0 then 
+					(
+						if fxSpeed >= 0 then ceil(param1*param2)*param3
+						else ceil(param11/param22)*param33
+					)
+					else 
+					(
+						if f < fxStart then 0
+						else 
+						(
+							if fxSpeed >= 0 then 
+							(	
+								if f > lngShort then ((fxWidth-((100/fxWidth)*0.01))*fxloop)
+								else ceil(param1*param2)*param3
+							)
+							else 
+							(
+								if f > lngLong then ((fxWidth-((100/fxWidth)*0.01))*fxloop)
+								else ceil(param11/param22)*param33
+							)
+							
+						)
+					)
+					"
+					
+					-- creamos el script para su funcionamiento .
+					fxgeo.modifiers[#AnimateUV].U_Offset.controller = float_script ()
+					fxgeo.modifiers[#AnimateUV].U_Offset.controller.AddTarget "fxStart" fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxstr.controller
+					fxgeo.modifiers[#AnimateUV].U_Offset.controller.AddTarget "fxWidth" fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxImg.controller
+					fxgeo.modifiers[#AnimateUV].U_Offset.controller.AddTarget "fxHeight" fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxVrt.controller
+					fxgeo.modifiers[#AnimateUV].U_Offset.controller.AddTarget "fxSpeed" fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxFrm.controller
+					fxgeo.modifiers[#AnimateUV].U_Offset.controller.AddTarget "fxLoop" fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxloop.controller
+					fxgeo.modifiers[#AnimateUV].U_Offset.controller.setExpression codeU
+					
+					local codeV = "
+					param1 = f-(fxStart)
+					param2 = (-fxWidth/(abs fxSpeed))
+					param3 = (100/fxHeight)*0.01
+
+					param11 = f-(fxStart)
+					param22 = (-fxWidth*(abs fxSpeed))
+					param33 = (100/fxHeight)*0.01
+
+					lngLong = fxStart+(((fxWidth*fxHeight)*(abs fxSpeed))*fxLoop)
+					lngShort = fxStart+(((fxWidth*fxHeight)/fxSpeed)*fxLoop)
+
+					if fxLoop == 0 then
+					(
+						if fxSpeed >= 0 then ceil(param1/param2)*param3
+						else ceil(param11/param22)*param33
+					)
+					else
+					(
+						if f < fxStart then 0
+						else 
+						(
+							if fxSpeed >= 0 then 
+							(	
+								if f > lngShort then -((fxHeight-1)/fxHeight)
+								else ceil(param1/param2)*param3
+							)
+							else 
+							(
+								if f > lngLong then -((fxHeight-1)/fxHeight)
+								else ceil(param11/param22)*param33
+							)
+							
+						)
+					)
+					"
+					-- creamos el script para su funcionamiento .
+					fxgeo.modifiers[#AnimateUV].V_Offset.controller = float_script ()
+					fxgeo.modifiers[#AnimateUV].V_Offset.controller.AddTarget "fxStart" fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxstr.controller
+					fxgeo.modifiers[#AnimateUV].V_Offset.controller.AddTarget "fxWidth" fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxImg.controller
+					fxgeo.modifiers[#AnimateUV].V_Offset.controller.AddTarget "fxHeight" fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxVrt.controller
+					fxgeo.modifiers[#AnimateUV].V_Offset.controller.AddTarget "fxSpeed" fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxFrm.controller
+					fxgeo.modifiers[#AnimateUV].V_Offset.controller.AddTarget "fxLoop" fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxloop.controller
+					fxgeo.modifiers[#AnimateUV].V_Offset.controller.setExpression codeV
+				)
+
+				if info.format == "sequence" do 
+				(
+					local fxmod2 = Materialmodifier name:"AnimateUV"
+					
+					addmodifier fxgeo fxmod1
+					fxgeo.modifiers[#CustomUV].U_Tile = (100/ info.tileHorizontal)*0.01
+					fxgeo.modifiers[#CustomUV].V_Tile = (100/info.tileVertical)*0.01
+					fxgeo.modifiers[#CustomUV].V_Offset = (1-(100/info.tileVertical)*0.01)
+					
+					-- añadimos modificadores y atributos
+					addmodifier fxgeo fxmod2
+					addmodifier fxgeo fxModEmpty
+					addAttr fxModEmpty
+					
+					if info.loop == true then 
+						fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxloop = 0
+					else 
+						fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxloop = 1
+					
+					fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxImg.controller = bezier_float ()
+					fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxFrm.controller = bezier_float ()
+					fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxVrt.controller = bezier_float ()
+					fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxstr.controller = bezier_float ()
+					fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxloop.controller = bezier_float ()
+					fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxcounter.controller = bezier_float ()
+					
+					fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxstr = info.start
+					fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxImg =  info.tileHorizontal
+					fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxVrt = info.tileVertical
+					fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxFrm = info.speed
+					fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxcounter = info.numberFiles
+					
+					-- creamos el script para su funcionamiento .
+					local code = "
+									if fxLoop == 0 then
+									(
+										if f < fxStart then 
+										(
+											0
+										)
+										else
+										(
+											if fxSpeed >= 0 then (f-fxStart)*fxSpeed
+											else (f-fxStart)/abs(fxSpeed)
+										)
+									)
+									else
+									(
+										if f < fxStart then 
+										(
+											0
+										)
+										else
+										(
+											if f > ((fxStart+fxCounter)*fxSpeed)*fxLoop then
+											(
+												0
+											)
+											else
+											(
+												if fxSpeed >= 0 then (f-fxStart)*fxSpeed
+												else (f-fxStart)/abs(fxSpeed)
+											)
+										)
+									)
+									"
+					fxgeo.modifiers[#AnimateUV].materialID.controller = float_script ()
+					fxgeo.modifiers[#AnimateUV].materialID.controller.AddTarget "fxStart" fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxstr.controller
+					fxgeo.modifiers[#AnimateUV].materialID.controller.AddTarget "fxSpeed" fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxFrm.controller
+					fxgeo.modifiers[#AnimateUV].materialID.controller.AddTarget "fxLoop" fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxloop.controller
+					fxgeo.modifiers[#AnimateUV].materialID.controller.AddTarget "fxCounter" fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxcounter.controller
+					fxgeo.modifiers[#AnimateUV].materialID.controller.setExpression code
+					fxgeo.modifiers[#CustomUV].U_Tile.controller = fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxImg.controller
+					fxgeo.modifiers[#CustomUV].V_Tile.controller = fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxVrt.controller
+				)
+				if info.format == "Mov (sequence)" do
+				(
+					local fxmod2 = Materialmodifier name:"AnimateUV"
+					
+					addmodifier fxgeo fxmod1
+					fxgeo.modifiers[#CustomUV].U_Tile = (100/ info.tileHorizontal)*0.01
+					fxgeo.modifiers[#CustomUV].V_Tile = (100/info.tileVertical)*0.01
+					fxgeo.modifiers[#CustomUV].V_Offset = (1-(100/info.tileVertical)*0.01)
+					
+					-- añadimos modificadores y atributos
+					addmodifier fxgeo fxmod2
+					addmodifier fxgeo fxModEmpty
+					addAttr fxModEmpty
+					
+					if info.loop == true then 
+						fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxloop = 0
+					else 
+						fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxloop = 1
+					
+					fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxImg.controller = bezier_float ()
+					fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxFrm.controller = bezier_float ()
+					fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxVrt.controller = bezier_float ()
+					fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxstr.controller = bezier_float ()
+					fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxloop.controller = bezier_float ()
+					fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxcounter.controller = bezier_float ()
+					
+					fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxstr = info.start
+					fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxImg =  info.tileHorizontal
+					fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxVrt = info.tileVertical
+					fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxFrm = info.speed
+					fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxcounter = info.numberFiles
+					
+					-- creamos el script para su funcionamiento .
+					local code = "
+									if fxLoop == 0 then
+									(
+										if f < fxStart then 
+										(
+											0
+										)
+										else
+										(
+											if fxSpeed >= 0 then (f-fxStart)*fxSpeed
+											else (f-fxStart)/abs(fxSpeed)
+										)
+									)
+									else
+									(
+										if f < fxStart then 
+										(
+											0
+										)
+										else
+										(
+											if f > ((fxStart+fxCounter)*fxSpeed)*fxLoop then
+											(
+												0
+											)
+											else
+											(
+												if fxSpeed >= 0 then (f-fxStart)*fxSpeed
+												else (f-fxStart)/abs(fxSpeed)
+											)
+										)
+									)
+									"
+					fxgeo.modifiers[#AnimateUV].materialID.controller = float_script ()
+					fxgeo.modifiers[#AnimateUV].materialID.controller.AddTarget "fxStart" fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxstr.controller
+					fxgeo.modifiers[#AnimateUV].materialID.controller.AddTarget "fxSpeed" fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxFrm.controller
+					fxgeo.modifiers[#AnimateUV].materialID.controller.AddTarget "fxLoop" fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxloop.controller
+					fxgeo.modifiers[#AnimateUV].materialID.controller.AddTarget "fxCounter" fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxcounter.controller
+					fxgeo.modifiers[#AnimateUV].materialID.controller.setExpression code
+					fxgeo.modifiers[#CustomUV].U_Tile.controller = fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxImg.controller
+					fxgeo.modifiers[#CustomUV].V_Tile.controller = fxgeo.modifiers[#Attribute_Holder].SpriteAttributes.fxVrt.controller
+					select fxgeo
+				)
+			)
+			else 
+				print "Seleccione un recurso para crear el sprite."
+		)
+		on btnHalp pressed do 
+		(
+ 			shellLaunch "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe" @"http://www.toolslb.com/doku.php?id=tools:sprites"
+		)
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollMain | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		--@gets: point2 | size | tamaño al que se ha redimensionado el rollout
+		------------------------------------------------
+		on rollMainDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollMain | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollMainDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+			if parent.rollMain != undefined then resize [parent.rollMain.width, parent.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollMain | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollMainDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+			
+			parent.opened = false --indica que la herramienta está cerrada.
+			updateToolbarButtons()
+		)
+	)--rollMainDef
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: templateTool | Contiene la herramienta plantilla.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct tl_sprites
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: string | def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: string | defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,					--@var: name | category | Categoria de la tool.
+		className = lb.getFileToolName (getThisScriptFilename() as string),	--@var: string | className | Nombre de la tool.
+		description = "Tool plantilla",		--@var: string | description | Descripcion de la tool.
+		
+		cfgFile = (lb.config.getToolsIniPath()) + (lb.getFileToolName (getThisScriptFilename() as string)) + ".cfg",	--@var: string | cfgFile | Archivo de configuracion de la tool.
+			
+		opened = false,			--@var: boolean | opened | Indica si la herramienta está abierta.
+			
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--ROLLOUTS
+		------------------------------------------------------------------------------------------------
+		
+		rollMain = rollMainDef,	--@var: rollout | rollMain | Almacena el rollout principal de la herramienta.
+			
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: boolean | isOpen | Devuelve información true o false, si la herramienta está abierta o cerrada.
+		------------------------------------------------
+		fn isOpen =
+		(
+			this.opened
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | refreshInterface | Refresca el interface inicial de la herramienta
+		------------------------------------------------
+		fn refreshInterface =
+		(
+			--refresca el interface de la herramienta
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | createInterface | Crea el interface inicial de la herramienta
+		------------------------------------------------
+		fn createInterface =
+		(
+			--crea el interface, lo redimensiona y lo reposiciona
+			createDialog this.rollMain lockwidth:true lockheight:true pos:[-10000,0] style:#(#style_toolwindow, #style_titlebar, #style_sysmenu, #style_resizing)
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | destroyInterface | Destruye el interface de la herramienta.
+		------------------------------------------------
+		fn destroyInterface =
+		(
+			destroyDialog this.rollMain --cierra la herramienta.			
+		),--destroyInterface
+		
+		------------------------------------------------
+		--@fn: undefined | run | Lanza la herramienta.
+		------------------------------------------------
+		fn run =
+		(
+			this.createInterface() --crea el interface.
+			this.opened = true --indica que la herramienta está abierta
+		),--execute
+		
+		------------------------------------------------
+		--@fn: undefined | close | Cierra la herramienta.
+		------------------------------------------------
+		fn close =
+		(
+			this.destroyInterface() --destruye el interface.
+			this.opened = false --indica que la herramienta está cerrada.
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addTool this --añade la tool a la libreria principal	
+		)		
+		
+	)--tl_sprites
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------	
+	
+	tl_sprites() --crea la herramienta
+)

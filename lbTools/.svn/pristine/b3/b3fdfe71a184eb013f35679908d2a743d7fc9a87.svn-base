@@ -1,0 +1,583 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--@Desc: libreria de cloth
+------------------------------------------------------------------------------------------------------------------------------------------------
+(	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: lib_cloth | Struct que almacena la libreria cloth
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct lib_cloth
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: string | def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: string | defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,					--@var: string | category | Categoria de la libreria.
+		className = lb.getFileLibName (getThisScriptFilename() as string),	--@var: string | className | Nombre de la libreria.
+		description = "Libreria plantilla",	--@var: string | description | Descripcion de la libreria.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: array | getGroupAmountClothModifier | función para obtener el numero de grupos en un modificador de tipo cloth
+		--@gets: modifier | clothMod | Modificador de cloth
+		--@returns: array | _infoRefs | devuelve los grupos donde el primer valor es el offset de modificadores anteriores que no son groups de los subanim, el segundo es el numero de modificadores
+		------------------------------------------------
+		fn getGroupAmountClothModifier clothMod = 
+		(
+			_inst = refs.dependentnodes clothMod
+			_offset = 1
+			_infoRefs = #()
+			append _infoRefs (_inst.count+_offset)
+			append _infoRefs (clothMod.numsubs-(_inst.count+_offset))
+			return _infoRefs
+		),
+
+		------------------------------------------------
+		--@fn: array | getNodeProperty | función para obtener el valor de una propiedad de un modificador
+		--@usage: <array> = getNodeProperty _modifier _node _name
+		--@gets: modifier | _modifier | modificador que contiene la propiedad
+		--@gets: node | _node | Nodo que contiene la propiedad
+		--@gets: string | _name | nombre de la propiedad
+		--@returns: array | _propertyNode | array, el primer valor es el nombre y el segundo el valor de la propiedad.
+		------------------------------------------------
+		
+		fn getNodeProperty _modifier _node _name =
+		(
+			_propertyNode = #()
+			append _propertyNode _name
+			append _propertyNode (_modifier.getObjectProperty _node _name)
+			return _propertyNode
+		),
+
+		------------------------------------------------
+		--@fn: array | getClothModifierObjPropertyObjects | función para obtener los nodos del modificador cloth y la informacion de las propiedades de estos 
+		--@gets: mnodifier | _modifier | modificador de cloth
+		--@returns: array | _clothModifierInfo | array con la siguiente estructura: #(nodo, tipo de cloth, array de propiedades (nombrepropiedad,valor))
+		------------------------------------------------
+		fn getClothModifierObjPropertyObjects clothMod =
+		(
+			_clothModifierInfo = #()
+			_assets = (lb.asset.getSceneAssets())
+			_nodesInClothMod = #()
+
+			_info = getGroupAmountClothModifier clothMod
+
+			--Consultamos los objetos que hay en el modificador 
+			for i=2 to _info[1] do 
+			(
+				_nameParts = filterstring (clothMod[i]as string) "_"
+				_index = 0 
+				_notFound = true
+				for j=1 to _nameParts.count where _notFound do
+				(
+					if ((_nameParts[j]=="drv") or (_nameParts[j]=="col")) then
+					(
+						_notFound = false
+					)
+					_index = _index + 1
+				)
+				_pattern = (_nameParts[_index]+"-"+_nameParts[_index+1])
+				for _node in _assets[1].nodes do
+				(
+					if matchpattern _node.name pattern: ("*"+_pattern+"*") do append _nodesInClothMod _node
+				)
+			)
+			
+			--Guardaremos las propiedades de cada uno de los nodos.
+			_nodesAndProperties = #()
+			for _node in _nodesInClothMod do
+			(
+
+				_nodetype = clothMod.getObjectType _node
+				
+				_properties = #()
+				case (_nodetype) of
+ 				(
+ 					0: (
+ 							--cloth tipo inactivo
+ 						)
+ 					1: (
+	 						--cloth tipo colision
+	 						_propNames = #("Depth","Offset","dynFric","staticFric","enableCollisions","isCutter")
+	 						
+	 						for _elem in _propNames do 
+	 						(
+	 							append _properties (getNodeProperty clothMod _node _elem)
+	 						)
+
+ 						)
+ 					2: (
+	 						--cloth tipo cloth
+	 						_propNames = #("bend","uBend","vBend","bCurve","uBCurve","vBCurve","stretch","uStretch","vStretch","compress","uCompress","vCompress","shear","density","damping","plasticity","thickness","repulsion","airres","dynFric","staticFric","selfFric","seamForce","uScale","vScale","depth","offset","layer","inherit_velocity","useEdgeSprings","useSolidFriction","keep_shape_bend_strength","keep_shape_stretch_strength","pressure","pressure_damp","track_volume","cap_holes","keepShape")
+	 						for _elem in _propNames do 
+	 						(
+	 							append _properties (getNodeProperty clothMod _node _elem)
+	 						)
+ 						)
+  				)
+  				_clothModifierInfoNode = #()
+  				append _clothModifierInfoNode _node
+  				append _clothModifierInfoNode _nodetype
+  				append _clothModifierInfoNode _properties
+  				append _clothModifierInfo _clothModifierInfoNode
+  				
+			)
+			return _clothModifierInfo	
+		),
+
+		------------------------------------------------
+		--@fn: integer | getClothModifierProperties | función para obtener las propiedades de los grupos de los modificadores de cloth
+		--@deprecated: this function is deprecated and is no longer used
+		--@gets: clothMod | Modificador de cloth | EL modificador de cloth 
+		--@returns: : array | _groupInfo | array con los valores de las propiedades 
+		------------------------------------------------
+		fn getClothModifierGroupProperties clothMod =
+		( 
+			--Como cuando se pone un group se pudre todo recorremos la info via los subanims del modificador... si..pura crema
+			_info = getGroupAmountClothModifier clothMod
+			_groupInfo = #()
+			for i=_info[1]+1 to (_info[1]+_info[2]) do
+			(
+				_subanim = clothMod[i]
+				_properties = #()
+
+				append _properties clothMod[i].Active
+				append _properties clothMod[i].Offset
+				append _properties clothMod[i].Offset_is_Relative
+				append _properties clothMod[i].Strength
+				append _properties clothMod[i].Damping
+				append _properties clothMod[i].Is_Soft
+				append _properties clothMod[i].Grp_Solid_Collision
+				append _properties clothMod[i].Grp_Self_Collision
+				append _properties clothMod[i].Use_Group_Properties
+				append _properties clothMod[i].Cloth_cloth_Friction
+				append _properties clothMod[i].Seam_Force
+				append _properties clothMod[i].U_Stretch_Resistance
+				append _properties clothMod[i].V_Stretch_Resistance
+				append _properties clothMod[i].Shear_Resistance
+				append _properties clothMod[i].U_Bend_Resistance
+				append _properties clothMod[i].V_Bend_Resistance
+				append _properties clothMod[i].U_Scale
+				append _properties clothMod[i].V_Scale
+				append _properties clothMod[i].Cloth_cloth_force
+				append _properties clothMod[i].Density
+				append _properties clothMod[i].Thickness
+				append _properties clothMod[i].Air_Resistance
+				append _properties clothMod[i].Dynamic_Friction
+				append _properties clothMod[i].Static_Friction
+				append _properties clothMod[i].Friction_Velocity_Cutoff
+				append _properties clothMod[i].U_Bend_Curve
+				append _properties clothMod[i].V_Bend_Curve
+				append _properties clothMod[i].Stretch_Damping
+				append _properties clothMod[i].Use_Edge_Springs
+				append _properties clothMod[i].Anisotropic
+				append _properties clothMod[i].Constraint_MatID
+				append _properties clothMod[i].Use_Edge_Distance
+				append _properties clothMod[i].Edge_Distance
+				append _properties clothMod[i].Affect_Backfacing
+				append _properties clothMod[i].Falloff
+				append _properties clothMod[i].Pinch
+				append _properties clothMod[i].Bubble
+				append _properties clothMod[i].Use_Vertex_Colors
+				append _properties clothMod[i].Use_Texture_Map
+				append _properties clothMod[i].Map_Channel_Type
+				append _properties clothMod[i].Map_Channel
+				append _properties clothMod[i].Use_Solid_Friction
+				append _properties clothMod[i].Collision_Offset
+				append _properties clothMod[i].Collision_Depth
+				append _properties clothMod[i].AssignerType
+				append _properties clothMod[i].Use_Radius
+				append _properties clothMod[i].Radius
+				append _properties clothMod[i].Keep_Shape
+				append _properties clothMod[i].Group_Name
+				append _properties clothMod[i].Keep_Shape_Factor
+				append _properties clothMod[i].Keep_Shape_Edge_Lengths_Factor
+				append _properties clothMod[i].Plasticity
+				append _properties clothMod[i].Layer
+				append _properties clothMod[i].Use_Group_Behavior
+				append _properties clothMod[i].Use_Solid_Depth_Offset
+				append _properties clothMod[i].Stickiness
+				append _properties clothMod[i].U_Compression_Resistance
+				append _properties clothMod[i].V_Compression_Resistance
+				append _properties clothMod[i].Inherit_Velocity
+				append _properties clothMod[i].Pressure
+				append _properties clothMod[i].Pressure_Damping
+
+				_groupCombination = #()
+				append _groupCombination _subanim
+				append _groupCombination _properties
+				append _groupInfo _groupCombination 
+
+			)
+			return _groupInfo
+		),
+
+		------------------------------------------------
+		--@fn: array | getClothObjectProperties | función que captura los objetos del modificador cloth y devuelve todas sus propiedades.
+		--@gets: modifier | clothMod | el modificador del qual consultaremos las propiedades
+		--returns array | _clothObjsProperties | array de structs de tipo clothObj_name con las propiedades de cloth
+		------------------------------------------------
+		fn getClothObjectProperties clothMod =
+		(
+			-- VARIABLES
+			_clothObjects = #() --array con los nombres de los objetos en el cloth
+			_clothGroups = #() --array con los nombres de los grupos en el cloth
+			
+			--STRUCTS
+			struct clothObj_name
+			(
+				-- propiedades no listadas en showObjectProperties() pero necesarias tales como el nombre del asset o el tipo de objeto
+				clothObj = undefined,
+				objectType = undefined,
+				
+				-- propiedades genéricas del obj
+				bend = undefined,
+				bCurve = undefined,
+				stretch = undefined,
+				shear = undefined,
+				density = undefined,
+				thickness = undefined,
+				repulsion = undefined,
+				damping = undefined,
+				airres = undefined,
+				dynFric = undefined,
+				staticFric = undefined,
+				selfFric = undefined,
+				seamForce = undefined,
+				uScale = undefined,
+				vScale = undefined,
+				useEdgeSprings = undefined,
+				useSolidFriction = undefined,
+				depth = undefined,
+				offset = undefined,
+				enableCollisions = undefined,
+				uBend = undefined,
+				vBend = undefined,
+				uBCurve = undefined,
+				vBCurve = undefined,
+				uStretch = undefined,
+				vStretch = undefined,
+				keepShape = undefined,
+				plasticity = undefined,
+				layer = undefined,
+				compress = undefined,
+				uCompress = undefined,
+				vCompress = undefined,
+				isCutter = undefined,
+				pressure = undefined,
+				pressure_damp = undefined,
+				keep_shape_bend_strength = undefined,
+				keep_shape_stretch_strength = undefined,
+				track_volume = undefined,
+				cap_holes = undefined,
+				inherit_velocity = undefined
+			)
+			
+			for i = 1 to clothMod.numsubs do  --capturamos los grupos
+			(	
+				_name = filterstring clothMod[i].name "_"
+				if _name[1] == "grp" then 
+					append _clothGroups clothMod[i].name
+			)
+			
+			--sacamos los objetos y los metemos en el array _clothObjects
+			_numObjs = (clothMod.numsubs - _clothGroups.count)
+			for i = 2 to _numObjs do
+				append _clothObjects clothMod[i].name
+			
+			_clothObjsProperties = #() --array con los struct con las propiedades de los objetos asignados al cloth
+			
+			-------------------------------------
+			-- creamos y rellenamos el struct de los objetos según su número, array de structs
+			-------------------------------------
+			for i=1 to _clothObjects.count do
+			(
+				append _clothObjsProperties (clothObj_name())--
+					
+				( 	
+					-- propiedades no listadas
+					--capturamos el nombre del objeto
+					_clothObjsProperties[i].clothObj = substituteString _clothObjects[i] "_properties" ""
+					--capturamos el tipo de objeto (collision, cloth o inactive)
+					_node = "$'" + _clothObjsProperties[i].clothObj + "'"
+					_clothObjsProperties[i].objectType = clothMod.getObjectType (execute _node)
+				)
+			)
+
+			_clothObjsProperties
+		),
+
+		------------------------------------------------		
+		--@fn: undefined | getClothGroupProperties | captura de grupos del modificador de cloth
+		--@gets: modifier | clothMod | El modificador de cloth 
+		--@returns array | _clothGroups | array con las group properties 
+		------------------------------------------------
+		fn getClothGroupProperties clothMod =
+		(
+			--VARIABLES
+			_clothGroups = #() --array con los nombres de los grupos en el cloth
+		
+			for i = 1 to clothMod.numsubs do  --capturamos los grupos
+			(	
+				_name = filterstring clothMod[i].name "_"
+				if _name[1] == "grp" then 
+					append _clothGroups clothMod[i].name
+			)
+		),
+
+		------------------------------------------------
+		--@fn: struct | getClothGlobalProperties | captura de las popiedades globales del modificador cloth
+		--@gets: modifier | clothMod | El modificador de cloth 
+		--@returns struct | _clothProperties | struct de tipo clothProperties_name con los valores de las propiedades.
+		------------------------------------------------		
+		fn getClothGlobalProperties clothMod =
+		(
+			-- VARIABLES
+			_clothProperties = undefined
+					
+			struct clothProperties_name
+			(
+				--propiedades generales
+				gravity = undefined,
+				selfCollision = undefined,
+				solidCollision = undefined,
+				scale = undefined,
+				useSewingSprings = undefined,
+				startFrame = undefined,
+				timestep = undefined,
+				showSewingSprings = undefined,
+				subsample = undefined,
+				endFrame = undefined,
+				enableEndFrame = undefined,
+				checkIntersections = undefined,
+				clothclothMethod = undefined,
+				useGravity = undefined,
+				simOnRender = undefined,
+				simPriority = undefined,
+				advancedPinching = undefined,
+				relativeVelocity = undefined,
+				timeScale = undefined,
+				ignoreBackfacing = undefined,
+				simOnMouseDown = undefined,
+				showCurrentState = undefined,
+				showTargetState = undefined,
+				showEnabledSolidCollision = undefined,
+				showEnabledClothCollision = undefined,
+				showTension = undefined,
+				tensionScale = undefined,
+				weldMethod = undefined
+			)
+
+			-------------------------------------
+			-- creamos y rellenamos el struct de propiedades genéricas
+			-------------------------------------
+			_clothProperties = clothProperties_name() --instanciamos el Struct
+			
+			_propNames = getPropNames clothMod
+		   
+			for _prop in _propNames do
+				if isProperty _clothProperties _prop then
+					setProperty _clothProperties _prop (getProperty clothMod _prop)
+				
+			_clothProperties
+		),
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		------------------------------------------------
+		--@fn: undefined | initialStateClothMod | inicialización del las propiedades del modificador de cloth de un objeto
+		--@gets: string | obj | El objeto que contiene el modificador.
+		------------------------------------------------
+		fn setInitialStateCloth obj = 
+		(
+			-- Nos aseguramos que estamos en el panel modificar
+			if (getCommandPanelTaskMode()) != #modify then setCommandPanelTaskMode #modify
+				
+			-- Capturamos el modificador actual seleccionado
+			_mod = modPanel.getCurrentObject() 
+				
+			if classof _mod == Cloth then
+			(
+				_mod.enabled = false
+				_mod.resetState obj
+				_mod.setInitialState obj
+				_mod.enabled = true
+			)
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | addClothModifier | Añade el modificador de cloth a un objeto inicializando sus propiedades.
+		--@gets: node | obj | objeto al que añadir el modificador de cloth
+		--@gets: (opt) name | type | Etiqueta con el tipo de modificador ( #cloth, #collision)
+		------------------------------------------------
+		mapped fn addClothModifier obj type:undefined  =
+		(
+			_currentFrame = filterstring (sliderTime as string) "f" --capturamos el frame actual, array
+			_modCloth = (cloth())
+			_baseName = if (lb.nc.ncOK obj.name) then (lb.nc.getNamePart obj.name 5) else obj.name --nombre quinta parte del nombre del objeto
+			_modCloth.name = "Cloth_" + _baseName --renombrado del modificador
+				
+			addModifier obj _modCloth -- añadimos el modificador y lo seleccionamos
+			modPanel.setCurrentObject _modCloth --seleccionamos el modificador en el panel
+			
+			---------------------
+			-- General
+			---------------------
+			--propiedades cloth por defecto
+			_modCloth.startFrame = (_currentFrame[1] as integer)
+			_modCloth.selfCollision = false
+			_modCloth.clothclothMethod = 0
+			_modCloth.subsample = 1
+
+			-- ---------------------
+			-- Objetos
+			---------------------
+			-- tipo de objeto	
+			case type of
+			(
+				#cloth:
+				(
+					_modCloth.clothops.setObjectType obj 2 true
+				)
+				
+				#collision:
+				(
+					
+					_modCloth.clothops.setObjectType obj 1  true
+					--propiedades dentro del objeto de colision
+					_modCloth.setObjectProperty obj "offset" 0.3
+					_modCloth.setObjectProperty obj "depth" 0.3
+				)
+			)	
+				
+			---------------------
+			-- Grupos DA FALLO DE SYSTEM EXCEPTION CUANDO SE INTENTA GENERAR UN SEGUNDO GRUPO
+			---------------------
+			--creación de grupos por defecto
+-- 			_vertex = _modCloth.clothops.numberVertices obj
+			
+-- 			_modCloth.clothops.initPointgroup "grp_all_preserve"
+-- 			_modCloth.clothops.makePointGroup #{1..(_vertex)} obj "grp_all_preserve" 
+						
+-- 			_vertex = _modCloth.clothops.numberVertices obj
+-- 			_modCloth.clothops.makePointGroup #{1..(_vertex)} obj "grp_all_drag " 
+			
+-- 			--propiedades del grupo preserve
+-- 			_modCloth.makeConstraint "grp_all_preserve" "preserved" obj
+-- 			_modCloth.grp_all_preserve.active = false
+-- 			_modCloth.grp_all_preserve.is_soft = false
+-- 			_modCloth.grp_all_preserve.offset = 0.1
+-- 			_modCloth.grp_all_preserve.damping = 0.1
+-- 				
+-- 			--propiedades del grupo drag
+-- 			_modCloth.makeConstraint "grp_all_drag" "drag" obj
+-- 			_modCloth.grp_all_drag.active = false
+-- 			_modCloth.grp_all_drag.is_soft = false
+-- 			_modCloth.grp_all_drag.offset = 0.1
+-- 			_modCloth.grp_all_drag.damping = 0.1
+				
+			this.setInitialStateCloth obj
+		),
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+
+		------------------------------------------------
+		--@fn: undefined | resetClothModifier | resetea el modificador de cloth de un objeto
+		--@gets: node | obj | objeto 
+		--@gets: modifier | clothMod | modificador a resetear
+		------------------------------------------------	
+		fn resetClothModifier obj clothMod =
+		(
+			--VARIABLES
+			_globalProperties = getClothGlobalProperties clothMod
+	-- 		_groupProperties = getClothGroupProperties clothMod
+			_objectProperties = getClothObjectProperties clothMod
+			
+			if classof clothMod == Cloth then --sólo entra si es de cloth
+			(		
+				--eliminamos el modificador buscando primero su index
+				_modifiers = for m in obj.modifiers collect m
+				_index = findItem _modifiers clothMod
+				if _index != 0 then deletemodifier obj _index
+					
+				--añadimos el modificador cloth de nuevo
+				lb.cloth.addClothModifier obj
+				
+				--volcamos las propiedades globales
+				(
+					_propNames = getPropNames _globalProperties
+				   
+					for _prop in _propNames do
+					(
+						if isProperty clothMod _prop then
+						(
+							setProperty clothMod _prop (getProperty _globalProperties _prop)
+						)
+					)
+				)
+			)
+		),
+
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | inicializa las librerias hijas de la libreria
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addLibrary this --añade la libreria a la principal
+		)
+		
+	)--lib_cloth
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	
+	lib_cloth() --crea la libreria
+)

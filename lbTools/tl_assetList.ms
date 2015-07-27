@@ -1,0 +1,892 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--@Desc: Herramienta Asset List, usada para la selección rápida de assets por interfaz grafica..
+------------------------------------------------------------------------------------------------------------------------------------------------
+(
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollMainDef | Contiene la interfaz de la herramienta Asset List.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollMainDef "Asset List"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) 	--@var: string | parent | Herramienta o rolllout del que depende y/o contiene el rollout actual
+		
+		local minRollWidth = 180															--@var: integer | minRollWidth | Ancho mínimo de la herramienta.
+		local minRollHeight = 350															--@var: integer | minRollHeight | Alto mínimo de la herramienta.
+
+		local iconpath = if (maxVersion())[1] >= 15000 then (getDir #maxRoot) + "UI_ln\\Icons\\" else (getDir #ui) + "/icons/" --@var: string | iconpath | ruta de los iconos de Max
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+
+		--local iconpath = if (maxVersion())[1] >= 15000 then (getDir #maxRoot) + "UI_ln\\Icons\\" else (getDir #ui) + "/icons/"		-- ruta de los iconos de Max.
+		
+		local affectedRollouts = #() 														--@var: array{rollout} | affectedRollouts | Array que contiene los rollouts que contienen esta tool.
+		
+		--colors------------------------------------------------------------------------------
+		local beige = (color 245 245 220)													--@var: Color | beige | color beige
+		
+		local dgBackColor = (dotNetClass "System.Drawing.Color").beige						--@var: DotNetClass Color | dgBackColor | Color de fondo
+		local dgForeColor = (dotNetClass "System.Drawing.Color").gray						--@var: DotNetClass Color | dgForeColor | Color del texto
+		local dgSelBackColor = (dotNetClass "System.Drawing.Color").midnightblue			--@var: DotNetClass Color | dgSelBackColor | Color del fondo de items seleccionados
+		local dgSelForeColor = (dotNetClass "System.Drawing.Color").white					--@var: DotNetClass Color | dgSelForeColor | Color del texto de items seleccionados
+
+		local clipboardObj = dotNetClass "System.Windows.Forms.Clipboard"   				--@var: DotNetClass | clipboardObj | Crea un clipboard de puntonet	
+
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+	
+		checkbutton ckb_CHRs "chr" pos:[5,5] width:20 height:20 highlightcolor:lb.asset.chrAssetColor tooltip:"Filter Character assets"
+		checkbutton ckb_PRPs "prp" pos:[25,5] width:20 height:20 highlightcolor:lb.asset.prpAssetColor tooltip:"Filter Prop assets"
+		checkbutton ckb_SPRs "spr" pos:[45,5] width:20 height:20 highlightcolor:lb.asset.sprAssetColor tooltip:"Filter SetProp assets"
+		checkbutton ckb_SETs "set" pos:[65,5] width:20 height:20 highlightcolor:lb.asset.setAssetColor tooltip:"Filter Set assets"	
+		checkbutton ckb_LITs "lit" pos:[85,5] width:20 height:20 highlightcolor:lb.asset.litAssetColor tooltip:"Filter LIT assets"
+		checkbutton ckb_FXs "fx" pos:[105,5] width:20 height:20 highlightcolor:lb.asset.fxAssetColor tooltip:"Filter FX assets"	
+		
+		button btnRefresh "R" pos:[130,5] width:20 height:20 toolTip:"refresh the list obtaining scene assets again"
+		
+		button btnSelectAll "A" pos:[5,30] width:20 height:20 toolTip:"Select All Assets in List" images:#(iconsPath + "displayIcons001_24i.bmp", undefined, 50, 1, 1, 1, 1, false)
+		button btnSelectNone "N" pos:[25,30] width:20 height:20 toolTip:"Unselect Assets in List" images:#(iconsPath + "displayIcons001_24i.bmp", undefined, 50, 2, 2, 2, 2, false)
+		button btnSelectInvert "I" pos:[45,30] width:20 height:20 toolTip:"Invert Asset selection" images:#(iconsPath + "displayIcons001_24i.bmp", undefined, 50, 3, 3, 3, 3, false)
+		
+		checkbutton ckbSortByAssetDependency pos:[75,30] width:20 height:20 tooltip:"Sort list by asset dependency" images:#(iconPath + "TrackViewTools_16i.bmp", undefined, 117, 60, 60, 60, 60, true)
+		
+		dotNetControl dgAssetList "System.Windows.Forms.DataGridView" pos:[5,55] width:170 height:282		
+
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		------------------------------------------------
+		--@fn: undefined | initGridView | inicializa el gridview
+		------------------------------------------------		
+		fn initGridView =
+		(
+			dgAssetList.rows.clear()
+			dgAssetList.columns.clear()
+			
+			dgAssetList.allowUsertoaddRows = false
+			dgAssetList.allowUserToResizeRows = false
+			dgAssetList.allowUserToResizeColumns = false
+			
+			dgAssetList.ColumnHeadersVisible = false	--para que las colunas no tengan titulo
+			dgAssetList.rowheadersvisible = false		--para que las filas no tengan titulo
+			
+			dgAssetList.foreColor = (dotNetClass "System.Drawing.Color").black
+			dgAssetList.backgroundcolor = dgForeColor									-- color del fondo
+			dgAssetList.rowsdefaultcellstyle.backcolor = dgForeColor				-- color por defecto de las celdas
+			dgAssetList.GridColor = dgForeColor
+			
+			dgAssetList.font = dotnetobject "system.drawing.font" (dotnetobject "System.Drawing.FontFamily" "Arial") 7.5					
+			
+			dgAssetList.readonly = true
+			dgAssetList.showCellTooltips = false
+		)
+
+		------------------------------------------------
+		--@fn: undefined | fillGridView | rellena el gridView
+		--@gets: (opt)name | sortType | Configuración del orden de muestra de los elementos del gridView. Puede valer **#byAssetType**.**#byAssetDependency**. Por defecto #byAssetType
+		------------------------------------------------		
+		fn fillGridView sortType:#byAssetType =
+		(
+			dgAssetList.rows.clear() --limpia las filas
+			dgAssetList.columns.clear() --limpia las columnas
+			
+			--añade la columna de iconos
+			dgAssetList.columns.add (dotnetobject "System.Windows.Forms.DataGridViewImageColumn")
+			--dgAssetList.columns.add "" ""
+			dgAssetList.columns.item[0].width = 25
+			
+			--añade la columna de assets
+			--dgAssetList.columns.add (dotnetobject "System.Windows.Forms.DataGridViewImageColumn")
+			dgAssetList.columns.add "" ""
+			dgAssetList.columns.item[1].width = (dgAssetList.width - 30)
+			
+			dgAssetList.selectionMode = (dotnetClass "System.Windows.Forms.DataGridViewSelectionMode").FullRowSelect
+			
+			--recorre los assets que pasan los filtros para mostrarlos en el listado
+			if lb.asset.listedAssets != undefined then --si la variable no esta indefinida
+			(
+				listedAssetsNames = for ast in lb.asset.listedAssets collect ast.fullname --rellena el listado de nombres
+				
+				case sortType of
+				(
+					#byAssetType:
+					(
+						newList = #() --nuevo listado ordenado
+						newListNames = #() --listado de nimbres del nuevo listado
+						
+						for ast in lb.asset.listedAssets where ast.type == lb.nc.NC_chrPrefix do (append newList ast; append newListNames ast.fullname)
+						for ast in lb.asset.listedAssets where ast.type == lb.nc.NC_prpPrefix do (append newList ast; append newListNames ast.fullname)
+						for ast in lb.asset.listedAssets where ast.type == lb.nc.NC_sprPrefix do (append newList ast; append newListNames ast.fullname)
+						for ast in lb.asset.listedAssets where ast.type == lb.nc.NC_setPrefix do (append newList ast; append newListNames ast.fullname)
+						for ast in lb.asset.listedAssets where ast.type == lb.nc.NC_fxPrefix do (append newList ast; append newListNames ast.fullname)
+						for ast in lb.asset.listedAssets where ast.type == lb.nc.NC_litPrefix do (append newList ast; append newListNames ast.fullname)
+						
+						lb.asset.listedAssets = newList --sobreescribe el listado
+						listedAssetsNames = newListNames
+					)--byAssetType
+					
+					#byAssetDependency: --ordena el listado por dependencia
+					(
+						newList = #() --nuevo listado ordenado
+						newListNames = #() --listado de nimbres del nuevo listado
+						
+						for ast in lb.asset.listedAssets where not ast.isDependent do --almacena primero los assets que no sean dependientes
+						(	
+							append newList ast
+							append newListNames ast.fullname
+						)--for
+						
+						for i = lb.asset.listedAssets.count to 1 by -1 where lb.asset.listedAssets[i].isDependent do --almacena luego los assets dependientes
+						(
+							ast = lb.asset.listedAssets[i]--asset actual
+							index = findItem newListNames ast.mainAsset
+							
+							if index != 0 then --si ha encontrado el asset principal, lo añade justo detras
+							(
+								insertItem ast newList (index + 1)
+								insertItem ("        " + ast.fullname) newListNames (index + 1)
+							)
+							else --si no ha encontrado el asset principal, añade el asset al final de la lista
+							(
+								append newList ast
+								append newListNames ast.fullname
+							)--if
+						)--for
+						
+						lb.asset.listedAssets = newList --sobreescribe el listado
+						listedAssetsNames = newListNames
+					)--byAssetDependency
+				)--case
+				
+				for i=1 to lb.asset.listedAssets.count do
+				(
+					--elige el color de fondo de la linea
+					rowDotnetColor = dgBackColor
+					rowColor = dgBackColor
+					
+					case lb.asset.listedAssets[i].type of
+					(
+						(lb.nc.NC_chrPrefix):
+						(
+							rowDotnetColor = (dotNetClass "System.Drawing.Color").fromargb lb.asset.chrAssetColor.x lb.asset.chrAssetColor.y lb.asset.chrAssetColor.z
+							rowColor = lb.asset.chrAssetColor as color
+						)
+						
+						(lb.nc.NC_prpPrefix):
+						(
+							rowDotnetColor = (dotNetClass "System.Drawing.Color").fromargb lb.asset.prpAssetColor.x lb.asset.prpAssetColor.y lb.asset.prpAssetColor.z
+							rowColor = lb.asset.prpAssetColor as color
+						)
+						
+						(lb.nc.NC_sprPrefix):
+						(
+							rowDotnetColor = (dotNetClass "System.Drawing.Color").fromargb lb.asset.sprAssetColor.x lb.asset.sprAssetColor.y lb.asset.sprAssetColor.z
+							rowColor = lb.asset.sprAssetColor as color
+						)
+						
+						(lb.nc.NC_setPrefix):
+						(
+							rowDotnetColor = (dotNetClass "System.Drawing.Color").fromargb lb.asset.setAssetColor.x lb.asset.setAssetColor.y lb.asset.setAssetColor.z
+							rowColor = lb.asset.setAssetColor as color
+						)
+						
+						(lb.nc.NC_fxPrefix):
+						(
+							rowDotnetColor = (dotNetClass "System.Drawing.Color").fromargb lb.asset.fxAssetColor.x lb.asset.fxAssetColor.y lb.asset.fxAssetColor.z
+							rowColor = lb.asset.fxAssetColor as color
+						)
+						
+						(lb.nc.NC_litPrefix):
+						(
+							rowDotnetColor = (dotNetClass "System.Drawing.Color").fromargb lb.asset.litAssetColor.x lb.asset.litAssetColor.y lb.asset.litAssetColor.z
+							rowColor = lb.asset.litAssetColor as color
+						)
+					)
+					
+					--crea una nueva fila
+					row = (dotnetobject "System.Windows.Forms.DataGridViewRow")
+					row.height = 25
+					row.defaultCellStyle.BackColor = rowDotnetColor
+					
+					dgAssetList.rows.add row --añade la fila
+					
+					(dgAssetList.item 1 (i-1)).value = listedAssetsNames[i] --lb.asset.listedAssets[i].fullname --pone el nombre del asset en la celda corespondiente
+					
+					_icon = lb.asset.getAssetIcon lb.asset.listedAssets[i] --obtiene el icono del asset
+					
+					if _icon != undefined then
+					(
+						(dgAssetList.item 0 (i-1)).value = (dotnetObject "System.Drawing.Bitmap" _icon)
+					)
+					else --no hay icono
+					(
+						setClipboardBitmap (bitmap 1 1 color:rowColor)
+						(dgAssetList.item 0 (i-1)).value = clipboardObj.GetImage() -- recupera la imagen del clipboard y la pone en el control
+						clipboardObj.clear() --limpia el portapapeles
+					)
+				)--for
+				
+				if dgAssetList.rows.count != 0 and lb.asset.selAssets.count == 0 then
+					(dgAssetList.item 0 0).selected = false				
+			)	
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | updateSelectionFromAssetManager | actualiza la seleccion del listado para que sea igual que la del asset bowser al abrirse la herramienta en caso de que el asset browser 
+		------------------------------------------------				
+		fn updateSelectionFromAssetManager =
+		(
+			if lb.assetManager != undefined and lb.assetManager.isOpen() then
+			(
+				if lb.assetManager.rollMain.dgAssetIcons.columns.count != 0 then
+				(
+					_selIndexes = #()
+
+					for i=1 to lb.assetManager.rollMain.dgAssetIcons.columns.count do
+					(
+						if (lb.assetManager.rollMain.dgAssetIcons.item (i-1) 0).selected then append _selIndexes i
+					)	
+
+					for i=1 to dgAssetList.rows.count do
+					(
+						(dgAssetList.item 1 (i-1)).selected = if findItem _selIndexes i != 0 then true else false
+					)
+
+					lb.asset.selAssets = _selIndexes
+				)--if
+			)--if
+		)
+
+		------------------------------------------------
+		--@fn: undefined | updateAssetArrays | actualiza los valores de los arrays si es necesario
+		------------------------------------------------		
+		fn updateAssetArrays =
+		(
+			if lb.asset.assetFilters == undefined then --si la variable no se ha inicializado la rellenamos por defecto
+				lb.asset.assetFilters = #(lb.nc.NC_chrPrefix, lb.nc.NC_prpPrefix, lb.nc.NC_sprPrefix, lb.nc.NC_setPrefix, lb.nc.NC_fxPrefix, lb.nc.NC_litPrefix)
+			
+			if lb.asset.sceneAssets == undefined then --si no esta inicializada, rellena la variable con los assets de la escena
+				lb.asset.sceneAssets = lb.asset.getSceneAssets()
+			
+			--arrays temporales de assets segun tipo
+			chrAssets = #()
+			prpAssets = #()
+			sprAssets = #()
+			setAssets = #()
+			fxAssets = #()
+			litAssets = #()
+			
+			for ast in lb.asset.sceneAssets do
+				case ast.type of
+				(
+					(lb.nc.NC_chrPrefix): append chrAssets ast
+					(lb.nc.NC_prpPrefix): append prpAssets ast
+					(lb.nc.NC_sprPrefix): append sprAssets ast
+					(lb.nc.NC_setPrefix): append setAssets ast
+					(lb.nc.NC_fxPrefix): append fxAssets ast
+					(lb.nc.NC_litPrefix): append litAssets ast
+				)--case
+				
+			lb.asset.listedAssets = #() --vacia los assets listados para rellenarlo de nuevo con los assets fijandoes en el filtro
+				
+			for ft in lb.asset.assetFilters do --recopilas los assets que pasan el filtro
+				case ft of
+				(
+					(lb.nc.NC_chrPrefix): lb.asset.listedAssets += chrAssets
+					(lb.nc.NC_prpPrefix): lb.asset.listedAssets += prpAssets
+					(lb.nc.NC_sprPrefix): lb.asset.listedAssets += sprAssets
+					(lb.nc.NC_setPrefix): lb.asset.listedAssets += setAssets
+					(lb.nc.NC_fxPrefix): lb.asset.listedAssets += fxAssets
+					(lb.nc.NC_litPrefix): lb.asset.listedAssets += litAssets
+				)--case
+			
+			--actualiza el array de assets seleccionados
+			if lb.asset.listedAssets.count != 0 then lb.asset.selAssets = #(1) else lb.asset.selAssets = #()			
+		)
+
+		------------------------------------------------
+		--@fn: undefined | updateControls | actualiza los controles del UI con los valores de los arrays
+		------------------------------------------------		
+		fn updateControls =
+		(
+			--actualiza el estado de los ckb de filtro de assets
+			ckb_CHRs.checked = (findItem lb.asset.assetFilters lb.nc.NC_chrPrefix != 0)
+			ckb_PRPs.checked = (findItem lb.asset.assetFilters lb.nc.NC_prpPrefix != 0)
+			ckb_SPRs.checked = (findItem lb.asset.assetFilters lb.nc.NC_sprPrefix != 0)
+			ckb_SETs.checked = (findItem lb.asset.assetFilters lb.nc.NC_setPrefix != 0)
+			ckb_FXs.checked = (findItem lb.asset.assetFilters lb.nc.NC_fxPrefix != 0)
+			ckb_LITs.checked = (findItem lb.asset.assetFilters lb.nc.NC_litPrefix != 0)
+			--------------------------------------------------------
+			
+			--------------------------------------------------------
+			--calcula el tipo de orden en el listado y rellena el listado
+			sortType = #byAssetType
+			if ckbSortByAssetDependency.checked do sortType = #byAssetDependency
+			
+			fillGridView sortType:sortType
+			--------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | updateGridViewSelection | actualiza la seleccion del listado de assets
+		------------------------------------------------
+		fn updateGridViewSelection =
+		(
+			for i = 1 to dgAssetList.rows.count do
+				(dgAssetList.item 0 (i-1)).selected = (findItem lb.asset.selAssets i != 0)
+		)
+
+		------------------------------------------------
+		--@fn: undefined | updateFromAssetManager | actualiza el rollout en funcion del asset manager
+		--@gets: (opt)boolean | sceneAstsUpdated | **No se usa en la función**
+		--@gets: (opt)boolean | listedAstsUpdated | **No se usa en la función**
+		--@gets: (opt)boolean | selAstsUpdated | Si vale **TRUE** indica que se ha realizado algún cambio en los assets y hay que actualizar las arrays de assets y los controles de la tool.
+		------------------------------------------------	
+		fn updateFromAssetManager sceneAstsUpdated:false listedAstsUpdated:false selAstsUpdated:false =
+		(
+			if lb.assetManager != undefined and lb.assetManager.isOpen() then
+			(
+				--actualiza el estado de los filtros de asset
+				_state = lb.assetManager.rollMain.ckb_CHRs.checked
+				ckb_CHRs.checked = _state
+				ckb_PRPs.checked = lb.assetManager.rollMain.ckb_PRPs.checked
+				ckb_SPRs.checked = lb.assetManager.rollMain.ckb_SPRs.checked
+				ckb_SETs.checked = lb.assetManager.rollMain.ckb_SETs.checked
+				ckb_FXs.checked = lb.assetManager.rollMain.ckb_FXs.checked
+				ckb_LITs.checked = lb.assetManager.rollMain.ckb_LITs.checked
+				
+				if selAstsUpdated then
+				(
+					updateAssetArrays()
+					updateControls()
+				)
+			)
+		)
+
+		------------------------------------------------
+		--@fn: undefined | updateDepententRollouts | actualiza los rollouts dependientes de este (otras herramientas)
+		--@gets: (opt)boolean | sceneAstsUpdated | **No se usa en la función**
+		--@gets: (opt)boolean | listedAstsUpdated | **No se usa en la función**
+		--@gets: (opt)boolean | selAstsUpdated | Si vale **TRUE** indica que se ha realizado algún cambio en los assets y hay que actualizar las arrays de assets y los controles de la tool.
+		------------------------------------------------	
+		fn updateDepententRollouts sceneAstsUpdated:false listedAstsUpdated:false selAstsUpdated:false =
+		(
+			for roll in affectedRollouts where roll.open do
+				roll.updateFromAssetList sceneAstsUpdated:sceneAstsUpdated listedAstsUpdated:listedAstsUpdated selAstsUpdated:selAstsUpdated
+		)
+
+		------------------------------------------------
+		--@fn: undefined | updateAssetFilters | actualiza el array de filtros con los valores de los controles
+		------------------------------------------------		
+		fn updateAssetFilters =
+		(
+			lb.asset.assetFilters = #()
+			if ckb_CHRs.checked then append lb.asset.assetFilters lb.nc.NC_chrPrefix
+			if ckb_PRPs.checked then append lb.asset.assetFilters lb.nc.NC_prpPrefix
+			if ckb_SPRs.checked then append lb.asset.assetFilters lb.nc.NC_sprPrefix
+			if ckb_SETs.checked then append lb.asset.assetFilters lb.nc.NC_setPrefix
+			if ckb_FXs.checked then append lb.asset.assetFilters lb.nc.NC_fxPrefix
+			if ckb_LITs.checked then append lb.asset.assetFilters lb.nc.NC_litPrefix
+				
+			updateAssetArrays()
+			updateControls()
+			
+			 --actualiza los rollouts de otras herramientas que dependan de este
+			updateDepententRollouts listedAstsUpdated:true selAstsUpdated:true
+		)
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollMainDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollMainDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+
+			if _increment.x >= (minRollWidth + 50) then --recoloca los botones en una sola linea
+			(
+				btnSelectAll.pos = [160,5]
+				btnSelectNone.pos = [180,5]
+				btnSelectInvert.pos = [200,5]
+				ckbSortByAssetDependency.pos = [230,5]
+				
+				--dgAssetList.height = 25
+				dgAssetList.pos.y = 30
+			)
+			else --recoloca los botones en dos lineas
+			(
+				btnSelectAll.pos = [5,30]
+				btnSelectNone.pos = [25,30]
+				btnSelectInvert.pos = [45,30]
+				
+				ckbSortByAssetDependency.pos = [75,30]
+				dgAssetList.pos.y = 55
+			)
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				dgAssetList.width = size.x - 10
+				if dgAssetList.columns.count != 0 then dgAssetList.columns.item[1].width = (dgAssetList.width - 30)
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				dgAssetList.height = size.y - 60
+				dgAssetList.pos.y = 55
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			if rollFltAssetManager != undefined and rollFltAssetManager.visible then
+			(
+				_posX = rollFltAssetManager.pos.x - (GetDialogPos rollMainDef).x	
+				_posY = rollFltAssetManager.pos.y - (GetDialogPos rollMainDef).y
+			)
+			else
+			(
+				_posX = (GetDialogPos rollMainDef).x	
+				_posY = (GetDialogPos rollMainDef).y
+			)
+			
+			--almacena posicion
+			lb.xml.setAttribute parent.cfgFile ("rollMain/pos") "x" (_posX as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/pos") "y" (_posY as string)
+			
+			--almacena tamaño
+			lb.xml.setAttribute parent.cfgFile ("rollMain/size") "width" ((getDialogSize rollMainDef).x as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/size") "height" ((getDialogSize rollMainDef).y as string)
+
+			lb.xml.setAttribute parent.cfgFile ("rollMain/sort") "byAssetDependency" (ckbSortByAssetDependency.checked as string)
+		)
+		
+
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			_width = (lb.xml.getAttribute parent.cfgFile ("rollMain/size") "width") as integer
+			_height = (lb.xml.getAttribute parent.cfgFile ("rollMain/size") "height") as integer
+				
+			--posicion
+			if rollFltAssetManager != undefined and rollFltAssetManager.visible then
+			(
+				_posX = rollFltAssetManager.pos.x - _width
+				_posY = rollFltAssetManager.pos.y
+
+			)
+			else
+			(
+				_posX = (lb.xml.getAttribute parent.cfgFile ("rollMain/pos") "x") as integer
+				_posY = (lb.xml.getAttribute parent.cfgFile ("rollMain/pos") "y") as integer
+			)
+
+			ckbSortByAssetDependency.checked = (lb.xml.getAttribute parent.cfgFile ("rollMain/sort") "byAssetDependency") == "true"	
+
+			--establece minimos
+			if _width < minRollWidth then _width = minRollWidth
+			if _height < minRollHeight then _height = minRollHeight
+			if _posX < 0 then _posX = 0
+			if _posY < 0 then _posY = 0
+				
+			--aplica los valores
+			rollMainDef.width = _width
+			rollMainDef.height = _height
+			setDialogPos rollMainDef [_posX,_posY]
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+
+		---------------------------------------------------------------------------
+		--@event: MouseUp | Evento que se lanza al dejar de pulsar el botón después de pulsar en el dataGrid View
+		--@control: DataGridView | dgAssetList | actualiza los assests seleccionados
+		---------------------------------------------------------------------------
+		on dgAssetList MouseUp events do
+		(
+			lb.asset.selAssets = #()
+			
+			for i = 1 to dgAssetList.rows.count do
+				if (dgAssetList.item 0 (i-1)).selected then append lb.asset.selAssets i
+					
+			--actualiza los rollouts de otras herramientas que dependan de este
+			updateDepententRollouts listedAstsUpdated:true selAstsUpdated:true
+		)
+		
+		---------------------------------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el botón.
+		--@control: button | btnSelectInvert | selecciona todos los objetos de la lista que no esten seleccionados. (Invierte la selección)
+		---------------------------------------------------------------------------		
+		on btnSelectInvert pressed do
+		(
+			lb.asset.selAssets = #()
+			
+			for i = 1 to dgAssetList.rows.count do
+			(
+				(dgAssetList.item 0 (i-1)).selected = not (dgAssetList.item 0 (i-1)).selected
+				if (dgAssetList.item 0 (i-1)).selected then appendIfUnique lb.asset.selAssets i
+			)
+				
+			 --actualiza los rollouts de otras herramientas que dependan de este
+			updateDepententRollouts listedAstsUpdated:true selAstsUpdated:true
+		)
+		
+		---------------------------------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el botón.
+		--@control: button | btnSelectAll | selecciona todos los assets de la lista
+		---------------------------------------------------------------------------			
+		on btnSelectAll pressed do
+		(
+			lb.asset.selAssets = #()
+
+			for i=1 to lb.asset.listedAssets.count do
+			(
+				(dgAssetList.item 0 (i-1)).selected = true
+				append lb.asset.selAssets i
+			)
+			
+			 --actualiza los rollouts de otras herramientas que dependan de este
+			updateDepententRollouts listedAstsUpdated:true selAstsUpdated:true
+		)
+		
+		---------------------------------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el botón.
+		--@control: button | btnSelectNone | Deselecciona todos los assets de la lista
+		---------------------------------------------------------------------------	
+		on btnSelectNone pressed do
+		(
+			for i=1 to lb.asset.listedAssets.count do
+				(dgAssetList.item 0 (i-1)).selected = false
+				
+			lb.asset.selAssets = #()
+					
+			 --actualiza los rollouts de otras herramientas que dependan de este
+			updateDepententRollouts listedAstsUpdated:true selAstsUpdated:true
+		)
+		
+		---------------------------------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el botón.
+		--@control: button | btnRefresh | refresca todos los valores
+		---------------------------------------------------------------------------			
+		on btnRefresh pressed do
+		(
+			lb.asset.sceneAssets = lb.asset.getSceneAssets()
+			
+			updateAssetArrays()
+			updateControls()
+			
+			 --actualiza los rollouts de otras herramientas que dependan de este
+			updateDepententRollouts listedAstsUpdated:true selAstsUpdated:true
+		)
+		
+		---------------------------------------------------------------------------
+		---------------------------------------------------------------------------
+		
+		---------------------------------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del checkbutton.
+		--@control: checkButton | ckb_CHRs | actualiza los filtros de assets mostrando/ocultando los personajes
+		---------------------------------------------------------------------------			
+		on ckb_CHRs changed state do
+			updateAssetFilters()
+		
+		---------------------------------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del checkbutton.
+		--@control: checkButton | ckb_PRPs | actualiza los filtros de assets mostrando/ocultando los  props
+		---------------------------------------------------------------------------			
+		on ckb_PRPs changed state do
+			updateAssetFilters()
+		
+		---------------------------------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del checkbutton.
+		--@control: checkButton | ckb_SPRs | actualiza los filtros de assets mostrando/ocultando los spr's
+		---------------------------------------------------------------------------
+		on ckb_SPRs changed state do
+			updateAssetFilters()
+		
+		---------------------------------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del checkbutton.
+		--@control: checkButton | ckb_SETs | actualiza los filtros de assets mostrando/ocultando los sets
+		---------------------------------------------------------------------------
+		on ckb_SETs changed state do
+			updateAssetFilters()
+		
+		---------------------------------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del checkbutton.
+		--@control: checkButton | ckb_FXs | actualiza los filtros de assets mostrando/ocultando los FX
+		---------------------------------------------------------------------------
+		on ckb_FXs changed state do
+			updateAssetFilters()
+		
+		---------------------------------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del checkbutton.
+		--@control: checkButton | ckb_LITs | actualiza los filtros de assets mostrando/ocultando las luces
+		---------------------------------------------------------------------------
+		on ckb_LITs changed state do
+			updateAssetFilters()
+		
+		---------------------------------------------------------------------------
+		---------------------------------------------------------------------------
+		
+		---------------------------------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del checkbutton.
+		--@control: checkButton | ckbSortByAssetDependency | cambia el modo de ordenacion del listado: ordenar por dependencias de asset
+		---------------------------------------------------------------------------		
+		on ckbSortByAssetDependency changed state do
+		(
+			updateControls()
+			updateDepententRollouts listedAstsUpdated:true selAstsUpdated:true
+		)		
+
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollMain | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		--@gets: point2 | size | tamaño al que se ha redimensionado el rollout
+		------------------------------------------------
+		on rollMainDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollMain | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollMainDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+			
+			affectedRollouts = #(lb.assetManager.rollMain) --rollouts relacionados
+
+			initGridView()				--inicializa el gridView
+			updateAssetArrays() 		--actualiza los valores de los arrays de assets
+			updateControls()			--actualiza el interface
+			updateSelectionFromAssetManager() --selecciona lo que haya seleccionado en el asset manager
+			
+			parent.opened = true --activa la herramienta
+			updateDepententRollouts listedAstsUpdated:true selAstsUpdated:true
+
+			if parent.rollMain != undefined then resize [parent.rollMain.width, parent.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollMain | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollMainDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+
+			parent.opened = false --indica que la herramienta está cerrada.
+			updateDepententRollouts() --actualiza los rollouts de otras herramientas que dependan de este
+			updateToolbarButtons()
+		)
+	)--rollMainDef
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: assetList | Contiene la herramienta assetList.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct tl_assetList
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),													--@var: string | def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),										--@var: string | defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,														--@var: name | category | Categoria de la tool.
+		className = lb.getFileToolName (getThisScriptFilename() as string),		--@var: string | className | Nombre de la tool.
+		description = "Asset List",												--@var: string | description | Descripcion de la tool.
+		
+		cfgFile = (lb.config.getToolsIniPath()) + (lb.getFileToolName (getThisScriptFilename() as string)) + ".cfg",	--@var: string | cfgFile | Archivo de configuracion de la tool.
+			
+		opened = false,															--@var: boolean | opened | Indica si la herramienta está abierta.
+			
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--ROLLOUTS
+		------------------------------------------------------------------------------------------------
+		
+		rollMain = rollMainDef,													--@var: rollout | rollMain | Almacena el rollout principal de la herramienta.
+			
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: boolean | isOpen | Devuelve información true o false, si la herramienta está abierta o cerrada.
+		--@returns: boolean | undefined | El resultado de la consulta.
+		------------------------------------------------
+		fn isOpen =
+		(
+			this.opened
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | refreshInterface | Refresca el interface inicial de la herramienta
+		------------------------------------------------
+		fn refreshInterface =
+		(
+			--refresca el interface de la herramienta
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | createInterface | Crea el interface inicial de la herramienta
+		------------------------------------------------
+		fn createInterface =
+		(
+			--crea el interface, lo redimensiona y lo reposiciona
+			createDialog this.rollMain lockwidth:false lockheight:false pos:[-10000,0] style:#(#style_toolwindow, #style_titlebar, #style_sysmenu, #style_resizing)
+
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | destroyInterface | Destruye el interface de la herramienta.
+		------------------------------------------------
+		fn destroyInterface =
+		(
+			destroyDialog this.rollMain --cierra la herramienta.			
+		),--destroyInterface
+		
+		------------------------------------------------
+		--@fn: undefined | run | Lanza la herramienta.
+		------------------------------------------------
+		fn run =
+		(
+			this.opened = true --indica que la herramienta está abierta
+			this.createInterface() --crea el interface.
+			this.opened = true --indica que la herramienta está abierta
+		),--execute
+		
+		------------------------------------------------
+		--@fn: undefined | close | Cierra la herramienta.
+		------------------------------------------------
+		fn close =
+		(
+			this.destroyInterface() --destruye el interface.
+			this.opened = false --indica que la herramienta está cerrada.			
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(
+			--this.rollMain.affectedRollouts = #(lb.assetManager.rollMain)
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addTool this --añade la tool a la libreria principal	
+		)			
+	)--tl_assetList
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------	
+	
+	tl_assetList() --crea la herramienta
+)

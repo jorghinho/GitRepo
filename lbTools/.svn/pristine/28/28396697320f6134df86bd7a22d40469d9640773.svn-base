@@ -1,0 +1,383 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--Descripcion: libreria de attachObjectToFaceFunctions
+------------------------------------------------------------------------------------------------------------------------------------------------
+(	
+	CA_attachPro = attributes attachProInfo		
+	(
+		parameters main
+		(
+			--guarda la descripcion del CA y su version
+			CA_description type:#string	animatable:false	default:"Información de los controladores attachPro"
+			CA_version type:#integer		animatable:false	default:2
+			
+			targetObj		type:#string		animatable:false	default:""
+			face				type:#integer	animatable:false
+			barCoords		type:#point3		animatable:false
+			
+			initialOffset	type:#matrix3	animatable:false	default:(matrix3 1)
+			keepOffset	type:#boolean	animatable:false	default:true
+			inheritRotation	type:#boolean	animatable:false	default:true
+			alignToFace	type:#boolean	animatable:false	default:false
+			xAxis			type:#integer	animatable:false	default:1
+			flipAxis			type:#boolean	animatable:false	default:false
+		)
+	)
+
+	struct str_attachPro
+	(
+		AOTFattachMode = undefined,
+		
+		posController = undefined,
+		rotController = undefined,
+		sourceObj = undefined,
+		targetObj = undefined,
+		
+		face = -1,
+		vert1 = -1,
+		vert2 = -1,
+		vert3 = -1,
+		barCoords = [0,0,0],
+		
+		initialOffset = matrix3 1,
+		keepOffset = true,
+		inheritRotation = false,
+		alignToFace = false,
+		xAxis = 1,
+		flipAxis = false
+	)
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: attachObjectToFaceFunctions | Contiene la libreria de attachObjectToFaceFunctions.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct lib_attachObjectToFaceFunctions
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,					--@var: category | Categoria de la libreria.
+		className = lb.getFileLibName (getThisScriptFilename() as string),	--@var: className | Nombre de la libreria.
+		description = "Attach Object To Face Functions",	--@var: description | Descripcion de la libreria.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+
+		attachPro = str_AttachPro(),
+
+		attachProCA = CA_attachPro,	
+
+		AOTFattachModName = #attachProAux,
+		AOTFattachMode = #animBake,		--	Puede valer #animBake o #attach. Indica si el enlace va a ser físico o simulado por animación.
+		
+		
+		attachProPosControllerName = #attachProPos,
+		attachProRotControllerName = #attachProRot,
+
+		
+		AOTFsubdivisionMods = #(meshSmooth, turboSmooth, tessellate, shell),
+
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+
+		------------------------------------------------
+		--@fn: undefined | getAttachProControllers | Captura los controladores de Attachment del objeto OBJ. Devuelve un array con tres elementos: el controlador de posición, de rotación y el tipo de attachment (#animBake o #attach)
+		------------------------------------------------
+		fn getAttachProControllers obj =
+		(
+			local _posController = undefined
+			local _rotController = undefined
+			local _attachMode = undefined
+			
+			if isProperty obj #position and classOf obj.position.controller == position_list then
+				for i = 1 to obj.position.controller.count where (getSubAnimName obj.position.controller i == attachProPosControllerName) do
+					_posController = obj.position.controller[i].controller
+			
+			if isProperty obj #rotation and classOf obj.rotation.controller == rotation_list then
+				for i = 1 to obj.rotation.controller.count where (getSubAnimName obj.rotation.controller i == attachProRotControllerName) do
+					_rotController = obj.rotation.controller[i].controller
+			
+			if _posController != undefined then
+				_attachMode = if classOf _posController == position_script then #attach else #animBake
+			
+			#(_posController, _rotController, _attachMode)
+		),
+
+		------------------------------------------------
+		--@fn: undefined | getAttachProInfo | Devuelve un strAttachPro con todos los datos rellenos. Undefined si OBJ no tiene attachPro
+		------------------------------------------------
+		fn getAttachProInfo obj =
+		(
+			_attachProControllers = this.getAttachProControllers obj
+			
+			if _attachProControllers[1] != undefined and _attachProControllers[1].CA_version < 2 then 
+			(
+				custAttributes.delete _attachProControllers[1] (custAttributes.getdef _attachProControllers[1].custAttributes[#attachProInfo])
+				custAttributes.add _attachProControllers[1] CA_attachPro
+			)
+			
+			_attachProInfo = str_attachPro()
+			
+			_attachProInfo.posController	=	_attachProControllers[1]
+			_attachProInfo.rotController	=	_attachProControllers[2]
+			
+			case _attachProControllers[3] of
+			(
+				#animBake:
+				(
+					_attachProInfo.AOTFattachMode		=	#animBake
+					_attachProInfo.targetObj 		=  execute ("$'" + _attachProControllers[1].targetObj + "'")
+					_attachProInfo.face		 		=  _attachProControllers[1].face
+					_attachProInfo.alignToFace 	=  _attachProControllers[1].alignToFace
+					_attachProInfo.initialOffset	 	=  _attachProControllers[1].initialOffset
+					_attachProInfo.keepOffset	 	=  _attachProControllers[1].keepOffset
+					if isProperty _attachProControllers[1] #inheritRotation then _attachProInfo.inheritRotation	=  _attachProControllers[1].inheritRotation
+					_attachProInfo.barCoords 		=  _attachProControllers[1].barCoords
+					_attachProInfo.xAxis 				=  _attachProControllers[1].xAxis
+					_attachProInfo.flipAxis 			=  _attachProControllers[1].flipAxis
+				)
+				
+				#attach:
+				(
+					if attachPro.posController != undefined then
+					(
+						_attachProInfo.AOTFattachMode		=	#attach
+						_attachProInfo.targetObj 		=  _attachProControllers[1].getNode "_targetObj"
+						_attachProInfo.alignToFace 	=  _attachProControllers[1].getConstant "_alignToFace" 
+						_attachProInfo.vert1 				=  _attachProControllers[1].getConstant "_vert1" 
+						_attachProInfo.vert2 				=  _attachProControllers[1].getConstant "_vert2" 
+						_attachProInfo.vert3 				=  _attachProControllers[1].getConstant "_vert3" 
+						_attachProInfo.barCoords 		=  _attachProControllers[1].getConstant "_barCoords" 
+						_attachProInfo.xAxis 				=  _attachProControllers[1].getConstant "_xAxis" 
+						_attachProInfo.flipAxis 			=  _attachProControllers[1].getConstant "_flipAxis"
+						_attachProInfo.barCoords 		=  _attachProControllers[1].getConstant "_barCoords" 
+					)
+				)
+			)
+			
+			_attachProInfo
+		),
+
+		------------------------------------------------
+		--@fn: undefined | createAnimFromVertex | Crea una animación en el objeto OBJ que sigue la transformación del vértice número TARGETVERT
+		------------------------------------------------
+		fn createAnimFromVertex obj targetObj numFace barCoords:[0,0,0] initialOffset:[0,0,0] keepOffset:true inheritRotation:false alignToFace:true flipAxis:false xAxis:1 startTime:animationRange.start endTime:animationRange.end  =
+		(
+			--	Apagamos todos los modificadores de subdivisión
+			_modsToDisable = for m in targetObj.modifiers where (findItem AOTFsubdivisionMods (classOf m) != 0) and m.enabledinviews collect #(m, m.enabled, m.enabledInViews)
+			
+			_helpObj = point name:"attachProHelper" 
+			_helpSrcObj = point name:"attachProHelperSrc" 
+			
+			_helpSrcObj.parent = _helpObj
+			
+			suspendEditing()
+			disableSceneRedraw()
+			
+			if keepOffset then	this.deleteAttachProAnimation obj #position
+			if not alignToFace then	this.deleteAttachProAnimation obj #rotation
+			
+			if _modsToDisable.count > 0 then
+				for m in _modsToDisable do m[1].enabled = false
+
+			_faceVerts = if numFace > 0 then getFace targetObj.mesh numFace else getFace targetObj.mesh 1
+
+			with animate on
+			(
+				for t in startTime to endTime do
+				(
+					at time t
+					(
+						-- Montamos la matriz y la posicion por defecto.
+						_pos = [0,0,0]
+						_mTemp = matrix3 1
+						
+						p1 = getVert targetObj.mesh _faceVerts[1] 	--	Posición del vértice 1
+						p2 = getVert targetObj.mesh _faceVerts[2] 	--	Posición del vértice 2
+						p3 = getVert targetObj.mesh _faceVerts[3] 	--	Posición del vértice 3
+						
+						if alignToFace then
+						(
+							-- Construimos los ejes de transformación 
+							vX = normalize (p2 - p1)
+							vY = normalize (p3 - p1)
+							vZ = normalize (cross vX vY)
+							vY = normalize (cross vZ vX)
+							
+							-----------	ALINEACIÓN A LA SUPERFICIE
+							-- Cambia el tipo de eje segun el valor que le pasemos a xAxis, alineado con la normal, x, y o z. 
+							case xAxis of 
+							(
+								1: _mTemp = if not flipAxis then (matrix3 vX vY vZ _pos) else (matrix3 -vX -vY vZ _pos) 
+								2: _mTemp = if not flipAxis then (matrix3 -vY vX vZ _pos) else (matrix3 -vY -vX -vZ _pos) 
+								3: _mTemp = if not flipAxis then (matrix3 vZ -vY vX _pos) else (matrix3 -vZ -vY -vX _pos) 
+							)
+						)
+						
+						-- Como las posiciones de los vértices se devuelven en local 
+						-- se ignoran las transformaciones del objeto. Las restauramos.
+						_mTemp *= targetObj.transform
+						
+						--	Establecemos la posicion y la multiplicamos por la tranformación
+						--	del objeto para que sea absoluta. Se tiene en cuenta el padre también
+						_pos = (barCoords[1] * p1 + barCoords[2] * p2 + barCoords[3] * p3)  * targetObj.transform 
+						
+						if obj.parent != undefined then _pos *= inverse obj.parent.transform
+						
+						_mTemp.pos = _pos
+						
+						if inheritRotation or alignToFace then
+							_helpObj.transform = _mTemp
+						else
+							_helpObj.pos = _mTemp.pos
+						
+				-- 					if alignToFace then
+				-- 						_helpSrcObj.transform = _helpObj.transform
+					)
+				)
+			)
+			
+			-- Alineamos el helper hijo a OBJ para asegurarnos de que parte de la misma posición
+			if alignToFace then
+			(
+				_helpSrcObj.transform = _helpObj.transform
+				_helpSrcObj.pos = obj.pos
+			)
+			else
+				_helpSrcObj.transform = obj.transform
+			
+			with undo off --"Set Vertex Animation" on
+			(
+				_targetHelper = if keepOffset then _helpSrcObj else _helpObj
+				_activePosController = obj.position.controller.getActive()
+				_activeRotController = undefined
+				
+				--	activamos los controladores de attachPro para que capturen ellos la transformación
+				obj.position.controller.setActive (obj.position.controller.getCount())
+				
+				if isProperty obj #rotation then 
+				(
+					_activeRotController = obj.rotation.controller.getActive()
+					
+					obj.rotation.controller.setActive (obj.rotation.controller.getCount())
+				)
+				
+				with animate on
+				(
+					for t in startTime to endTime do 
+					(
+						at time t 
+						(
+							if isProperty obj #rotation then 
+								obj.rotation = _targetHelper.rotation
+							
+							obj.position = _targetHelper.position
+						)
+					)
+				)
+				
+				--	reactivamos los controladores que estaban previamente activos
+				obj.position.controller.setActive _activePosController
+				
+				if isProperty obj #rotation then
+					obj.rotation.controller.setActive _activeRotController
+			)
+			
+			--	Volvemos a encender los modificadores de subdivisión
+			for m in _modsToDisable do 
+			(
+				m[1].enabled = m[2]
+				m[1].enabledInViews = m[3]
+			)
+			
+			delete $*attachProHelper*
+			
+			resumeEditing()
+			enableSceneRedraw()
+			completeRedraw()
+		),
+
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		---------------------------------------------------------------------------------------------------------------
+		--	Borra la animación de los controladores attachPro del objeto OBJ.
+		--	TYPE: Puede valer #position, #rotation y #all, indicando qué controlador borrará su animación
+		---------------------------------------------------------------------------------------------------------------
+		fn deleteAttachProAnimation obj type = 
+		(
+			--	eliminamos el controlador de posición
+			if (type == #both or type == #position) and classOf obj.pos.controller == position_list then
+				for i = obj.pos.controller.count to 1 by -1 where getSubAnimName obj.pos.controller i == attachProPosControllerName do
+				(
+					deleteKeys obj.pos.controller[i].controller #allKeys
+					obj.pos.controller[i].controller.value = [0,0,0]
+				)
+					
+			--	Eliminamos el controlador de rotación
+			if (type == #both or type == #rotation) and isProperty obj #rotation and classOf obj.rotation.controller == rotation_list then
+				for i = obj.rotation.controller.count to 1 by -1 where getSubAnimName obj.rotation.controller i == attachProRotControllerName do
+				(
+					deleteKeys obj.rotation.controller[i].controller #allKeys
+					obj.rotation.controller[i].controller.value = quat 1
+				)
+		),
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+			
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addLibrary this --añade la libreria a la principal
+		)	
+	)--lib_attachObjectToFaceFunctions
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	
+	lib_attachObjectToFaceFunctions() --crea la libreria
+)

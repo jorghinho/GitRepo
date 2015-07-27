@@ -1,0 +1,757 @@
+--------------------------
+-- COSAS POR HACER
+-------------------------
+--	Añadir al fileInfo:
+--		Bloque del Pass Manager:
+--			Path de salida de fotogramas (rootPath).
+--			Versión LPM
+--			Por cada pase:
+--				Materiales de override.
+--				Nombre.
+--				Ruta de salida completa
+--				Rango de salida
+
+------------------------------------------------------------------------------------------------------------------------------------------------
+--Descripcion: libreria de fileInfo
+------------------------------------------------------------------------------------------------------------------------------------------------
+(	
+	struct assetFileInfo
+	(
+		name = undefined,				
+		folder = undefined,				--folders de los assets que hay dentro del archivo
+		filePath = undefined,			--ruta del archivo del que viene
+		fileHistory = #(),				
+		version = -1,					--version del asset
+		type = undefined,				--tipo del asset
+		copyNumber = undefined,			--numero de copia del asset
+		isDependent = undefined,		--si el asset es dependiente
+		mainAsset = undefined,			--nombre del asset del que depende
+		isXrefObject = undefined,		--si es XRefObject
+		isXrefScene = undefined			--si es XrefScene
+	)
+	
+	----------------------------------------------------
+	struct camFileInfo
+	(
+		name,
+		type,
+		recStart,
+		recEnd
+	)
+	
+	----------------------------------------------------
+	struct bitmapFileInfo
+	(
+		filename,
+		nodes,
+		materials = #()
+	)
+		
+	----------------------------------------------------
+	struct passManagerFileInfo
+	(
+		lpmRootDir = undefined,			--root dir de LPM
+		lpmPasses = #(),				--nombres de los layers de LPM
+		lpmPassesOutputs = #(),			--nombres de los fotogramas de los layers de LPM
+		lpmPassesRendTimeType = #(),	--tipo de rango de render de los pases de LPM
+		lpmPassesRenderRange = #(),		--rango de render de los pases de LPM
+		
+		renderElements = #(),			--nombres de los render elements
+		renderElementsOutputs = #(),	--nombres de los fotogramas de salida de los renderElemets
+		
+		finalGatherMaps = #(),			--para los mapas de finalGather
+		finalGatherMapsLPMpasses = #()	--para los pases de lpm donde se usa cada finalGather
+	)
+	
+	----------------------------------------------------
+	struct checkFileInfo
+	(
+		name,
+		id,
+		state
+	)
+	
+	----------------------------------------------------
+	struct fileInfo
+	(
+		fileInfoCorrupted = true,			--si el extra info esta corrupto de por si se rellena esta variable a true, si no se pone a falso
+		
+		checked = false,					--estado de checked del archivo
+		checks = #(),						--listado de id's de checks.
+		savedDate = undefined,				--fecha de guardado
+		
+		animationRange = undefined,			--rango de animacion de la escena
+		renderRange = undefined,			--rango de render de la escena
+		
+		passManagerVersion = 1.0,			--version de NC de lpm con la que se hizo
+		
+		assets = #(),						--assets que hay dentro del archivo
+		
+		materials = #(),					--array con los nombres de los materiales, es un treeview de nodos materialInfoNode
+		
+		cameras = #(),						--camaras de la escena
+		
+		xrefRecords = #(),					--para almacenar los xrefsrecords de xrefObjects del archivo
+		xrefScenes = #()					--para almacenar los path de los xrefScenes que haya
+	)
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: fileInfo | Contiene la libreria de fileInfo.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct lib_fileInfo
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,					--@var: category | Categoria de la libreria.
+		className = lb.getFileLibName (getThisScriptFilename() as string),	--@var: name | Nombre de la libreria.
+		description = "Librería fileInfo",	--@var: description | Descripcion de la libreria.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		fileInfoPosNode = 	if (isProperty lb #xml) and (lb.xml != undefined) then 
+								fileInfoPosNode = lb.xml.xmlElement elementName:"fileInfoPosition" text:"123456789012345" 
+							else 
+								undefined,
+		
+		
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		
+		------------------------------------------------
+		--@fn: double | getFileInfoPosition | Indica la posición del fichero donde está ubicado el fileInfo. Si no la encuentra devuelve undefined.
+		--@gets: string | filename | Nombre del fichero en que hay que buscar el fileInfo
+		------------------------------------------------
+		fn getFileInfoPosition filename = 
+		(
+			_fileInfoFilePosition = undefined 
+			
+			_f = dotnetObject "System.IO.streamReader" filename
+			_f.baseStream.seek -(fileInfoPosNode.toString()).count (dotNetClass "System.IO.SeekOrigin").end
+			_lastLine = _f.readToEnd()
+			_f.close()
+			
+			--print _lastLine
+			
+			if findString _lastLine "fileInfoPosition" != undefined then
+				_fileInfoFilePosition = (filterstring _lastLine "<>")[2] as integer
+			
+			_fileInfoFilePosition
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | hasFileInfo | Indica si el fichero especificado tiene fileInfo
+		--@gets: string | filename | Nombre del fichero al que añadir el fileInfo
+		------------------------------------------------
+		fn hasFileInfo filename = 
+		(
+			(this.getFileInfoPosition filename) != undefined
+		),
+		
+		------------------------------------------------
+		--@fn: string | createFileInfoString | Devuelve un string con todo el fileInfo que corresponde al fichero que está actualmente abierto. Es necesario que el fichero esté previamente guardado para calcular bien su tamaño
+		------------------------------------------------
+		fn createFileInfoXmlDoc filename:(maxFilePath + maxFileName) date:undefined checked:false = 
+		(
+ 			--_start = timeStamp()
+						
+			_xmlDoc = lb.xml.newXmlDoc()	--	documento xml con el contenido que se añadirá al fichero .max
+			_fileSize = formattedPrint ((getFileSize filename) + 1) format:"015d" --	calculamos la longitud actual del fichero sumándole 1 (por el salto de línea) para poner luego la marca de dónde comienza el fileInfo
+
+ 			--print _fileSize
+ 			--print (getFileSize filename)
+			fileInfoPosNode.setText _fileSize
+			
+ 			--_end = timeStamp()
+ 			--print "crear documento"
+ 			--print (((_end - _start)/1000.0) as string)
+ 			--print "-------------------------"
+ 			--_start = timeStamp()
+			
+			--	Cabecera
+			------------------------------------------------
+			(
+				_rootNode = _xmlDoc.root		--	nodo root del documento
+				_fileInfoNode = _rootNode.newChild "fileInfo"
+				_fileInfoNode.setProperty "version" "2.0"
+				_fileInfoNode.setProperty "checked" checked
+				_fileInfoNode.setProperty "saveDate" (if date != undefined then date else localTime)
+				_fileInfoNode.setProperty "animationRange" (animationRange)
+				_fileInfoNode.setProperty "passManagerVersion" 1.0
+			)
+			
+ 			--_end = timeStamp()
+ 			--print "cabecera"
+ 			--print (((_end - _start)/1000.0) as string)
+ 			--print "-------------------------"
+ 			--_start = timeStamp()
+			
+			--	Assets
+			------------------------------------------------
+			(
+ 				--_st = timeStamp()
+				
+				_sceneAssets = lb.asset.getSceneAssets()
+				_assetsNode = _fileInfoNode.newChild "assets"
+				_assetsNode.SetProperty "numAssets" _sceneAssets.count
+				
+ 				--_nd = timeStamp()
+ 				--print (((_nd - _st)/1000.0) as string)
+ 				--_st = timeStamp()
+				
+				for _asset in _sceneAssets do
+				(
+ 					--print _asset.fullname
+					
+					_assetNode = _assetsNode.newChild "asset"
+					_assetNode.SetPropNames #("fullname", "filePath", "folder", "loadMode", "type", "version", "copyNumber", "isDependent", "mainAsset", "isXrefObject", "isXrefScene" )
+					_assetNode.SetPropValues #(_asset.fullname, _asset.filePath, _asset.folder, _asset.loadMode, _asset.type, _asset.version, _asset.copyNumber, _asset.isDependent, _asset.mainAsset, _asset.isXrefObject, _asset.isXrefScene)
+					
+ 					--_nd = timeStamp()
+ 					--print (((_nd - _st)/1000.0) as string)
+ 					--_st = timeStamp()
+					
+					--	Ficheros que componen el asset y su modo de carga
+					for i = 1 to _asset.files.count do
+					(
+						_fileNode = _assetNode.newChild "file"
+						_fileNode.setProperty "filename" _asset.files[i]
+						_fileNode.setProperty "loadMode" _asset.filesLoadMode[i]
+					)
+					
+ 					--_nd = timeStamp()
+ 					--print (((_nd - _st)/1000.0) as string)
+ 					--_st = timeStamp()
+					
+					--DESACTIVACION DEL ALMACENAJE DE VARIATIONS PORQUE TARDA LA VIDA
+					--	variaciones
+					/*
+					_varNodes = (asset.meshNodesAll as array) + (asset.hairNodesAll as array)
+					for _o in _asset.meshNodesAll where lb.variations.hasVariations _o do
+					(
+						--print _o.name
+					
+						_meshNode = _assetNode.newChild "node"
+						_meshNode.setProperty "name" _o.name
+						
+						_variations = lb.variations.getVariations _o
+						for _var in _variations do
+						(
+							_varNode = _meshNode.newChild "variation"
+							_varNode.setProperty "type" _var.type
+							_varNode.setProperty "value" _var.value
+							
+							case _var.type of
+							(
+								#material:	_varNode.setProperty "matID" _var.matID
+								#morph: _varNode.setProperty "channel" _var.channel
+							)
+						)
+					)
+					
+					_nd = timeStamp()
+					print (((_nd - _st)/1000.0) as string)
+					_st = timeStamp()*/
+					
+ 					--print "--------------"
+				)				
+			)
+			
+ 			--_end = timeStamp()
+ 			--print "assets"
+ 			--print (((_end - _start)/1000.0) as string)
+ 			--print "-------------------------"
+ 			--_start = timeStamp()
+			
+			-- materials
+			------------------------------------------------
+			(
+				_mats = #()
+				for _o in objects where _o.material != undefined do 
+				(
+					_mat = if classOf _o.material == xRefMaterial then (_o.material.GetSourceMaterial true) else _o.material
+					if _mat != undefined then appendIfUnique _mats _mat
+				)
+				
+				_matsNode = _fileInfoNode.newChild "materials"
+				_matsNode.setProperty "count" _mats.count
+				
+				for _m in _mats do
+				(
+					_matNode = _matsNode.newChild "material"
+					_matNode.SetProperty "name" _m.name
+					_matNode.SetProperty "class" (classOf _m)
+					_matNode.SetProperty "class" (classOf _m)
+					_matNode.SetProperty "class" (classOf _m)
+				)
+			)
+			
+ 			--_end = timeStamp()
+ 			--print "materiales"
+ 			--print (((_end - _start)/1000.0) as string)
+ 			--print "-------------------------"
+ 			--_start = timeStamp()
+			
+			-- bitmaps
+			------------------------------------------------
+			(
+				_bitmaps = #() --array de bitmaps
+				_mats = lb.materials.getSceneMaterials()
+				_bitmapMats = #() --array con arrays de los nombres de los materiales que usan cada bitmap
+				_bitmapNodes = #() --array de arrays de los nombres de los objetso que usan cada bitmap en los materiales
+				_isBitmapProxy = #() --array para saber si se trata de un bitmap de proxy de baja
+				
+				--	recopilamos los bitmaps de los materiales
+				for _mat in _mats do 
+				(
+					_matOwners = lb.materials.getMatOwners _mat 
+					_matBitmaps = lb.materials.getBitmaps _mat 
+					
+					for _bmp in _matBitmaps do 
+					(
+						_index = findItem _bitmaps _bmp 
+						
+						if _index != 0 then 
+						(
+							if appendIfUnique _bitmapMats[_index] _mat.name then
+								_bitmapNodes[_index] += ((for o in _matOwners collect o.name) as array)
+						)
+						else
+						(
+							append _bitmaps _bmp
+							append _bitmapMats #(_mat.name)
+							append _bitmapNodes ((for o in _matOwners collect o.name) as array)
+							append _isBitmapProxy false
+						)
+					)
+				)
+				
+				--	escribimos los bitmaps en el xml
+				_bitmapsNode = _fileInfoNode.newChild "bitmaps"
+				_bitmapsNode.setProperty "count" _bitmaps.count
+				
+				for i = 1 to _bitmaps.count do
+				(
+					_bitmapNode = _bitmapsNode.newChild "bitmap"
+					_bitmapNode.SetProperty "filename" _bitmaps[i]
+					_bitmapNode.SetProperty "materials" _bitmapMats[i]
+					_bitmapNode.SetProperty "objects" _bitmapNodes[i]
+					_bitmapNode.SetProperty "isProxy" _isBitmapProxy[i]
+				)
+			)
+			
+ 			--_end = timeStamp()
+ 			--print "bitmaps"
+ 			--print (((_end - _start)/1000.0) as string)
+ 			--print "-------------------------"
+ 			--_start = timeStamp()
+			
+			--	Pass Manager
+			------------------------------------------------
+			(
+				_pmNode = _fileInfoNode.newChild "passManager"
+			)
+			
+ 			--_end = timeStamp()
+ 			--print "pass manager"
+ 			--print (((_end - _start)/1000.0) as string)
+ 			--print "-------------------------"
+ 			--_start = timeStamp()
+			
+			--	Asset Checker
+			------------------------------------------------
+			(
+				_acNode = _fileInfoNode.newChild "assetChecker"
+				_acNode.SetProperty "user" sysInfo.username
+				_acNode.SetProperty "checked" checked
+				_acNode.SetProperty "override" FI_overrideActivated
+				if saveFromAssetChecker then
+				(
+					--Todos los checks
+					_currentData = deepCopy (execute currentChecksArrayName)
+					for i=_currentData.count to 1 by -1 do
+					(
+						if (_currentData[i] As Integer) == undefined then
+						(
+							deleteItem _currentData i 
+						)
+					)
+					_currentData = with printAllElements on _currentData As String
+					_currentNode = _acNode.newChild "all"
+					_currentNode.SetProperty "checks" _currentData
+					--Correctos
+					_currentData = with printAllElements on (makeUniqueArray FI_passedChecks) As String
+					_currentNode = _acNode.newChild "passed"
+					_currentNode.SetProperty "checks" _currentData
+					--Incorrectos
+					_currentData = with printAllElements on (makeUniqueArray FI_failedChecks) As String
+					_currentNode = _acNode.newChild "failed"
+					_currentNode.SetProperty "checks" _currentData
+					--Warning
+					_currentData = with printAllElements on (makeUniqueArray FI_warningChecks) As String
+					_currentNode = _acNode.newChild "warning"
+					_currentNode.SetProperty "checks" _currentData
+					--Not Required
+					_currentData = with printAllElements on (makeUniqueArray FI_notRequiredChecks) As String
+					_currentNode = _acNode.newChild "notRequired"
+					_currentNode.SetProperty "checks" _currentData
+				)
+				FI_overrideActivated = false
+				FI_checkedFile = false
+				FI_passedChecks = #()
+				FI_failedChecks = #()
+				FI_notRequiredChecks = #()
+				FI_warningChecks = #()
+			)
+			
+ 			--_end = timeStamp()
+ 			--print "asset checker"
+ 			--print (((_end - _start)/1000.0) as string)
+ 			--print "-------------------------"
+ 			--_start = timeStamp()
+			
+			--	LPM
+			------------------------------------------------
+			(
+				_lpmRoot = $'LPM_root'
+				if _lpmRoot != undefined then
+				(
+					_lpmNode = _fileInfoNode.newChild "LPM"
+					_lpmNode.SetProperty "version" _lpmRoot.baseObject.custAttributes[#rootVersion].CA_version
+					_lpmNode.SetProperty "rootDir" _lpmRoot.baseObject.custAttributes[#root].rootDir
+					_outputString = _lpmRoot.baseObject.custAttributes[#root].rootDir + _lpmRoot.baseObject.custAttributes[#root].pathString \
+					+ "." + _lpmRoot.baseObject.custAttributes[#root].fileType
+					
+					--Creación de pases
+					_passesNode = _lpmNode.newChild "passes"
+					for pass in _lpmRoot.children do
+					(
+						--Los pases válidos (ni separadores ni shotroot) tendrán el custAttribute pass
+						if pass.baseObject.custAttributes[#pass]!= undefined then
+						(
+							_pass = _passesNode.newChild "pass"
+							_pass.SetProperty "name" (filterString pass.name "_")[2]
+ 							--_pass.SetProperty "output" (substituteString _outputString "$Pass" (filterString pass.name "_")[2])
+							for _passChild in pass.children do
+							(
+								--Ha de ser un pase sin bakear
+								if (filterString _passChild.name "_")[(filterString _passChild.name "_").count] != "baked" then
+								(
+									--Si es un pase de propiedades
+									if _passChild.baseObject.custAttributes[#commonProps] != undefined then
+									(
+										_pass.SetProperty "rendTimeType" _passChild.baseObject.custAttributes[#commonProps]._rendTimeType
+										_pass.SetProperty "renderRange" ((interval _passChild.baseObject.custAttributes[#commonProps]._rendStart _passChild.baseObject.custAttributes[#commonProps]._rendEnd) As String)
+									)
+									else if _passChild.baseObject.custAttributes[#ObjectSet] != undefined then
+									(									
+										--Materiales del pase
+										if _passChild.baseObject.custAttributes[#ObjectSet].pMaterial != undefined then
+										(
+											--Si no tiene la etiqueta de materiales se la creamos
+											_passMaterials = _pass.getChildByName "materials"
+											if _passMaterials == undefined then
+												_passMaterials = _pass.newChild("materials")
+											_singleMaterial = _passMaterials.newChild "material"
+											_singleMaterial.SetProperty "name" _passChild.baseObject.custAttributes[#ObjectSet].pMaterial.name
+											_singleMaterial.SetProperty "class" ((classof _passChild.baseObject.custAttributes[#ObjectSet].pMaterial) As String)
+											
+											--Bitmaps del pase
+											_materialBitmaps = lb.materials.getBitmaps _passChild.baseObject.custAttributes[#ObjectSet].pMaterial
+											if _materialBitmaps.count > 0 then
+											(
+												_passBitmaps = _pass.getChildByName "bitmaps"
+												if _passBitmaps == undefined then
+													_passBitmaps = _pass.newChild("bitmaps")
+												
+												for _bitmap in _materialBitmaps do
+												(
+													_singleBitmap = _passBitmaps.newChild "bitmap"
+													_singleBitmap.SetProperty "filename" _bitmap
+													_singleBitmap.SetProperty "material" _passChild.baseObject.custAttributes[#ObjectSet].pMaterial.name
+												)
+											)
+										)
+									)
+								)--if de pase no bakeado
+								
+							)
+							
+						)
+					)
+					_passesNode.SetProperty "numPasses" (_passesNode.getChildren()).count
+					
+				)-- _lpmRoot != undefined
+			)--LPM
+			
+ 			--_end = timeStamp()
+ 			--print "lpm"
+ 			--print (((_end - _start)/1000.0) as string)
+ 			--print "-------------------------"
+ 			--_start = timeStamp()
+			
+			--	Caches
+			------------------------------------------------
+			(
+				
+				
+				_pointCacheFiles = #()
+				_pointCacheObjects = #()
+				_transformCacheFiles = #()
+				_transformCacheObjects = #()
+				
+				for _o in objects do 
+				(
+					for m in _o.modifiers do
+					(
+						if classof m == point_Cache then (append _pointCacheFiles m.filename; append _pointCacheObjects _o)
+						if classof m == transform_Cache then (append _transformCacheFiles m.filename; append _transformCacheObjects _o)
+					)
+				)
+				
+				
+				_cachesNode = _fileInfoNode.newChild "caches"
+				
+				for i = 1 to _pointCacheObjects.count do
+				(
+					_obj = _pointCacheObjects[i]
+					_cacheFile = _pointCacheFiles[i]
+					
+					_cacheNode = _cachesNode.newChild "cache"
+					_cacheNode.setProperty "objName" _obj.name
+					_cacheNode.setProperty "type" "transform_cache"
+					_cacheNode.setProperty "filename" _cacheFile
+				)
+				
+				for i = 1 to _transformCacheObjects.count do
+				(
+					_obj = _transformCacheObjects[i]
+					_cacheFile = _transformCacheFiles[i]
+					
+					_cacheNode = _cachesNode.newChild "cache"
+					_cacheNode.setProperty "objName" _obj.name
+					_cacheNode.setProperty "type" "point_cache"
+					_cacheNode.setProperty "filename" _cacheFile
+				)
+			)
+			
+ 			--_end = timeStamp()
+ 			--print "caches"
+ 			--print (((_end - _start)/1000.0) as string)
+ 			--print "-------------------------"
+ 			--_start = timeStamp()
+			
+			-- cameras
+			------------------------------------------------
+			(
+				_cams = lb.cameraFunctions.getSceneCameras()
+				_camsNode = _fileInfoNode.newChild "cameras"
+				
+				for _c in _cams do
+				(
+					_camNode = _camsNode.newChild "cam"
+					_camNode.SetProperty "name" _c.name
+					_camNode.SetProperty "type" (classOf _c)
+					_camNode.SetProperty "recStart" (if lb.cameraFunctions.hasCamInfo _c then _c.camInfo.recStart else undefined)
+					_camNode.SetProperty "recEnd" (if lb.cameraFunctions.hasCamInfo _c then _c.camInfo.recEnd else undefined)
+				)
+			)
+			
+ 			--_end = timeStamp()
+ 			--print "cameras"
+ 			--print (((_end - _start)/1000.0) as string)
+ 			--print "-------------------------"
+ 			--_start = timeStamp()
+			
+			-- xrefObject files
+			(
+				
+				_xRefObjsNode = _fileInfoNode.newChild "xRefObjects"
+				
+				for i = 1 to objXrefMgr.recordCount do
+				(
+					_record = objXrefMgr.getRecord i
+					
+					_xRefFileNode = _xRefObjsNode.newChild "file"
+					_xRefFileNode.SetProperty "filename" _record.srcFileName
+				)
+			)
+			
+ 			--_end = timeStamp()
+ 			--print "xref objs"
+ 			--print (((_end - _start)/1000.0) as string)
+ 			--print "-------------------------"
+ 			--_start = timeStamp()
+			
+			-- xrefScene Files
+			(
+				
+				_xRefScenesNode = _fileInfoNode.newChild "xRefScenes"
+				
+				for i = 1 to xrefs.getXrefFileCount() do
+				(
+					_xRefFilename = (xrefs.getXrefFile i).filename
+					
+					_xRefFileNode = _xRefScenesNode.newChild "file"
+					_xRefFileNode.SetProperty "filename" _xRefFilename
+				)
+			)
+			
+ 			--_end = timeStamp()
+ 			--print "xref scenes"
+ 			--print (((_end - _start)/1000.0) as string)
+ 			--print "-------------------------"
+ 			--_start = timeStamp()
+			
+			-- etiqueta final de información
+			_rootNode.addNode fileInfoPosNode
+			
+ 			--_end = timeStamp()
+ 			--print "nodo de cierre"
+ 			--print (((_end - _start)/1000.0) as string)
+ 			--print "-------------------------"			
+			
+			_xmlDoc
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | addFileInfo | Añade el fileInfo al fichero pasado por parámetro
+		--@gets: string | filename | Nombre del fichero al que añadir el fileInfo
+		--@gets: string | fileInfo | String con todo el fileInfo que hay que añadir al fichero
+		------------------------------------------------
+		fn addFileInfo filename fileInfoString =
+		(
+			--	Si ya existía el fileInfo lo borramos primero
+			this.removeFileInfo filename
+			
+			_f = dotnetObject "System.IO.fileStream" filename (dotnetClass "System.IO.FileMode").Append
+			_fw = dotnetObject "System.IO.StreamWriter" _f
+
+			fileInfoString = "\n" + fileInfoString
+			_fw.Write fileInfoString
+			_fw.Flush()
+
+			_f.close()
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | removeFileInfo | Añade el fileInfo al fichero pasado por parámetro
+		--@gets: string | filename | Nombre del fichero al que añadir el fileInfo
+		------------------------------------------------
+		fn removeFileInfo filename =
+		(
+			_fileInfoFilePos = this.getFileInfoPosition filename
+			
+			if _fileInfoFilePos != undefined then
+			(
+				_f = dotnetObject "System.IO.fileStream" filename (dotnetClass "System.IO.FileMode").open
+				_f.setLength _fileInfoFilePos
+				_f.close()
+			)
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | getFileInfo | Obtiene el fileInfo al fichero pasado por parámetro
+		--@gets: string | filename | Nombre del fichero 
+		------------------------------------------------
+		fn getFileInfo filename =
+		(
+			_fileInfoDoc = undefined
+			
+			if doesFileExist filename then
+			(
+				_fileInfoPos = this.getFileInfoPosition filename
+				
+				if _fileInfoPos != undefined then
+				(
+					_f = dotnetObject "System.IO.streamReader" filename
+					_f.baseStream.position = _fileInfoPos
+					_txt = _f.readToEnd()
+					
+					_fileInfoDoc = lb.xml.xmlDoc()
+					_fileInfoDoc.setString _txt
+					
+					_f.close()
+				)
+			)
+			
+			_fileInfoDoc
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | isFileChecked | Indica si un fichero está chequeado
+		--@gets: string | filename | Nombre del fichero 
+		------------------------------------------------
+		fn isFileChecked filename =
+		(
+			_fileChecked = false
+			_fileInfoDoc = lb.fileInfo.getFileInfo filename
+			
+			if _fileInfoDoc != undefined then
+			(
+				_fileInfoNode = _fileInfoDoc.root.getNode "fileInfo"
+				_checkedProperty = _fileInfoNode.getProperty "checked"
+				if _checkedProperty != undefined then _fileChecked = execute _checkedProperty
+			)
+			
+			_fileChecked
+		),
+		
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+			
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+			
+			fileInfoPosNode = lb.xml.xmlElement elementName:"fileInfoPosition" text:"123456789012345"
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addLibrary this --añade la libreria a la principal
+			
+		)
+		
+	)--lib_fileInfo
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	
+	lib_fileInfo() --crea la libreria
+)

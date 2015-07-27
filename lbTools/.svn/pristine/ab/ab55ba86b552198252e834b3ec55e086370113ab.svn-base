@@ -1,0 +1,163 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--Descripcion: libreria de funciones matematicas
+------------------------------------------------------------------------------------------------------------------------------------------------
+(	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: math | Contiene la libreria de plantilla.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct lib_math
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,					--@var: category | Categoria de la libreria.
+		className = lb.getFileLibName (getThisScriptFilename() as string),	--@var: className | Nombre de la libreria.
+		description = "Libreria de funciones matematicas",	--@var: description | Descripcion de la libreria.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: integer | sign | Devuelve -1 sin el numero pasado por parametro es menor que 0 y devuelve 1 si es mayor o igual que 0.
+		--@gets: integer | num | Numero que comprobar para conocer el signo.
+		------------------------------------------------
+		fn sign num =
+		(
+			if num < 0 then -1 else 1
+		),
+		
+		------------------------------------------------
+		--@fn: integer | round | Devuelve el numero entero más cercano al pasado por parametro.
+		--@gets: integer | n | Numero que redondear.
+		------------------------------------------------
+		fn round n = 
+		(
+			_result = [0,0,0]
+			if (superclassof n) == Number then
+			(
+				_middle = if n < 0 then -0.5 else 0.5 
+				--si el numero es mayor que su parte entera mas 0.5, se redondea hacia arriba.
+				if n >= (n as integer) + _middle then _result = ceil n
+				else _result = floor n
+			)
+			else if (classof n) == Point2 or (classof n) == Point3 then
+			(
+				_middle = if n.x < 0 then -0.5 else 0.5 
+				if n.x >= (n.x as integer) + _middle then _result.x = ceil n.x
+				else _result.x = floor n.x
+				
+				_middle = if n.y < 0 then -0.5 else 0.5 
+				if n.y >= (n.y as integer) + _middle then _result.y = ceil n.y
+				else _result.y = floor n.y
+				
+				if (classof n) == Point3 then
+				(
+					_middle = if n.z < 0 then -0.5 else 0.5 
+					if n.z >= (n.z as integer) + _middle then _result.z = ceil n.z
+					else _result.z = floor n.z
+				)
+				else
+				(
+					_result = [_result.x, _result.y]
+				)
+			)
+			
+			_result
+		),
+
+		----------------------------------------------------------------------------------------------------------------
+		--	devuelve TRUE si el string pasado son numeros
+		----------------------------------------------------------------------------------------------------------------
+		fn isNumeric numberString =
+		(
+			success = true
+			stringNumbers = #("0","1","2","3","4","5","6","7","8","9")	
+			
+			if classof numberString == String then
+			(
+				if numberString.count > 0 then
+					for i=1 to numberString.count where findItem stringNumbers numberString[i] == 0 do success = false			
+				else
+					success = false
+			)
+			else
+				success = false
+				
+			success
+		),
+				
+		----------------------------------------------------------------------------------------
+		-- limita el número de díginos de un float de 0 a 3, según indique nDigits
+		----------------------------------------------------------------------------------------
+		fn limitDigits val nDigits =
+		(
+			v = formattedprint (val as float) format:("." + (nDigits as string) + "f")
+		),
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+			
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addLibrary this --añade la libreria a la principal
+		)
+		
+	)--lib_math
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	
+	lib_math() --crea la libreria
+)

@@ -1,0 +1,1033 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--Descripcion: Herramienta Plantilla.
+------------------------------------------------------------------------------------------------------------------------------------------------
+(
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollMain | Contiene la herramienta plantilla.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollMainDef "Audio Exporter Test"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) --@var : parent | Herramienta o rolllout del que depende y/o contiene el rollout actual
+		
+		local minRollWidth = 400		--@var: minRollWidth | Ancho mínimo de la herramienta.
+		local minRollHeight = 510		--@var: minRollHeight | Alto mínimo de la herramienta.
+		local selectionBackcolor = (dotnetclass "System.Drawing.Color").transparent
+		local selectionForecolor = (dotnetclass "System.Drawing.Color").black
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		local soxPath = lb.config.getExePath() + "sox.exe"
+		local premiereParserPath = lb.config.getExePath() + "premiereParser.exe" 
+		local audioClips = #()
+		local videoClips = #()
+		local errorMessages = #()
+		local _sequence = ""
+		local _soxPath = "\"" + soxPath + "\" "
+		local _soundDir = (GetDir #sound) + "\\"
+		-- Path the archivos intermedios
+		local _tempSilencePath = _soundDir + "tempSilence.wav"
+		local _tempSpeedPath = _soundDir + "tempSpeed.wav"
+		local _tempTrimPath = _soundDir + "tempTrim.wav"
+		local fps = 24.0
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		
+		--@control | controlName | Plantilla de comentario para controles
+		label lblFile "Premiere file:" pos:[5,10]
+		edittext edtFilename pos:[1,25] width:330 enabled:false
+		button btnPick "Browse" pos:[335,24] width:60 height:20
+		dotNetControl dgAudios "System.Windows.Forms.DataGridView" pos:[5,50] width:390 height:400
+		button btnExport "Export audios" pos:[5,460] width:390 height:40 enabled:false
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollMainDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollMainDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				dgAudios.width = size.x - 10
+				btnExport.pos.x = 5 + (_increment.x/2.0)
+				btnPick.pos.x = 335 + _increment.x
+				edtFilename.width = 326 + _increment.x
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				btnExport.pos.y = 460 + _increment.y
+				dgAudios.height = 400 + _increment.y
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--almacena posicion
+			lb.xml.setAttribute parent.cfgFile ("rollMain/pos") "x" (((getDialogPos rollMainDef).x) as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/pos") "y" (((getDialogPos rollMainDef).y) as string)
+			
+			--almacena tamaño
+			lb.xml.setAttribute parent.cfgFile ("rollMain/size") "width" (rollMainDef.width as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/size") "height" (rollMainDef.height as string)
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			_width = (lb.xml.getAttribute parent.cfgFile ("rollMain/size") "width") as integer
+			_height = (lb.xml.getAttribute parent.cfgFile ("rollMain/size") "height") as integer
+				
+			--posicion
+			_posX = (lb.xml.getAttribute parent.cfgFile ("rollMain/pos") "x") as integer
+			_posY = (lb.xml.getAttribute parent.cfgFile ("rollMain/pos") "y") as integer
+				
+			--establece minimos
+			if _width < minRollWidth then _width = minRollWidth
+			if _height < minRollHeight then _height = minRollHeight
+			if _posX < 0 then _posX = 0
+			if _posY < 0 then _posY = 0
+				
+			--aplica los valores
+			rollMainDef.width = _width
+			rollMainDef.height = _height
+			setDialogPos rollMainDef [_posX,_posY]
+		)
+		
+		
+		fn initDataGridView =
+		(
+			dgAudios.allowUsertoaddRows = false -- No dejamos agregar columnas
+			dgAudios.allowUserToResizeRows = false -- No dejamos escalar filas
+			dgAudios.allowUserToResizeColumns = false -- No dejamos escalar columnas
+			dgAudios.AllowUserToOrderColumns = false 	-- No dejamos ordenar columnas
+			dgAudios.columnHeadersHeightSizeMode = (dotNetClass "System.Windows.Forms.dataGridViewColumnHeadersHeightSizeMode").disableResizing -- Ni idea
+			dgAudios.AdvancedColumnHeadersBorderStyle.all = (dotnetclass "System.Windows.Forms.DataGridViewAdvancedCellBorderStyle").outset -- Borde de las cabeceras de columnas
+
+			dgAudios.columnHeadersVisible = true									--Para que las columnas tengan titulo
+			dgAudios.rowheadersvisible = false									--Para que las filas no tengan titulo
+			
+			dgAudios.foreColor = (dotNetClass "System.Drawing.Color").black		--Color negro para las fuentes
+			
+			dgAudios.font = dotnetobject "system.drawing.font" (dotnetobject "System.Drawing.FontFamily" "Arial") 7.5	--Tipo de fuente
+			
+			dgAudios.readonly = false 					--No modificable
+			dgAudios.multiSelect = false				--Sin multiselección
+			dgAudios.showCellTooltips = false			--Mostrar tooltips de las celdas
+			dgAudios.selectionMode = undefined --(dotnetClass "System.Windows.Forms.DataGridViewSelectionMode").fullRowSelect	--Selección de fila completa
+
+			_rowStyle = (dotnetObject "System.Windows.Forms.DataGridViewCellStyle")
+			_rowStyle.selectionBackcolor = selectionBackcolor
+			_rowStyle.selectionForecolor = selectionForecolor
+			dgAudios.rowsDefaultCellStyle = _rowStyle
+		)
+		
+		
+		fn fillAudioDataGridView _audioclips=
+		(	
+			--Limpiamos las columnas
+			dgAudios.columns.clear()
+
+			--Creamos las columnas
+			_column = (dotnetobject "System.Windows.Forms.DataGridViewTextBoxColumn")
+			_column.width = 40
+			_column.readOnly = true
+			_column.sortmode = (dotnetclass "System.Windows.Forms.DataGridViewColumnSortMode").notSortable
+			_column.HeaderText = "Loc"
+			dgAudios.columns.add _column
+			
+			_column = (dotnetobject "System.Windows.Forms.DataGridViewTextBoxColumn")
+			_column.width = 40
+			_column.readOnly = true
+			_column.sortmode = (dotnetclass "System.Windows.Forms.DataGridViewColumnSortMode").notSortable
+			_column.HeaderText = "Cam"
+			dgAudios.columns.add _column
+
+			_chars = #()
+			_sortedAudPrClips = #()
+
+			--Función de comparación de cámaras para qsort
+			_qsortFn = ( fn compareClips c1 c2 = 
+			(
+				if (c1[1].cam As Number) > (c2[1].cam As Number) then
+					1
+				else if (c1[1].cam As Number) < (c2[1].cam As Number) then 
+					-1
+				else
+					0
+			))
+
+			for c in _audioClips do
+			(
+				--Agregamos un personaje a cada columna
+				if findItem _chars c.char == 0 do
+				(
+					_column = (dotnetobject "System.Windows.Forms.DataGridViewCheckBoxColumn")
+					_column.readOnly = false
+					_column.width = 60 --c.char.count * 7.5
+					_column.sortmode = (dotnetclass "System.Windows.Forms.DataGridViewColumnSortMode").notSortable
+					_column.HeaderText = c.char
+					dgAudios.columns.add _column
+					append _chars c.char
+				)
+				--print c
+
+				--Organizamos los audioClips en un array de arrays que va por localización y luego por número de cámara
+				_added = false
+				_locationFound = false
+				for i=1 to _sortedAudPrClips.count where not _added do
+				(
+					for j=1 to _sortedAudPrClips[i].count where not _added do
+					(
+						--print ("Current location: " + _sortedAudPrClips[i][j][1].location + " == " + c.location) 
+						if _sortedAudPrClips[i][j][1].location == c.location then
+						(
+							--print ("Current camera: " + _sortedAudPrClips[i][j][1].cam + " == " + c.cam) 
+							_locationFound = true
+							if _sortedAudPrClips[i][j][1].cam == c.cam then
+							(
+								--print "Added!"
+								append _sortedAudPrClips[i][j] c
+								_added = true
+							)
+						)
+					)
+					if _locationFound and not _added then
+					(
+						--print "No hay cámara"
+						append _sortedAudPrClips[i] #(c)
+						qsort _sortedAudPrClips[i] _qsortFn
+						_added = true
+					)
+					--print "-----------------------------------------------"
+				)
+				if not _locationFound do
+				(
+					append _sortedAudPrClips #(#(c))
+				)
+			)
+
+			for _location in _sortedAudPrClips do
+			(
+				--print "--Location"
+				--print _location.count
+				for _cam in _location do
+				(
+					--print "----Cam"
+					_row = (dotNetObject "System.Windows.Forms.DataGridViewRow")
+					_row.height = 25
+					dgAudios.rows.add _row
+					_row.cells.item[0].value = _cam[1].location
+					_row.cells.item[1].value = _cam[1].cam
+					_addedChars = #()
+					for _clip in _cam do
+					(
+						--print _clip
+						_found = false
+						for i=1 to _chars.count  do
+						(
+							if _clip.char == _chars[i] then
+							(
+								append _addedChars _clip.char
+								
+								_style = (dotNetObject "System.Windows.Forms.DataGridViewCellStyle")
+								_style.backColor = (dotnetClass "System.Drawing.Color").palegreen --JAJAJAJ Pale cream
+								_row.cells.item[i+1].style = _style
+								_row.cells.item[i+1].value = true
+								_found = true
+							)
+						)
+						if not _found then
+						(
+							_row.cells.item[i+1].value = false
+						)
+					)
+				)
+			)
+
+			for i=0 to (dgAudios.rows.count - 1) do
+			(
+				for j=2 to (dgAudios.rows.item[i].cells.count - 1) do
+				(
+					_style = (dotNetObject "System.Windows.Forms.DataGridViewCellStyle")
+					if dgAudios.rows.item[i].cells.item[j].value != undefined then
+					(
+						dgAudios.rows.item[i].cells.item[j].readOnly = false
+					)
+					else
+					(
+						dgAudios.rows.item[i].cells.item[j].readOnly = true
+						dgAudios.rows.item[i].cells.item[j].FlatStyle = (dotNetClass "System.Windows.Forms.FlatStyle").Flat
+						_style = (dotNetObject "System.Windows.Forms.DataGridViewCellStyle")
+						_style.backColor = (dotnetClass "System.Drawing.Color").FromArgb 255 102 102 
+						_style.foreColor = (dotnetClass "System.Drawing.Color").darkGray
+						dgAudios.rows.item[i].cells.item[j].style = _style
+					)
+				)
+			)
+		)
+
+
+		fn fillVideoClipsFromXml xml =
+		(
+			struct prVideoClipInfo (sequence, location, cam, char, duration, trimIn, trimOut, speed, file, silence, start, end, audios)
+			struct prAudioClipInfo (file,start,trimIn,length,speed,char)
+
+			_videoClips = #()
+			_sortedVidPrClips = #()
+			
+			xmlDoc = lb.xml.newXmlDoc()
+			xmlDoc.setString(xml)
+			root = xmlDoc.root
+
+			-- clips que estan mal colocados , en la pista del personaje que no le corresponde
+			_failAudioClips = #() 
+			
+			-- el nodo root es el nodo de secuencia. Obtiene el primero
+			sequenceNode = (root.getNodes "sequence")[1]
+			_sequence = (sequenceNode.getProperty("name"))
+
+			print "\n\nCARGANDO LOS AUDIOS Y VIDEOS -----------------------------"
+
+			-- Para cada localizacion de la secuencia...
+			for location in (root.getNodes "sequence/location") do
+			(
+				-- Para cada clip de la localizacion
+				for c in (location.getNodes "clip") do
+				(
+					_infoVideo = ""
+
+					-- Para la pieza de video colocada en ese clip
+					for v in c.getNodes "video" do
+					(
+						-- LOS NODOS DE VIDEO NO TIENEN CHARNAME. ??¿¿
+						-- Creo la estructura con la informacion
+						_infoVideo = prVideoClipInfo sequence:(sequenceNode.getProperty("name")) location:(location.getProperty("name")) cam:(c.getProperty("cam")) char:(v.getProperty("charname")) trimIn:(v.getProperty("trimIn") As Number) trimOut:(v.getProperty("trimOut") As Number) speed:(v.getProperty("speed") As Number) duration:(v.getProperty("length") As Number) file:(v.getProperty("path") + "\\" + v.getProperty("filename")) start:(v.getProperty("start") As Number) end:(v.getProperty("end") As Number) audios:#()
+					)
+
+					if _infoVideo != "" do
+					(
+						format "\nVideo %\n" _infoVideo.file
+						-- Le añadimos la info basica de los audios relativos
+						for a in c.getNodes "audio" do
+						(
+							-- Montamos la estructura con la informacion del audio minima que necesitamos para realizar la exportacion
+							_file = (a.getProperty("path")) + "\\" + (a.getProperty("filename"))
+							_audioInfo = prAudioClipInfo file:_file start:(a.getProperty("start") As Number) trimIn:(a.getProperty("trimIn") As Number) length:(a.getProperty("length") As Number) speed:(a.getProperty("speed") As Number) char:(a.getProperty("charname"))
+							append _infoVideo.audios _audioInfo
+							format "\tAudio: %\n" _audioInfo
+							
+							-- Si el audio esta colocado en la pista que no le corresponde 
+							-- (no contiene el string del nombre del personaje en el nombre de archivo)
+							if (findString (a.getProperty("filename")) _audioInfo.char) == undefined do
+								append _failAudioClips _audioInfo
+						)
+						append _videoClips _infoVideo
+					)
+				)
+			)
+
+			for error in (root.getNodes "error") do
+				append errorMessages error
+
+			-- Ordeno los clips por numero de camara
+			_qsortFnClips = ( fn compareClips c1 c2 = 
+			(
+				if (c1[1].cam As Number) > (c2[1].cam As Number) then
+					1
+				else if (c1[1].cam As Number) < (c2[1].cam As Number) then 
+					-1
+				else
+					0
+			))
+			
+			-- Para cada videoclip obtenido
+			for c in _videoClips do
+			(
+				--Agregamos las columnas de rangos
+				--Organizamos los _videoClips en un array de arrays que va por localización y luego por posicion en la secuencia
+				
+				_added = false
+				_locationFound = false
+				for i=1 to _sortedVidPrClips.count do 
+				(
+					for j=1 to _sortedVidPrClips[i].count do 
+					(
+						if _sortedVidPrClips[i][j][1].location == c.location then
+						(
+							_locationFound = true
+							if _sortedVidPrClips[i][j][1].cam == c.cam then
+							(
+								append _sortedVidPrClips[i][j] c
+								_added = true
+							)
+						)
+					)
+					
+					if _locationFound then
+					(
+						--print "No hay cámara"
+						append _sortedVidPrClips[i] #(c)
+						qsort _sortedVidPrClips[i] _qsortFnClips
+						_added = true
+					)					
+				)
+				
+				if not _locationFound do
+				(
+					append _sortedVidPrClips #(#(c))
+				)
+					
+				
+			)
+
+			-- Imprime errores de clips mal colocados
+			if _failAudioClips.count > 0 do
+			(
+				_failAudioClipsString = ""
+				for _failAudioClip in _failAudioClips do
+					_failAudioClipsString += _failAudioClip.file + " en la posicion global: " + (_failAudioClip.start As String) + " para el personaje: " + _failAudioClip.char + "\n"
+
+				_dp = (GetDialogPos lb.audioExporter.rollMain)
+				lb.message.show ("Errors in edition: Audio clips inserted in wrong character audio track:\n\n" + _failAudioClipsString) type:#message size:[800,300] -- pos:[(lb.audioExporter.rollMain.width/2.0)-400,_dp.y+(lb.audioExporter.rollMain.height/2.0)-37.5] modal:false
+			)
+		
+			-- Devuelve los clips
+			_sortedVidPrClips	
+		)
+	
+		fn fillAudioClipsFromXml xml =
+		(
+			struct audioClipInfo (sequence, location, cam, char, duration, trimIn, speed, file, silence, start)
+			_audioClips = #()
+			
+			xmlDoc = lb.xml.newXmlDoc()
+			xmlDoc.setString(xml)
+			root = xmlDoc.root
+			
+			sequence = (root.getNodes "sequence")[1]
+			for location in (root.getNodes "sequence/location") do
+			(
+				for c in (location.getNodes "clip") do
+				(
+					for a in c.getNodes "audio" do
+					(
+						clip = audioClipInfo sequence:(sequence.getProperty("name")) location:(location.getProperty("name")) cam:(c.getProperty("cam")) char:(a.getProperty("charname")) trimIn:(a.getProperty("trimIn") As Number) speed:(a.getProperty("speed")) duration:(a.getProperty("length") As Number) file:(a.getProperty("path") + "\\" + a.getProperty("filename")) silence: (a.getProperty("silence") As Number) start:(a.getProperty("start") As Number)
+						append _audioClips clip
+					)
+				)
+			)
+
+			_audioClips
+			
+		)
+
+		fn systemCall command =
+		(
+			setWaitCursor() 
+			oldClipboard = getclipboardText()
+			if oldClipboard == undefined do oldClipboard = ""
+			oldCurrentDir = sysInfo.currentDir
+			sysInfo.currentDir = lb.config.getExePath()
+			HiddenDOSCommand (command + " 2>&1 | clip")
+			clip = getclipboardText()
+			setclipboardText(oldClipboard)
+			sysInfo.currentDir = oldCurrentDir
+			setArrowCursor() 
+			clip
+		)
+
+		-- Crea un audio temporal con silencio y audio, con la duracion del 
+		-- video relacionado original. Dura igual que el video original, pero solo contiene un clip de audio insertado.
+		-- Para posteriormente unificarlos todos y tener el audio de un personaje para un video completo.
+		fn generateTempAudio _audioCounter _audInfo _vidClipTrimIn _vidClipStart =
+		(
+			-- Si el clip existe
+			if not (doesFileExist _audInfo.file) then
+				return #( "", "El archivo no existe. " + (_audInfo.file As String) )
+		
+			-- Path del archivo de salida
+			_pathArchivoUnido = _soundDir + "char" + (formattedPrint _audioCounter format:"03d") + ".wav"
+	
+			_comando = ""
+			_output = ""
+			_log = ""
+
+			-- SPEED --------------------------------------------------
+
+			--if (_audInfo.speed != 1.0)
+			--(
+			-- Camiamos la velocidad del clip usando SOX
+			_comando = _soxPath 
+			_comando += "−G " -- Ajustar audio si hay clipping
+			_comando += "\"" + _audInfo.file + "\" " -- Clip de audio
+			_comando += "-c 1 " -- canal
+			_comando += "-r 48000 " -- rate, importante indicarlo para un cambio de velocidad
+			_comando += "-b 16 " -- bitdepth
+			_comando += "\"" + _tempSpeedPath +"\" " -- Archivo salida temporal
+			_comando += "speed " + (_audInfo.speed As String) -- EFECTO: Cambiar la velocidad usando la propiedad de velocidad del clip original
+			_output = systemCall (_comando)
+			
+			-- pintamos el output del comando
+			format "\n------------------------\nPaso 1) Cambio velocidad.\n\tComando: %\n" _comando
+
+			if (_output != "") do
+			(
+				format "\toutput:\n%\n" _output
+				_log += (_output As String)
+				_log += "\n"
+			)
+			
+			-- TRIM --------------------------------------------------
+  			-- recorta del audio del paso anterior el trozo que está en el montaje
+
+			_posTrimInFPS = (_audInfo.trimIn*1.0) / fps
+			_posDurationFPS = (_audInfo.length*1.0) / fps
+
+			_comando = _soxPath
+			_comando += "\"" + _tempSpeedPath + "\" " -- clip de entrada. Clip con velocidad ajustada
+			_comando += "\"" + _tempTrimPath + "\" " -- clip de salida
+			_comando += "trim " + (_posTrimInFPS As String) + " " + (_posDurationFPS As String) -- EFECTO: Trim. Se queda desde el trimIn hasta la duracion del clip final
+			_output = systemCall (_comando)
+
+			-- pintamos el output del comando
+			format "Paso 2 ) Trim hasta el inicio de montaje. Trim in: % Length: %\n\tComando: %\n" (_audInfo.trimIn As String) (_audInfo.length As String) _comando
+			if (_output != "") do
+			(
+				format "\toutput:\n%\n " _output
+				_log += (_output As String)
+				_log += "\n"
+			)
+
+			-- CREAR SILENCIO --------------------------------------------------
+			-- para añadir el silencio antes del audio, rellenado hasta el corte de video. 
+			-- Para que coja todo el video desde el inicio, hay que añadir el trim de video
+
+			-- El silencio es el tamaño del video original hasta donde empieza el audio.
+			_silencioHastaAudio =  _vidClipTrimIn
+
+			-- si empieza despues del inicio del clip de video, hay que sumarle la diferencia hasta que empieza
+			if (_audInfo.start > _vidClipStart) do
+				_silencioHastaAudio += _audInfo.start - _vidClipStart
+			
+			_silencioHastaAudioFPS = (_silencioHastaAudio * 1.0) / fps
+
+			_comando = _soxPath
+			_comando += "-n " -- Sin video de origen
+			_comando += "-r 48000 " -- rate,
+			_comando += "-c 1 " -- Canal 
+			_comando += "-b 16 " -- bitdepth
+			_comando += "\"" + _tempSilencePath + "\" " -- Archivo de salida temporal
+			_comando += "trim 0.0 " + (_silencioHastaAudioFPS As String) -- EFECTO: Trim. Desde 0 hasta la duracion del silencio.
+			_output = systemCall (_comando)
+			
+			-- pintamos la salida de la llamada del comando
+			format "Paso 3 ) Creado silencio hasta el corte de premiere.Start audio: % Start Video: % TrimIn video: % Silencio calculado: %\n\tComando: %\n" (_audInfo.start As String) (_vidClipStart As String) (_vidClipTrimIn As String) (_silencioHastaAudio As String) _comando
+			
+			if (_output != "") do
+			(
+				format "\toutput:\n%\n " _output
+				_log += (_output As String)
+				_log += "\n"
+			)
+
+			-- MERGE del silencio y el recorte ----------------------------------------------------
+			
+			_comando = _soxPath
+			_comando += "\"" + _tempSilencePath + "\" " -- Archivo de entrada del silencio
+			_comando += "\"" + _tempTrimPath + "\" " -- Archivo de entrada del trim
+			_comando += "\"" + _pathArchivoUnido + "\"" -- Archivo de salida
+			_output = systemCall (_comando)
+
+			-- Pintamos la salida de la llamada al comando
+			format "Paso 4 ) Concatenamos silencio + recorte.\n\tComando: %\n" _comando
+			
+			if (_output != "") do
+			(
+				format "\toutput:\n%\n " _output
+				_log += (_output As String)
+				_log += "\n"
+			)
+
+			-- Borramos temporales
+			deleteFile(_tempSpeedPath)
+			deleteFile(_tempSilencePath)
+			deleteFile(_tempTrimPath)
+
+			-- Devolvemos la ruta y el log de salida
+			return #(_pathArchivoUnido,_log)
+
+		)
+
+
+		fn processAudio location camera character =
+		(
+			print "========================================================="
+ 			print "PROCESANDO AUDIO PARA:"
+ 			print ("Sequence: " + _sequence As String)
+ 			print ("Location: " + location As String) 
+ 			print ("Camera: " + camera As String) 
+ 			print ("Character: " + character As String) 
+
+
+ 			print "\nOBTENEMOS LOS CLIPS DE SONIDO, Y CREAMOS AUDIOS TEMPORALES PARA CADA UNO."
+
+
+			if videoClips.count <= 0 do
+				return ""
+
+			_audioToMergeCounter = 0
+			_log = ""
+
+			-- construimos el comando para unir todos los audios
+			_mergeCommand = _soxPath + " -m " -- EFECTO: Merge
+			_audiosToMergePaths = #()
+
+			for _vClips in videoClips do
+			(
+				
+				-- Para cada video que ocurra en el lugar y la camara indicadas
+				for _v in _vClips 
+				where _v[1].location == location and _v[1].cam == camera and _v[1].audios.count > 0 do
+				(
+					_vidClip = _v[1]
+
+					-- Si tiene audios relacionados con el personaje, nos interesa sacar de uno en uno
+					for _audInfo in _vidClip.audios
+					where _audInfo.char == character do
+					(
+						returnVals = generateTempAudio _audioToMergeCounter _audInfo _vidClip.trimIn _vidClip.start
+						_tempAudioPath = returnVals[1]
+						_logText = returnVals[2]
+
+						if ( _logText != "" and ( (findString _logText "WARN") != undefined) ) do 
+							_log += _logText
+
+						if (_tempAudioPath != "") do
+						(
+							append _audiosToMergePaths _tempAudioPath
+							_mergeCommand += "\"" + _tempAudioPath + "\" "
+							_audioToMergeCounter += 1
+						)
+					)
+				)
+			)
+
+			-- Ruta de salida de los audios a juntar
+			-- TODO: utilizar el NC
+			-- FORMATO : y:\sequence\movie\seq_XX(loc)\cam\camxxx\sound\seq_xx_camxxx_dub_character.wav
+			_outputPath = "y:\\sequence\\movie\\seq_" + _sequence + "(" + location + ")\\cam\\cam" + camera + "\\sound\\seq_" + _sequence + "_cam" + camera + "_dub_" + character + ".wav"
+
+			-- comando DOS para borrar el fichero. deleteFile no funciona
+			if doesFileExist _outputPath do HiddenDOSCommand ("del /F " + _outputPath)
+
+			-- Crea el path si no existe
+			makeDir (getFilenamePath _outputPath) all:true
+
+			-- Si hay al menos un audio, hay que unirlos
+			if _audioToMergeCounter > 1 then
+			(
+				-- añadimos el archivo de salida al comando de merge
+				_mergeCommand += "\"" + _outputPath + "\""
+			
+				-- Ejecutar el comando
+				_output = (systemCall _mergeCommand)
+				
+				-- Pintamos la salida de la llamada al comando
+				print "\nMEZCLAMOS TODOS LOS AUDIOS EN UNO. \n"
+				format "Comando: %\n" _mergeCommand
+				
+				if (_output != "" and ( (findString (_output As String) "WARN") != undefined) ) do
+				(
+					format "\toutput:\n%\n " _output
+					_log += (_output As String)
+					_log += "\n"
+				)
+
+				--Borramos los ficheros temporales
+				for _tempAudio in _audiosToMergePaths do
+					deleteFile _tempAudio
+			)
+
+			-- Si solo hay un archivo, no es necesario juntarlo.
+			else if _audioToMergeCounter == 1 then
+			(
+				print "\nMOVEMOS EL ARCHIVO DE AUDIO A LA RUTA DE SALIDA:\n"
+				format "%\n" _outputPath
+				renameFile _audiosToMergePaths[1] _outputPath
+			)
+
+			_log
+		)
+
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		on btnPick pressed do
+		(
+			premiere_file = getOpenFileName "Open premiere file" filename:"Y:\\sequence\\movie\\" types:"Premiere(*.prproj)"
+			
+			--premiere_file = "Y:\\sequence\\movie\\seq_080a-mi\\video\\edit\\seq_080a-mi_edit.prproj"
+			
+			if premiere_file != undefined then
+			(
+ 				--if not lb.svn.svnIsFileUpdated premiere_file timeout:10 then
+ 				--(
+ 				--	_dp = (GetDialogPos lb.audioExporter.rollMain)
+ 				--	lb.message.show "Premiere file is not updated" type:#message size:[300,75] pos:[_dp.x+(lb.audioExporter.rollMain.width/2.0)-150,_dp.y+(lb.audioExporter.rollMain.height/2.0)-37.5] modal:true
+ 				--) 
+ 				--else
+ 				--(
+				edtFilename.text = premiere_file
+				encodeCommand = "\"" + premiereParserPath + "\" " + premiere_file
+				
+				xml = systemCall(encodeCommand)
+				--print "XML:"
+				--while not eof(xml) do print readline xml
+				--print xml
+				
+				audioClips = fillAudioClipsFromXml(xml)	
+				
+				--for a in audioClips do print a
+				videoClips = fillVideoClipsFromXml(xml)	
+				--for v in videoClips do print v
+
+				fillAudioDataGridView audioClips
+				
+				btnExport.enabled = true
+
+				for _m in errorMessages do print _m
+ 				--)
+			)
+		)
+		
+		on btnExport pressed do
+		(
+			_log = ""
+			_selectedChars = #()
+
+			--Recorremos la visualización para ver que audios nos ha indicado el usuario
+			for i=0 to dgAudios.rows.count-1 do
+			(
+				-- Obtengo la localizacion de la columna
+				_location = dgAudios.rows.item[i].cells.item[0].Value
+
+				-- Obtengo la camara de la columna
+				_cam = dgAudios.rows.item[i].cells.item[1].Value
+				
+				-- Obtengo los items seleccionados
+				for j=2 to dgAudios.rows.item[i].cells.count-1 do
+				(
+					if dgAudios.rows.item[i].cells.item[j].EditedFormattedValue do
+						append _selectedChars #(_location, _cam, dgAudios.columns.item[j].headerCell.Value)
+				)
+			)
+
+			_listaProceso = ("\nSonidos Exportados de la secuencia: " + _sequence + "\n")
+			
+			-- Activamos la progress bar y vamos procesando el audio
+			lb.progressBar.progressBarOpen useCaptions:true captionsWidth:200--abre la barra de progreso
+			for c=1 to _selectedChars.count do
+			(
+				lb.progressBar.setProgressBarCaption (_selectedChars[c][3])
+				lb.progressBar.setProgressBarValue (c*(100.0/_selectedChars.count))
+				outputLog = (processAudio _selectedChars[c][1] _selectedChars[c][2] _selectedChars[c][3])
+				
+				_listaProceso += (_selectedChars[c][1] As String)
+				_listaProceso += "_"
+				_listaProceso += (_selectedChars[c][2] As String)
+				_listaProceso += "_"
+				_listaProceso += (_selectedChars[c][3] As String)
+				_listaProceso += ", "
+
+				if (outputLog != "") do 
+					_log += outputLog
+			)
+			lb.progressBar.progressBarClose()
+
+
+			print _listaProceso
+			textToShow = ""
+			
+			-- Creamos el texto a mostrar al usuario
+			if _log != "" then 
+			(
+				textToShow = "Audio Exported with errors:\n\n"
+				textToShow += _log
+			)
+			else 
+				textToShow = "Audio Exported correctly"
+
+			-- Show message
+			_dp = (GetDialogPos lb.audioExporter.rollMain)
+			lb.message.show textToShow -- type:#message size:[300,75] pos:[_dp.x+(lb.audioExporter.rollMain.width/2.0)-150,_dp.y+(lb.audioExporter.rollMain.height/2.0)-37.5] modal:false
+		)
+
+
+
+		on dgAudios ColumnHeaderMouseDoubleClick sender e do
+		(
+			if dgAudios.columns.count > 2 and dgAudios.rows.count > 0 do
+			(
+				_columns = (if e.ColumnIndex < 2 then (for i=2 to dgAudios.columns.count-1 collect i) else #(e.ColumnIndex))
+				if _columns.count > 0 do
+				(
+					_value = undefined
+					for c in _columns do
+					(
+						for r=0 to (dgAudios.rows.count-1) where dgAudios.rows.item[r].cells.item[c].readonly == false do
+						(
+							if _value == undefined do
+								_value = not dgAudios.rows.item[r].cells.item[c].value
+							dgAudios.rows.item[r].cells.item[c].value = _value
+						)
+					)
+				)
+			)
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollMain | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		--@gets: point2 | size | tamaño al que se ha redimensionado el rollout
+		------------------------------------------------
+		on rollMainDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollMain | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollMainDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+			if parent.rollMain != undefined then resize [parent.rollMain.width, parent.rollMain.height]
+			initDataGridView()
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollMain | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollMainDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+			
+			parent.opened = false --indica que la herramienta está cerrada.
+			updateToolbarButtons()
+		)
+	)--rollMainDef
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: templateTool | Contiene la herramienta plantilla.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct tl_audioExporter
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,					--@var: category | Categoria de la tool.
+		className = lb.getFileToolName (getThisScriptFilename() as string),	--@var: className | Nombre de la tool.
+		description = "Tool plantilla",		--@var: description | Descripcion de la tool.
+		
+		cfgFile = (lb.config.getToolsIniPath()) + (lb.getFileToolName (getThisScriptFilename() as string)) + ".cfg",	--@var: cfgFile | Archivo de configuracion de la tool.
+			
+		opened = false,			--@var: opened | Indica si la herramienta está abierta.
+			
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--ROLLOUTS
+		------------------------------------------------------------------------------------------------
+		
+		rollMain = rollMainDef,	--@var: rollMain | Almacena el rollout principal de la herramienta.
+			
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: boolean | isOpen | Devuelve información true o false, si la herramienta está abierta o cerrada.
+		------------------------------------------------
+		fn isOpen =
+		(
+			this.opened
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | refreshInterface | Refresca el interface inicial de la herramienta
+		------------------------------------------------
+		fn refreshInterface =
+		(
+			--refresca el interface de la herramienta
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | createInterface | Crea el interface inicial de la herramienta
+		------------------------------------------------
+		fn createInterface =
+		(
+			--crea el interface, lo redimensiona y lo reposiciona
+			createDialog this.rollMain lockwidth:false lockheight:false pos:[-10000,0] style:#(#style_toolwindow, #style_titlebar, #style_sysmenu, #style_resizing)
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | destroyInterface | Destruye el interface de la herramienta.
+		------------------------------------------------
+		fn destroyInterface =
+		(
+			destroyDialog this.rollMain --cierra la herramienta.			
+		),--destroyInterface
+		
+		------------------------------------------------
+		--@fn: undefined | run | Lanza la herramienta.
+		------------------------------------------------
+		fn run =
+		(
+			this.createInterface() --crea el interface.
+			this.opened = true --indica que la herramienta está abierta
+		),--execute
+		
+		------------------------------------------------
+		--@fn: undefined | close | Cierra la herramienta.
+		------------------------------------------------
+		fn close =
+		(
+			this.destroyInterface() --destruye el interface.
+			this.opened = false --indica que la herramienta está cerrada.
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addTool this --añade la tool a la libreria principal	
+		)		
+		
+	)--tl_audioExporter
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------	
+	
+	tl_audioExporter() --crea la herramienta
+)

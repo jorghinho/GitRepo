@@ -1,0 +1,954 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--	Descripcion: Sincroniza los clips de Layout de cámara en Max con el montaje de Layout de Premiere. Genera los nuevos videos. 
+--	Luego hay que  reajustar los videos generados dentro de Premiere, que ya no tendrán ningún trimming
+------------------------------------------------------------------------------------------------------------------------------------------------
+(
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollMain | Contiene la herramienta plantilla.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollMainDef "premiereSync"  width:1000 height:800
+	(
+
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		struct clipInfo (sequence, location, cam, char, duration, trimIn, trimOut, speed, file, silence, start, end)
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) --@var : parent | Herramienta o rolllout del que depende y/o contiene el rollout actual
+		
+		local minRollWidth = 400		--@var: minRollWidth | Ancho mínimo de la herramienta.
+		local minRollHeight = 510		--@var: minRollHeight | Alto mínimo de la herramienta.
+		local selectionBackcolor = (dotnetclass "System.Drawing.Color").transparent
+		local selectionForecolor = (dotnetclass "System.Drawing.Color").black
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		local soxPath = lb.config.getExePath() + "sox.exe"
+		local premiereParserPath = lb.config.getExePath() + "premiereParser.exe" 
+		local videoClips = #()
+		local _sortedClips=#()
+			local indexClips=0
+		local movClips=#()
+			local indexMovs=0
+		local maxClips=#()
+		local sceneCams=#()
+			local currentCamSel
+			local indexCams=0
+		local fps = 24.0
+		local seqPath = "y:\\sequence\\movie\\"
+		local curSeqPath=""
+		local curLoc=""
+		local indexCurLoc=0
+		local layoutEditPath = "video\\edit\\"
+		local layoutPath ="layout"
+		local _clipsEncontrados=#()
+		local _movEncontrados=#()
+		local okPosVisible=[320,150]
+		local okPosHidden=[-320,150]
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		
+		editText etxSearch "Search: " width: 100  pos:[21,22]
+		dropdownList ddl_seqs "Sequences" pos:[130,2] width:140 height:40 items:#("auxiliary", "seq_005a-oil", "seq_010a-moon", "seq_020a-game", "seq_020b-igor", "seq_025a-scott", "seq_027a-parking", "seq_030a-car", "seq_030b-arrival", "seq_030c-lobby", "seq_030e-leave", "seq_040a-intro", "seq_040b-carson", "seq_040c-docu", "seq_040d-caRocket", "seq_050a-white", "seq_060a-room", "seq_060b-order", "seq_070a-letter", "seq_080a-mi", "seq_080b-corridor", "seq_080c-delivery", "seq_090a-veterans", "seq_100a-gigsgags", "seq_110a-llrv", "seq_110b-accident", "seq_120a-plaster", "seq_130a-roof", "seq_140a-training", "seq_150a-helium", "seq_160a-vab", "seq_170a-bye", "seq_180a-map", "seq_190a-gators", "seq_190b-sneak", "seq_200a-bridge", "seq_200b-caught", "seq_210a-trapped", "seq_220a-caShow", "seq_230a-saboteur", "seq_240a-redemt", "seq_240b-kitchen", "seq_240c-copter", "seq_250a-crisis", "seq_250b-caReady", "seq_250c-launch", "seq_260a-badNews", "seq_270a-flying", "seq_280a-cleaning","seq_290a-caOrder" , "seq_300a-hand", "seq_310a-sleeping", "seq_320a-moonland", "seq_320b-noComm", "seq_330a-baseSet", "seq_340a-twoFlags", "seq_340b-kidnap", "seq_350a-deal", "seq_370a-killEm", "seq_380a-runaway", "seq_380b-dieHard", "seq_390a-split", "seq_400a-theFlag", "seq_xxx") tooltips:"Elige una secuencia"
+			
+		--GroupBox grp1 "videoClips de Premiere" pos:[3,72] width:275 height:538
+		button btn_getPrProj "Get Premiere Layout" pos:[21,48] width:113 height:21 enabled:false
+		button btn_seeLayoutMov "See Layout Mov" pos:[140,48] width:97 height:21 enabled:false
+		button btn_exportCSV "Export CSV" pos:[239,48] width:70 height:21 enabled:false
+		button btn_updateVideoFromSVN "update video from SVN" pos:[178,70] height:21 enabled:false
+		button btn_updateprProjFromSVN "update PrProj from SVN" pos:[37,70] height:21 enabled:false
+		multiListBox lbox_clipsPremiere "videoClips" pos:[8,89] width:296 height:34 -- enabled:false selection:#{1, 3}
+		button btn_deleteCam " X - Delete Cam ? ->" enabled: false pos:[310,220] 
+		button btn_OK " ¡¡ OK !!"  pos:okPosHidden
+		
+	 
+	 
+		
+		button btn_fixCamMaxRange "Fix Cam Range -->" pos:[320,120] width:99 height:21 enabled:false
+		button btn_chkMax2Mov "Make Previews -->" pos:[640,160] width:112 height:24 enabled:false toolTip:"Check differences between Cameras and Movs"
+		
+		
+		
+		button btn_refreshMaxClips "Refresh videoClips" pos:[512,48] width:78 height:21
+		
+		
+		--GroupBox grp2 "videoClips de QT" pos:[738,72] width:208 height:536
+		button btn_getMovs "Get Movs Info" pos:[750,48] width:83 height:21 enabled:false
+		button btn_SVNupdateMovs "SVN update Movs" pos:[880,48] width:100 height:21 enabled:false
+		multiListBox lbox_MovClips "Mov videoClips" pos:[760,88] width:210 height:34
+		
+		--GroupBox grp3 "videoClips de Max" pos:[400,72] width:206 height:536
+		button btn_getLayout "Get Layout3d" pos:[408,47] width:83 height:21 enabled:false
+		listbox lbox_maxClips "videoClips de Max" pos:[424,88] width:208 height:34
+
+
+		edittext etx_Pr2Max "info variada 1" pos:[16,624] width:355 height:155 labelOnTop:true readOnly:true
+		edittext etx_Max2Mov "info variada 2" pos:[440,624] width:386 height:151 labelOnTop:true readOnly:true
+		dropdownList ddl_loc "Locations" pos:[480,0] width:107 height:40
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			fn fillClipsFromXml xml =
+			(
+				--struct clipInfo (sequence, location, cam, char, duration, trimIn, trimOut, speed, file, silence, start, end)
+				videoClips = #()
+				
+				xmlDoc = lb.xml.newXmlDoc()
+				xmlDoc.setString(xml)
+				root = xmlDoc.root
+				
+				sequence = (root.getNodes "sequence")[1]
+				for location in (root.getNodes "sequence/location") do
+				(
+					for c in (location.getNodes "clip") do
+					(
+						for v in c.getNodes "video" do
+						(
+							--print (classof (a.getProperty("start")))
+							--print (a.getProperty("start"))
+							clip = clipInfo sequence:(sequence.getProperty("name")) location:(location.getProperty("name")) cam:(c.getProperty("cam")) char:(v.getProperty("charname")) trimIn:(v.getProperty("trimIn") As Number) trimOut:(v.getProperty("trimOut") As Number) speed:(v.getProperty("speed")) duration:(v.getProperty("length") As Number) file:(v.getProperty("path") + "\\" + v.getProperty("filename")) start:(v.getProperty("start") As Number) end:(v.getProperty("end") As Number) 
+							append videoClips clip
+						)
+					)
+				)
+
+				_qsortFnClips = ( fn compareClips c1 c2 = 
+				(
+					if (c1[1].cam As Number) > (c2[1].cam As Number) then
+						1
+					else if (c1[1].cam As Number) < (c2[1].cam As Number) then 
+						-1
+					else
+						0
+				))
+				
+				for c in videoClips do
+				(
+					--Agregamos las columnas de rangos
+					
+				
+					--print c
+
+					--Organizamos los videoClips en un array de arrays que va por localización y luego por posicion en la secuencia
+					
+					_added = false
+					_locationFound = false
+					for i=1 to _sortedClips.count do -- where not _added do
+					(
+						for j=1 to _sortedClips[i].count do -- where not _added do
+						(
+							--print ("Current location: " + _sortedClips[i][j][1].location + " == " + c.location) 
+							if _sortedClips[i][j][1].location == c.location then
+							(
+								--print ("Current camera: " + _sortedClips[i][j][1].cam + " == " + c.cam) 
+								_locationFound = true
+								if _sortedClips[i][j][1].cam == c.cam then
+								(
+									print "Added!"
+									append _sortedClips[i][j] c
+									_added = true
+								)
+							)
+						)
+						
+						if _locationFound then   -- and not _added
+						(
+							print "No hay cámara"
+							append _sortedClips[i] #(c)
+							qsort _sortedClips[i] _qsortFnClips
+							_added = true
+						)
+						print "-----------------------------------------------"
+						
+					)
+					
+					if not _locationFound do
+					(
+						append _sortedClips #(#(c))
+					)
+						
+					
+				)
+
+					
+			)
+			
+			fn prClipRecStart prIndex =
+			(
+				movInfo=lb.video.getVideoInfo videoClips[prIndex].file
+				
+				_prClipRecStart=movInfo.recStart+videoClips[prIndex].trimIn
+			)
+			
+			fn prClipRecEnd prIndex =
+			(
+				movInfo=lb.video.getVideoInfo videoClips[prIndex].file
+				_prClipRecEnd=movInfo.recEndt-videoClips[prIndex].trimOut
+			)
+		
+			fn padString _string numPad char=
+			(
+				while _string.count <numPad do _string=char+_string
+				_string
+			)			
+			
+			fn fillmaxClips = 
+			(
+				
+				maxClips=#()
+				
+				_qsortFn = ( fn compareClips c1 c2 = 
+				(
+					if (c1) > (c2) then
+						1
+					else if (c1) < (c2) then 
+						-1
+					else
+						0
+				))
+				
+				
+				--for _c in cameras do append sceneCams _c
+				sceneCams= lb.cameraFunctions.getSceneCameras()
+				--qsort sceneCams
+				
+				--if resultado then
+				--(
+					for _c in sceneCams do
+					(
+						_dur=(_c.caminfo.recEnd - _c.caminfo.recStart+1) as string
+						_dur=padString _dur 4 "0"
+						_start=(_c.caminfo.recStart) as string
+						_start=padString _start 4 "0"
+						_end=(_c.caminfo.recEnd) as string
+						_end=padString _end 4 "0"
+						camNombre=_c.name+"  "+"["+_dur+"f]"+" - ["+_start +"-"+_end +"]"
+						
+						append maxClips camNombre
+						
+					)
+					qsort maxClips _qsortFn
+				
+				maxClips
+			
+			)
+		
+			------------------------------------------------------------------------------------------------
+			fn systemCall command =
+			(
+				setWaitCursor() 
+				oldClipboard = getclipboardText()
+				if oldClipboard == undefined do oldClipboard = ""
+				oldCurrentDir = sysInfo.currentDir
+				sysInfo.currentDir = lb.config.getExePath()
+				HiddenDOSCommand (command + " 2>&1 | clip")
+				clip = getclipboardText()
+				setclipboardText(oldClipboard)
+				sysInfo.currentDir = oldCurrentDir
+				setArrowCursor() 
+				clip
+			)
+			
+			
+			-------------------------------------------------------------
+			fn buscaCadenaEnArray _arrayOfStrings _cadena=
+			(
+				_encontrados=#()
+				for _i=1 to _arrayOfStrings.count do
+				(
+					_encontrado=matchpattern (_arrayOfStrings[_i] as string) pattern:_cadena 
+					if _encontrado then append _encontrados _i
+				)
+				--print "salida dela busqueda" + (_encontrados as string)
+				return _encontrados
+			)
+			
+			fn checkRanges _prClipIndex _maxClipIndex=
+			(
+				videoClips[_prClipIndex].file
+				movInfo=lb.video.getvideoInfo videoClips[_prClipIndex].file
+				
+				_prClipStart=movInfo.recStart+videoClips[_prClipIndex].trimIn 
+				_prCliplEnd=movInfo.recEnd-videoClips[_prClipIndex].trimOut 
+				_maxClipStart=sceneCams[_maxClipIndex].camInfo.recStart
+				_maxClipEnd=sceneCams[_maxClipIndex].camInfo.recEnd
+				
+				format "checkRangos : % [%-%] -> [%-%]\n" videoClips[_prClipIndex].cam _prClipStart _prCliplEnd  _maxClipStart  _maxClipEnd
+				if (_prClipStart==_maxClipStart) and (_prCliplEnd==_maxClipEnd) then true else false
+			)
+			
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+
+		on lb.premiereSync.rollMain create do
+		(
+			setFocus lb.premiereSync.rollMain.etxSearch.text
+		)
+		on etxSearch changed texto do
+		
+		(
+			print texto
+			
+			encontrado=false
+			i=1
+			format "dll_Seqs [%] -- %\n" i i
+			while not encontrado and i< ddl_seqs.items.count do
+			(
+				patron="*"+texto+"*"
+				
+				encontrado=matchpattern ddl_seqs.items[i] pattern:patron
+				--ddl_seqs.items[i].selected
+				i=i+1
+			)
+			if encontrado then
+			(
+				ddl_seqs.selection=(i-1)
+			)
+			
+			btn_getPrProj.enabled=true
+			btn_seeLayoutMov.enabled=true
+			--messagebox ("Has Elegido: "+ddl_seqs.items[ddl_seqs.selection])
+			btn_updateVideoFromSVN.enabled=true
+			btn_updatePrProjFromSVN.enabled=true
+			
+		)
+		
+		
+		on ddl_seqs selected selSeq do
+		(
+			btn_getPrProj.enabled=true
+			btn_seeLayoutMov.enabled=true
+			--messagebox ("Has Elegido: "+ddl_seqs.items[ddl_seqs.selection])
+			btn_updateVideoFromSVN.enabled=true
+			btn_updatePrProjFromSVN.enabled=true
+			
+		)
+		on btn_getPrProj pressed do
+		(
+		
+			mySeqEditPath=seqPath+ddl_seqs.selected+"\\"+layoutEditPath
+			curSeqPath=seqPAth+ddl_seqs.selected
+			--messagebox mySeqEditPath
+			
+			global 	premiere_file = getOpenFileName "Open premiere file" filename:mySeqEditPath types:"Premiere(*.prproj)"
+		-- 		
+		-- 		if maxfilepath!="" then
+		-- 		(
+		-- 			tok=filterstring maxfilepath "()"
+		-- 			prprojPath=tok[1]+"/video/edit/"
+		-- 			
+		-- 			--premiere_file = "Y:\\sequence\\movie\\seq_060b-order\\video\\edit\\seq_060b-order_edit.prproj"
+					if premiere_file != undefined then
+					(
+						--edtFilename.text = premiere_file
+						encodeCommand = "\"" + premiereParserPath + "\" " + premiere_file
+						
+						xml = systemCall(encodeCommand)
+						
+						--getSceneCamerasInfo
+						fillClipsFromXml(xml)   -- rellena el array 'videoClips' 
+						
+						
+						PrLocations=#()
+						PrClips=#()
+						for i=1 to videoClips.count do
+						(
+							appendifunique prLocations videoClips[i].location
+							--print videoClips[i].file
+							-- metemos información de trimming y velocidad 
+							
+							
+				
+							movFileInfo=lb.video.getVideoInfo videoClips[i].file
+							--print movFileInfo
+							
+							movStartTrimmed=padString ((movFileInfo.recStart+videoClips[i].trimIn) as string) 4 "0"
+							movEndTrimmed=padString ((movFileInfo.recEnd-videoClips[i].trimOut) as string) 4 "0"
+							--print movEndTrimmed
+							
+							--movRecEnd=padString (movFileInfo.recEnd as string) 4 "0"
+							
+							_idCam="("+videoClips[i].location+")_cam"+videoClips[i].cam
+							_dur=padString (videoClips[i].duration as string) 4 "0"
+							
+							print _idCam
+							clipName=  _idCam +" ["+_dur+ "f]-"+videoClips[i].speed +"-["+movStartTrimmed+"-"+movEndTrimmed+"] - [->"+(videoClips[i].trimIn as string)+"-"+(videoClips[i].trimOut as string)+"<-]" --  ddl_seqs.selected+
+							
+							
+							append prClips clipName
+							
+							--format "%\n" videoClips[i].location
+							-- lbox_clipsPremiere[i]=videoClips[i][1][1]
+						)
+						
+						ddl_loc.items= prLocations
+						ddl_loc.selection=1
+						curLoc=ddl_loc.items[1]
+						
+						lbox_clipsPremiere.items=prClips
+						btn_getMovs.enabled=true
+						btn_getLayout.enabled=true
+						btn_exportCSV.enabled=true
+						
+					)
+					
+		-- 		)
+		-- 		
+		-- 		else  messagebox "No hay ninguna escena cargada !!!"
+			curLoc=ddl_loc.selected
+			indexCurLoc=ddl_loc.selection
+			format "btn_getLayout - curLoc=%  -- indexCurLoc=%\n" curLoc indexCurLoc
+		
+		)
+		
+		on btn_updateVideoFromSVN pressed do
+		(
+			_seqName=ddl_seqs.selected
+			mySeqVideoPath=seqPath+_seqName+"\\"+"video"+"\\"
+			--print mySeqVideoPath
+			mySeqAudioPath=seqPath+_seqName+"\\"+"sound"+"\\"
+			layoutVideoFilePath=mySeqVideoPath+_seqName+"_layout.mov"
+			layoutEditFilePath=mySeqVideoPath+"edit\\"+_seqName+"_edit.prproj"
+			--layoutAudioPath=
+			--shellLaunch layoutEditFilePath ""
+			
+			format "¿audio actualizado?: %\n" (lb.svn.isFolderUpdated mySeqAudioPath)
+			
+			if not (lb.svn.isFolderUpdated layoutVideoFilePath) then lb.svn.svnUpdate layoutVideoFilePath
+			if not (lb.svn.isFolderUpdated mySeqAudioPath) then lb.svn.svnUpdate mySeqAudioPath
+			
+			print layoutEditFilePath
+			print layoutVideoFilePath
+			print mySeqAudioPath
+		)
+		
+		on btn_updatePrProjFromSVN pressed do
+		(
+			_seqName=ddl_seqs.selected
+			mySeqVideoPath=seqPath+_seqName+"\\"+"video"+"\\"
+			print mySeqVideoPath
+			mySeqAudioPath=seqPath+_seqName+"\\"+"sound"+"\\"
+			layoutVideoFilePath=mySeqVideoPath+_seqName+"_layout.mov"
+			layoutEditFilePath=mySeqVideoPath+"edit\\"+_seqName+"_edit.prproj"
+			--layoutAudioPath=
+			--shellLaunch layoutEditFilePath ""
+			
+			format "¿audio actualizado?: %\n" (lb.svn.isFolderUpdated mySeqAudioPath)
+			
+			if not (lb.svn.isFolderUpdated layoutEditFilePath) then lb.svn.svnUpdate layoutEditFilePath
+			--if not (lb.svn.isFolderUpdated mySeqAudioPath) then lb.svn.svnUpdate mySeqAudioPath
+			
+			print layoutEditFilePath
+			print layoutVideoFilePath
+			print mySeqAudioPath
+		)
+		
+		on btn_seeLayoutMov pressed do
+		(
+			_seqName=ddl_seqs.selected
+			mySeqVideoPath=seqPath+_seqName+"\\"+"video"+"\\"
+			--print mySeqVideoPath
+			
+			layoutVideoFilePath=mySeqVideoPath+_seqName+"_layout.mov"
+			print layoutVideoFilePath
+			shellLaunch layoutVideoFilePath ""
+			
+			
+			--curSeqPath=seqPath+ddl_seqs.selected
+		)
+		on btn_fixCamMaxRange pressed do
+		(
+			
+			format "videoClips encontrados: %\n" _clipsEncontrados.count
+			--format " %  --> % [%-%] -> [%-%]\n " _clipsEncontrados    sceneCams[currentCamSel].name sceneCams[currentCamSel].recStart sceneCams[currentCamSel].recEnd  newCamRecStart newCamRecEnd --maxClips[currentCamSel]
+			
+			for i in _clipsEncontrados do
+			(
+				movFileInfo=lb.video.getVideoInfo videoClips[i].file
+				
+				print movFileInfo
+				
+				newCamRecStart=movFileInfo.recStart+videoClips[i].trimIn
+				newCamRecEnd = movFileInfo.recEnd-videoClips[i].trimOut
+				
+				movStartTrimmed=padString ((movFileInfo.recStart+videoClips[i].trimIn) as string) 4 "0"
+				movEndTrimmed=padString ((movFileInfo.recEnd-videoClips[i].trimOut) as string) 4 "0"
+		
+				format " %  --> % [%-%] -> [%-%]\n " videoClips[i].cam    sceneCams[currentCamSel].name sceneCams[currentCamSel].recStart sceneCams[currentCamSel].recEnd  newCamRecStart newCamRecEnd --maxClips[currentCamSel]
+				
+				sceneCams[currentCamSel].recStart=   newCamRecStart 
+				sceneCams[currentCamSel].recEnd=newCamRecEnd 
+				
+				lbox_MaxClips.items=#()
+				lbox_MaxClips.items=fillmaxClips()
+				
+				setFocus lb.premiereSync.rollMain.lbox_maxClips
+				
+				
+		--	currentCamSel	
+			)
+			
+			
+			
+		)
+
+		on btn_refreshMaxClips pressed do
+		(
+			lbox_MaxClips.items=#()
+			lbox_MaxClips.items=fillmaxClips()
+			
+			ddl_loc.selection=indexCurLoc
+			curLoc=ddl_loc.selected
+			format "indexCurLoc: %  -- curLoc: %\n" indexCurLoc curLoc
+		)
+		on btn_getMovs pressed do
+		(
+			print "cogiendo movs"
+			
+			fn fillMovClips
+			movClips=#()
+			for i=1 to videoClips.count do
+			(
+				
+				if (doesFileExist videoClips[i].file) then format "OK - %\n" videoClips[i].file else  format "ERROR - %\n" 
+					
+				_name= getFilenameFile videoClips[i].file
+				tok= filterString _name "(_"
+				movFilePath= videoClips[i].file
+				movFileInfo=lb.video.getVideoInfo movFilePath
+				
+				-- padding duracion a 4 digitos
+				_dur=(movFileInfo.duration as string) 
+				_dur=padString _dur 4 "0"
+				_start=(movFileInfo.recStart as string)
+				_start=padString _start 4 "0"
+				_end=(movFileInfo.recEnd as string)
+				_end=padString _end 4 "0"
+				
+				movName="("+tok[3]+"_"+tok[4]+" ["+_dur+"f] - ["+_start+"-"+_end+"]"
+				
+				
+				--appendifunique movClips movName
+				append movClips movName
+			)
+			
+			lbox_MovClips.items = movClips
+			
+		)
+		on lbox_MovClips doubleClicked dc do
+		(
+			print videoClips[dc].file
+			shellLaunch videoClips[dc].file ""
+			
+		)
+		on btn_getLayout pressed do
+		(
+			
+			
+			layoutFileName=curSeqPath+"("+curLoc+")"+"\\"+layoutPath+"\\"
+			layoutMaxFile = getOpenFileName "Open Layout file" filename:layoutFileName types:"3dsMax(*.max)"
+			print layoutMaxFile
+			if layoutMaxFile!= undefined then
+			(
+				resultado= loadmaxfile  layoutMaxFile quiet:true
+				print resultado
+				if resultado  then
+				(
+					lbox_MaxClips.items=fillmaxClips()
+					
+					curLoc=ddl_loc.selected
+					indexCurLoc=ddl_loc.selection
+					format "btn_getLayout - curLoc=%  -- indexCurLoc=%\n" curLoc indexCurLoc
+				)
+				
+			)
+			
+		)
+		on btn_deleteCam pressed do
+		(
+			_c=lbox_maxClips.selection		
+			print sceneCams[_c]
+			lb.camerafunctions.removeCamInfo sceneCams[_c]
+			delete sceneCams[_c]
+			btn_deleteCam.enabled=false
+			lbox_MaxClips.items=#()
+			lbox_MaxClips.items=fillmaxClips()
+			
+			setFocus lb.premiereSync.rollMain.lbox_maxClips
+			
+		)
+		/*
+		on lbox_MovClips selected _c do
+		(
+			format "% -- %\n" lbox_MovClips.selected  (videoClips[lbox_MovClips.selection].file)
+		)
+		*/
+		on lbox_maxClips selected _c do
+		(
+			--print "lbx_MaxClips selected"
+			_cam=maxClips[_c]
+			--format "% \n" _c
+			_idCam=_c
+		
+			btn_fixCamMaxRange.enabled=false
+			
+			currentCamSel=lbox_maxClips.Selection
+			--print maxClips[currentCamSel]
+			--print sceneCams[currentCamSel].name
+			
+			lbox_clipsPremiere.selection=#{lbox_maxClips.Selection}
+			
+			-- formatea el nombre de la camara para poder buscarla en el array
+			
+			tok=filterString sceneCams[currentCamSel].name "_"
+			-- paraBuscar = "(ran)_cam020"
+			paraBuscar=(("("+curLoc+")_cam"+tok[2]) as string)+"*"
+			
+			-- buscando en videoClips
+			format "paraBuscar = '%'\n" paraBuscar
+			--print "antes de buscar"
+			_clipsEncontrados = buscaCadenaEnArray lbox_clipsPremiere.items paraBuscar
+			selectedIndexCams= _clipsEncontrados
+			
+			format "Location:  %\n" curLoc
+			
+			_bitArray=#{}
+			for _i in _clipsEncontrados do
+			(
+				format "Encontrada cadena: '%' en el índice: % \n" paraBuscar _i
+				append _bitArray _i
+			)
+			
+			lbox_clipsPremiere.selection=_bitArray
+			btn_fixCamMaxRange.enabled=(_clipsEncontrados.count==1)    -- (_bitArray.count==1)
+			--btn_deleteCam.enabled=(_clipsEncontrados.count==0)    
+			if (_clipsEncontrados.count==0)   then 
+			(
+				btn_deleteCam.pos=[310,220]
+				btn_deleteCam.enabled=true
+				btn_OK.pos=okPosHidden
+			)
+			else
+			(
+				btn_deleteCam.pos=[-310,220]
+				btn_OK.pos=okPosVisible
+			)
+			
+			
+			if (_clipsEncontrados.count==1) then 
+			(
+				
+				
+				iguales=checkRanges _clipsEncontrados[1] currentCamSel
+				if iguales then 
+				(
+					btn_Ok.pos = okPosVisible
+					btn_fixCamMaxRange.enabled=false
+					format "rangos iguales\n\n\n"
+				)
+				else 
+				(
+					format  "rangos DISTINTOS\n\n\n"
+					btn_OK.pos=okPosHidden
+					btn_fixCamMaxRange.enabled=true
+				)
+			)
+			
+			-- buscando en MovClips
+			format "paraBuscar = '%'\n" paraBuscar
+			--print "antes de buscar"
+			_movEncontrados = buscaCadenaEnArray lbox_MovClips.items paraBuscar
+			selectedIndexCams= _movEncontrados
+			
+			format "Location:  %\n" curLoc
+			
+			_bitArray=#{}
+			for _i in _movEncontrados do
+			(
+				format "Encontrada cadena: '%' en el índice: % \n" paraBuscar _i
+				append _bitArray _i
+			)
+			
+			lbox_MovClips.selection=_bitArray
+			--btn_fixCamMaxRange.enabled=(_clipsEncontrados.count==1)    -- (_bitArray.count==1)
+			--btn_deleteCam.enabled=(_clipsEncontrados.count==0)    
+			/*
+			if (_clipsEncontrados.count==0)   then 
+			(
+				btn_deleteCam.pos=[310,220]
+				btn_deleteCam.enabled=true
+				btn_OK.pos=okPosHidden
+			)
+			else
+			(
+				btn_deleteCam.pos=[-310,220]
+				btn_OK.pos=okPosVisible
+			)
+			
+			
+			if (_clipsEncontrados.count==1) then 
+			(
+				
+				
+				iguales=checkRanges _clipsEncontrados[1] currentCamSel
+				if iguales then 
+				(
+					btn_Ok.pos = okPosVisible
+					btn_fixCamMaxRange.enabled=false
+					format "rangos iguales\n\n\n"
+				)
+				else 
+				(
+					format  "rangos DISTINTOS\n\n\n"
+					btn_OK.pos=okPosHidden
+					btn_fixCamMaxRange.enabled=true
+				)
+			)
+			*/
+			
+		)
+		on lbox_maxClips doubleClicked _c do
+		(
+			_cam=sceneCams[_c]
+			format "Rango: % -- %\n" _cam.recStart _cam.recEnd
+			lb.cameraFunctions.setAnimRangeFromCameras _cam
+			lb.cameraFunctions.setViewportCamera viewport.activeViewport _cam
+			format "curLoc: %\n" curLoc
+			
+		)
+		on ddl_loc selected locSel do
+		(
+			print ddl_loc.selected
+			curLoc=ddl_loc.selected
+			
+		)
+		
+		on btn_exportCSV pressed do
+		(
+				
+			for i in _sortedClips do
+			(
+				print i[1][1].location
+			)
+
+
+			csvFilePath=getFilenamePath premiere_file
+			csvFileName=getFilenameFile   premiere_file
+			csvFileNameFull= csvFilePath+csvFileName+"_rangosMax.csv"
+			
+			csvFile=openfile csvFileNameFull mode:"w"
+			format "FECHA;;HORA:;\n" to:csvFile
+			lt=getLocalTime()
+			format "%-%-%;%:%:%\n" lt[1] lt[2] lt[3] lt[5] lt[6] lt[7]  to: csvFile
+			format ";;\n" to: csvFile
+			format "%;\n" csvFileName   to: csvFile
+			format "\"Loc\";\"camera\";\"spd\";\"Start\";\"End\";\"Dur\"\n"   to: csvFile
+			for i=1 to _sortedClips.count do
+			(
+				repetido=false
+				anterior=clipInfo cam:""
+				for j=1 to _sortedClips[i].count do 
+				(
+					
+					info=_sortedClips[i][j][1]
+					movInfo=lb.video.getVideoInfo info.file
+					repeFlag=""
+					postrepeFlag=""
+					timeWarpFlag=""
+					if info.cam==anterior.cam then repetido=true
+						
+					if info.trimIn !=0 or info.trimOut!=0 then 
+					(
+	
+						-- repeFlag=" "+((movInfo.recStart+info.trimIn) as string) +"," +((movInfo.recEnd-info.trimOut) as string)+","
+						repeFlag= "  -- TRIMMED --"
+						if repetido  then repeFlag= " -- TRIMMED -- \"; \" -- SPLITTED -- "
+						repetido=false
+
+					)
+	
+					if info.speed !="1.0" then 
+					(
+						timeWarpFlag=";\"; -- TIMEWARP --"
+					)
+	
+					--linea=" ,"+"cam_"+info.cam+","+info.recStart+","+info.recEnd+","
+					--format "\"%\";\"cam_%\";\"%\";\"%\";\"%\";\"%\"\n" info.location info.cam (movInfo.recStart+info.trimIn) (movInfo.recEnd-info.trimOut) info.duration repeFlag   to: csvFile
+					format "\"%\";\"cam_%\";\"%\";\"%\";\"%\";\"%\";\"%\";\"%\"\n" info.location info.cam info.speed (movInfo.recStart+info.trimIn) (movInfo.recEnd-info.trimOut) info.duration repeFlag  timeWarpFlag to: csvFile
+					--format linea -- to:file
+					anterior=info
+	
+				)
+					
+			)
+			
+			close csvFile
+
+
+			-- for i in videoClips do 
+			-- (
+			-- 	repetido=false
+			-- 	videoInfo=lb.video.getVideoInfo i.file
+			-- 	
+			-- 	of 
+			-- 	format "% -- cam_% -- rangoIn % -- rangoOut %\n"  i.location i.cam videoInfo.recStart videoInfo.recEnd
+			-- 	--findItem
+
+			-- 	anterior=i.cam
+			-- )
+			comando= "explorer.exe "+ csvFilePath
+			systemCall comando
+			systemCall csvFilePath
+		)
+	
+	)--rollMainDef
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: templateTool | Contiene la herramienta plantilla.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct tl_premiereSync
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,					--@var: category | Categoria de la tool.
+		className = lb.getFileToolName (getThisScriptFilename() as string),	--@var: className | Nombre de la tool.
+		description = "Tool plantilla",		--@var: description | Descripcion de la tool.
+		
+		cfgFile = (lb.config.getToolsIniPath()) + (lb.getFileToolName (getThisScriptFilename() as string)) + ".cfg",	--@var: cfgFile | Archivo de configuracion de la tool.
+			
+		opened = false,			--@var: opened | Indica si la herramienta está abierta.
+			
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--ROLLOUTS
+		------------------------------------------------------------------------------------------------
+		
+		rollMain = rollMainDef,	--@var: rollMain | Almacena el rollout principal de la herramienta.
+			
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: boolean | isOpen | Devuelve información true o false, si la herramienta está abierta o cerrada.
+		------------------------------------------------
+		fn isOpen =
+		(
+			this.opened
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | refreshInterface | Refresca el interface inicial de la herramienta
+		------------------------------------------------
+		fn refreshInterface =
+		(
+			--refresca el interface de la herramienta
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | createInterface | Crea el interface inicial de la herramienta
+		------------------------------------------------
+		fn createInterface =
+		(
+			--crea el interface, lo redimensiona y lo reposiciona
+			createDialog this.rollMain  style:#(#style_toolwindow, #style_titlebar, #style_sysmenu, #style_resizing) --lockwidth:false lockheight:false
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | destroyInterface | Destruye el interface de la herramienta.
+		------------------------------------------------
+		fn destroyInterface =
+		(
+			destroyDialog this.rollMain --cierra la herramienta.			
+		),--destroyInterface
+		
+		------------------------------------------------
+		--@fn: undefined | run | Lanza la herramienta.
+		------------------------------------------------
+		fn run =
+		(
+			this.createInterface() --crea el interface.
+			this.opened = true --indica que la herramienta está abierta
+		),--execute
+		
+		------------------------------------------------
+		--@fn: undefined | close | Cierra la herramienta.
+		------------------------------------------------
+		fn close =
+		(
+			this.destroyInterface() --destruye el interface.
+			this.opened = false --indica que la herramienta está cerrada.
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addTool this --añade la tool a la libreria principal	
+		)		
+
+
+		
+	)--tl_templateTool
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------	
+	
+	tl_premiereSync() --crea la herramienta
+)

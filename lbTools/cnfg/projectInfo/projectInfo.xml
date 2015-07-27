@@ -1,0 +1,968 @@
+<projects>
+
+  <project>
+    <id>tdj</id>
+    <name>Tadeo Jones</name>
+    <root>z:\</root>
+    <networkRoot>\\lbdata001\z\</networkRoot>
+    <svnRoot>https://lbdata001/svn/</svnRoot>
+
+    <parameters>
+
+      <paramblock>
+        <type>common</type>
+        <name>common</name>
+        <frameRate>24.0</frameRate>
+        <size>
+          <width>2048</width>
+          <height>1108</height>
+          <aspect>1.0</aspect>
+        </size>
+        <gamma>
+          <input>1.84</input>
+          <output>1.0</output>
+        </gamma>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-goy</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-pr1</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-pr2</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-pr3</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-pf1</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>192</height>
+          <width>512</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-pf2</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>192</height>
+          <width>512</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-pf3</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>192</height>
+          <width>512</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-pf4</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>192</height>
+          <width>512</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-pf5</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>192</height>
+          <width>512</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-pf6</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>192</height>
+          <width>512</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-pf7</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>192</height>
+          <width>512</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-pf8</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>192</height>
+          <width>512</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-pf9</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>192</height>
+          <width>512</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-pf10</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>192</height>
+          <width>512</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-pf11</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>512</height>
+          <width>192</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-ct1</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-ct2</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-ct3</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-ct4</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-ct5</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-ct6</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-ct7</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-ct8</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-ct9</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01x00</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01x01</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01x02</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01x03</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01x04</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01x05</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01x06</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01x07</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01x08</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01x09</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01x10</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01x11</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01x12</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01x13</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01x14</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01x15</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01x16</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01x17</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01x18</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01x19</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01x20</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01x21</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01x22</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01x23</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01x24</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01x25</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01x26</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01xpromo01</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>576</height>
+          <width>720</width>
+          <aspect>1.459</aspect>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01xpromo02</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>576</height>
+          <width>720</width>
+          <aspect>1.459</aspect>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01xpromo03</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>576</height>
+          <width>720</width>
+          <aspect>1.459</aspect>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01xpromo04</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>576</height>
+          <width>720</width>
+          <aspect>1.459</aspect>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01xpromo05</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>576</height>
+          <width>720</width>
+          <aspect>1.459</aspect>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01xpromo06</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>576</height>
+          <width>720</width>
+          <aspect>1.459</aspect>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01xpromo07</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>576</height>
+          <width>720</width>
+          <aspect>1.459</aspect>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01xpromo08</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>576</height>
+          <width>720</width>
+          <aspect>1.459</aspect>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01xpromo09</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>576</height>
+          <width>720</width>
+          <aspect>1.459</aspect>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_505-01xpromo10</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>576</height>
+          <width>720</width>
+          <aspect>1.459</aspect>
+        </size>
+      </paramblock>
+
+    </parameters>
+  </project>
+
+  <project>
+    <id>ctf</id>
+    <name>Capture the Flag</name>
+    <root>y:\</root>
+    <networkRoot>\\lbdata001\y\</networkRoot>
+    <svnRoot>https://lbdata001/svn/ctf_</svnRoot>
+
+    <parameters>
+
+      <paramblock>
+        <type>common</type>
+        <name>common</name>
+        <frameRate>24.0</frameRate>
+        <size>
+          <width>2048</width>
+          <height>872</height>
+          <aspect>1.0</aspect>
+        </size>
+        <gamma>
+          <input>1.84</input>
+          <output>1.0</output>
+        </gamma>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-cine</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-cine(cin)</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-cine(mkb)</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-ctDueloA</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>    
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-ctDueloA(nos)</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>    
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-ctDueloB</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>    
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-ctDueloB(nos)</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>      
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-ctElGranDictador</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock> 
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-ctElGranDictador(nos)</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-ctIgorVsBrasabotA</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-ctIgorVsBrasabotA(nos)</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-ctIgorVsBrasabotB</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock> 
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-ctIgorVsBrasabotB(nos)</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-ctMoonWalk</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock> 
+      
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-ctMoonWalk(mkb)</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-uvas2015</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-pfIgorRocket(pf2)</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-pfMoonWalk</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-pfMoonWalk(pf1)</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-pfCoundown5</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-pfGrandpa</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-pfGrandpa(pf4)</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-pfIgorRocket</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-auryn</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>seq_500-pfCoundown5(pf3)</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>1080</height>
+          <width>1920</width>
+        </size>
+      </paramblock>                             
+    </parameters>
+       
+  </project>
+
+  <project>
+    <id>cmn</id>
+    <name>Common</name>
+    <root>r:\</root>
+    <networkRoot>\\lbdata001\r\</networkRoot>
+    <svnRoot>https://lbdata001/svn/common_</svnRoot>
+
+    <parameters>
+
+      <paramblock>
+        <type>common</type>
+        <name>common</name>
+        <frameRate>24.0</frameRate>
+        <size>
+          <height>872</height>
+          <width>2048</width>
+          <aspect>1.0</aspect>
+        </size>
+        <gamma>
+          <input>1.84</input>
+          <output>1.0</output>
+        </gamma>
+      </paramblock>
+
+      <paramblock>
+        <type>override</type>
+        <name>s0001</name>
+        <frameRate>25.0</frameRate>
+        <size>
+          <height>436</height>
+          <width>1024</width>
+          <aspect>1.0</aspect>
+        </size>
+        <gamma>
+          <input>2.2</input>
+          <output>1.0</output>
+        </gamma>
+      </paramblock>
+
+    </parameters>
+  </project>
+</projects>

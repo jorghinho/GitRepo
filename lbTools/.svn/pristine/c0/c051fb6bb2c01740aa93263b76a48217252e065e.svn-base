@@ -1,0 +1,1732 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--STRUCTS
+------------------------------------------------------------------------------------------------------------------------------------------------
+
+------------------------------------------------------------------------------------------------------------------------------------------------
+--Descripcion: libreria de presets
+------------------------------------------------------------------------------------------------------------------------------------------------
+(
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--struct para la informacion de preset
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct str_presetData
+	(
+		path = "",
+		name = "",
+		version = 1.0,
+		files = #()
+	)
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--struct para la informacin de cada archivo que carga un preset
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct str_presetFileData
+	(
+		file = "",
+		loadMode = #xrefMeshObjects,
+		nodeVariations = #(),
+		nodeTransforms = #()
+	)
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--struct para las variaciones de un preset
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct str_nodeVariationData
+	(
+		node = undefined,
+		type = undefined,
+		value = undefined,
+		matId = undefined,
+		matName = undefined,
+		submatName = undefined,
+		morphChannel = undefined,
+		morphChannelName = undefined
+	)
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--struct para las variaciones de posicion de objetos de un preset
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct str_nodeTransformData
+	(
+		node = undefined,
+		transform = undefined
+	)
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: presets | Contiene la libreria de presets.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct lib_presets
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,					--@var: category | Categoria de la libreria.
+		className = lb.getFileLibName (getThisScriptFilename() as string),	--@var: name | Nombre de la libreria.
+		description = "Librería presets",	--@var: description | Descripcion de la libreria.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		--structs para la informacion de un preset 
+		presetData = str_presetData,
+		presetFileData = str_presetFileData,
+		nodeVariationData = str_nodeVariationData,
+		nodeTransformData = str_nodeTransformData,
+		
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+				
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+
+		-- Reemplaza la parte de preset del nombre (la segunda entre corchetes)
+		-- chr_nombre.versión{subVersión-preset}_tipo
+		fn presetNamePartReplace fullname newText =
+		(
+			_presetNamePart = (filterString (filterString fullname "{}()")[2] "-")[2]
+			substituteString fullname ("-" + _presetNamePart) ("-" + newText) 
+		),
+
+		-- Reemplaza la parte de subversion del nombre (la primera entre corchetes)
+		-- chr_nombre.versión{subVersión-preset}_tipo
+		fn subversionNamePartReplace fullname newText =
+		(
+			_presetNamePart = (filterString (filterString fullname "{}()")[2] "-")[1]
+			substituteString fullname (_presetNamePart + "-") (newText + "-") 
+		),
+
+		------------------------------------------------
+		--Devuelve #checked, #unchecked y #warning si alguno de los archivos que debe cargar el preset no existe
+		--para calcular si un preset esta verificado, lo calcula en funcion de si estan checkeados los archivos que tiene que cargar el preset. Si alguno no existe debe dar warning.
+		------------------------------------------------
+		fn getPresetCheckedState filename parentState:#checked =
+		(
+			_checkedState = parentState
+
+			_presetData = this.readPresetData filename --obtiene la info del preset
+
+			--recorre los archivos que tiene que cargar un preset y mira si estan checkeados
+			for _file in _presetData.files while _checkedState != #unChecked do
+			(
+				if not doesfileExist _file.file then 
+				(
+					_checkedState = #warning
+				)
+				else
+				(
+					if (getFilenameType _file.file) == ".prt" then
+					(
+						if not doesFileExist _file.file then _checkedState = #warning
+						else _checkedState = getPresetCheckedState _file.file parentState: _checkedState
+					)
+					else
+					(
+						if not doesfileExist _file.file then _checkedState = #warning
+						else if not lb.fileInfo.isFileChecked _file.file then _checkedState = #unChecked
+					)
+				)
+			)--for
+			
+			_checkedState
+		),
+
+		------------------------------------------------
+		--Devuelve un listado de los maxes que componen el preset
+		------------------------------------------------
+		fn getPresetComponents filename =
+		(
+			_result = #()
+
+			_presetData = this.readPresetData filename --obtiene la info del preset
+
+			for _file in _presetData.files do
+			(
+				if (getFilenameType _file.file) == ".prt" then
+				(
+					if doesFileExist _file.file do
+						_result = _result + getPresetComponents _file.file
+				)
+				else
+				(
+					append _result _file.file
+				)
+			)--for
+			
+			_result
+		),
+
+		------------------------------------------------
+		--Lee la informacion de un preset y la devuelve en un arbol de structs
+		------------------------------------------------		
+		fn readPresetData filename =
+		(
+			_presetData = undefined
+
+			--carga en memoria el preset
+			_xmlDoc = lb.xml.newXmlDoc()
+			_xmlDoc.load filename
+
+			--crea el struct para el preset
+			_presetData = this.presetData()
+
+			--almacena los parametros principales
+			_presetData.path = getFileNamePath filename
+			_presetData.name = getFileNameFile filename
+
+			--obtiene la version
+			_root = _xmlDoc.getNode "preset"
+			_presetData.version = (_root.getProperty "version") as string
+
+			------------------------------------------------
+			--obtiene los archivos del preset y los recorre para almacenar su informacion
+			_files = _xmlDoc.getNodes "preset/files/file"
+
+			for _file in _files do
+			(
+				_fileData = this.presetFileData()
+				
+				_fileData.file = _file.getProperty "path"
+				_fileData.loadMode = (_file.getProperty "loadMode") as name
+
+				------------------------------------------------
+				--almacena las variaciones de los nodos
+
+				_nodeVariations = _file.getNodes "nodeVariations"	
+							
+				for _variation in _nodeVariations do
+				(
+					_nodeName = _variation.getProperty "name"
+					_currNodeVariations = _variation.getNodes "variation"
+
+					for _var in _currNodeVariations do
+					(
+						_varType = (_var.getProperty "type") as name
+						case _varType of
+						(
+							#Morph:
+							(
+								_varValue = try (_var.getProperty "value") as integer catch( undefined )
+								_varMorphChannel = try (_var.getProperty "channel") as integer catch( undefined )
+								_varMorphChannelName = try (_var.getProperty "channelName") as string catch( undefined )
+								if _varValue != undefined and _varValue != undefined then
+								(
+									append _fileData.nodeVariations (str_nodeVariationData node:_nodeName type:_varType value:_varValue morphChannel:_varMorphChannel morphChannelName:_varMorphChannelName)
+								)
+							)
+							#asset:
+							(
+								_varValue = try (_var.getProperty "value") as String catch( undefined )
+								append _fileData.nodeVariations (str_nodeVariationData node:_nodeName type:_varType value:_varValue)
+							)
+							#material:
+							(
+
+								_varMatName = try (_var.getProperty "matName") as String catch(undefined)
+								_varSubMatName = try (_var.getProperty "subMatName") as String catch(undefined)
+
+								if _varMatName != "undefined" and _varSubMatName != "undefined" then
+								(
+									append _fileData.nodeVariations (str_nodeVariationData node:_nodeName type:_varType matName:_varMatName subMatName:_varSubMatName)
+								)
+								else
+								(
+									_varMatId = try (_var.getProperty "matID") as integer catch( undefined )
+									_varValue = try (_var.getProperty "value") as integer catch( undefined )
+									
+									if _varMatId != "undefined" and _varValue != "undefined" then
+									(
+										append _fileData.nodeVariations (str_nodeVariationData node:_nodeName type:_varType value:_varValue matId:_varMatId)
+									)
+								)
+							)
+						)
+					)--for
+				)--for
+				------------------------------------------------
+
+				------------------------------------------------
+				--almacena las variacions de transformacion en los nodos
+
+				_nodeTransforms = _file.getNodes "nodeTransform"
+							
+				for _nodeTrans in _nodeTransforms do
+				(
+					_nodeName = _nodeTrans.getProperty "name"					
+					_transform = execute (_nodeTrans.getProperty "transform")
+					append _fileData.nodeTransforms (this.nodeTransformData node:_nodeName transform:_transform)
+				)--for
+				------------------------------------------------
+
+				--añade el file al presetData
+				append _presetData.files _fileData
+			)--for
+			------------------------------------------------
+
+			_presetData
+		),
+	
+
+		-- Coge un struct de variación y lo aplica a quien corresponda.
+		-- Acepta structs del tipo:
+		-- struct _strVariation (node, type, value, matId, matName, subMatName, morphChannel, morphChannelName, trackName)
+		fn applyVariation variationStr =
+		(
+			--case of variationStr.type
+			--(
+
+			--)
+		),
+
+		-- Retorna un Array de structs con las variaciones que hay en el xml
+		-- El struct que retorna es de este tipo:
+		-- struct _strVariation (node, type, value, matId, matName, subMatName, morphChannel, morphChannelName, trackName) 
+		fn collectVariation =
+		(
+
+		),
+
+		-- ***PRIVADA*** Esta función está pensada para buscar coincidencias de preset dentro de loadAsset
+		-- Busca si el preset está duplicado en la escena, y si es el caso retorna el índice que hay que ponerle al nombre
+		-- Si no se puede 
+		--fn _loadingDuplicatedPreset presetFilename then
+
+		------------------------------------------------
+		--@fn: boolean | load | carga un preset
+		--@gets: string | presetFilename | Ruta del fichero a cargar
+		------------------------------------------------
+		fn loadPreset presetFilename renameParts:true renamePartsMaterials:true loadSkinData:true stackTrace:#() = 
+		(
+			struct str_loadPresetData
+			(
+				meshNodes = #(),
+				meshAssets = #(),
+				
+				facialNodes = #(),
+				facialAssets = #(),
+
+				animNodes = #(),
+				animAssets = #(),
+
+				allNodes = #(),
+				abort = false
+			)
+
+			_loadPresetData = str_loadPresetData()
+			
+			_meshVariations = #()
+			_meshTransforms = #()
+			_animFileLoaded = false
+			_fileLoaded = false
+			_loadedNodes = #()
+
+			_presetNodes = #()
+			_assetNodes = undefined
+			_asset = undefined
+			_presetFileParts = filterString (getFileNameFile presetFilename) "_"
+			_presetAssetType = _presetFileParts[1]
+			
+			_xmlDoc = lb.xml.newXmlDoc()
+			_xmlLoaded = _xmlDoc.load presetFilename
+			
+			_from = undefined
+			_to = undefined
+
+			if _xmlLoaded then
+			(
+				_xmlFileElements = _xmlDoc.root.getNodes "preset/files/file"
+				
+				_allFilesExist = true
+				for _xmlF in _xmlFileElements where _allFilesExist and not doesfileExist (_xmlF.getProperty "path") do _allFilesExist = false
+				
+				if _allFilesExist then
+				(
+					setWaitCursor()
+					disableSceneRedraw()
+					gc()
+				
+					with undo off
+					(
+						-----------------------------------------------------------
+						--antes de renombrar el preset debe averiguar si ese preset esta cargado ya en la escena y si es asi añadirle un ínidce
+						--calculo del nombre del preset con indice si está duplicado para usarlo más adelante en la carga
+						-----------------------------------------------------------
+
+						_presetName = _presetFileParts[2]
+						_presetFullName = _presetFileParts[1] + "_" + _presetFileParts[2]
+						if _presetFileParts.count >= 3 and _presetFileParts[3] == lb.nc.NC_layoutFileName then _presetFullName += ":" + lb.nc.NC_layoutFileName
+						
+						_currentLayers = lb.layer.getLayersNames() --capas de max
+
+						_copyIndex = 0
+
+						for _layer in _currentLayers where _presetFullName == _layer or matchPattern _layer pattern:(_presetFullName + "#*") do
+						(
+							_layerNodes = #()
+							(LayerManager.getLayerFromName _layer).nodes &_layerNodes
+							--Si la capa se llama igual pero los archivos provienen de distinto preset entonces haremos oídos sordos.
+							if (lb.nodeInfo.hasNodeInfo _layerNodes[1]) /*and _layerNodes[1].fileHistory[1] == presetFilename*/ then
+							(
+								if _presetFullName == _layer then 
+								(
+									if _copyIndex == 0 then _copyIndex = 1
+								)
+								else
+								(
+									_tempIndex = (filterstring _layer "#")[2] as integer
+									if _tempIndex >= _copyIndex then _copyIndex = _tempIndex + 1
+								)
+							)--if else
+						)--for
+
+						--si el preset es de layout pone :layout despues del nombre del preset
+						if _presetFileParts.count >= 3 and _presetFileParts[3] == lb.nc.NC_layoutFileName then
+						(
+							_presetName = _presetName + ":" + lb.nc.NC_layoutFileName
+						)--if
+						
+						if _copyIndex != 0 then _presetName = _presetName + "#" + (formattedPrint _copyIndex format:"03d")
+						--print _presetName
+						-----------------------------------------------------------
+						-----------------------------------------------------------						
+						
+						--------------------------------------------------------------------------
+						--	Cargamos todos los ficheros en el modo de carga que corresponda
+						--------------------------------------------------------------------------
+						--print "llego "
+						--print _loadPresetData.abort
+
+
+						for _element in _xmlFileElements where not _loadPresetData.abort do
+						(
+							--print "paso el primer abort"
+							_filename = _element.getProperty "path"
+							_filenameParts = filterstring (getFileNameFile _filename) "_"
+							_filenamePrefix = _filenameParts[1]
+							_fileType = _filenameParts[3]
+							_loadMode = execute ("#" + (_element.getProperty "loadMode"))
+							--print ("Loading " + _filename)
+							-----------------------------------------------------------
+							--	Cargamos el fichero
+							-----------------------------------------------------------
+							if (getFilenameType _filename) == ".prt" then
+							(
+								if (finditem stackTrace _filename) == 0 then
+								(
+									
+									_loadedData = loadPreset _filename renameParts:renameParts renamePartsMaterials:renamePartsMaterials loadSkinData:loadSkinData stackTrace:(stackTrace)
+									_loadPresetData.abort = _loadedData.abort and _loadPresetData.abort
+
+									if not _loadedData.abort then
+									(
+										join _loadPresetData.meshNodes _loadedData.meshNodes
+										join _loadPresetData.meshAssets _loadedData.meshAssets
+										join _loadPresetData.facialNodes _loadedData.facialNodes
+										join _loadPresetData.facialAssets _loadedData.facialAssets
+										join _loadPresetData.animNodes _loadedData.animNodes
+										join _loadPresetData.animAssets _loadedData.animAssets
+										join _loadPresetData.allNodes _loadedData.animAssets
+
+										--Aplicamos variaciones de mesh a nivel de preset
+										for _node in _loadedData.meshNodes do
+										(
+											
+											_nodeVariationXMLnodes = _element.getNodes "nodeVariations"
+
+											for _variationXMLnode in _nodeVariationXMLNodes do
+											(
+												_variationOwner = try(_variationXMLnode.getProperty "name") catch (undefined)
+
+												_variationOwner = lb.presets.connectionXmlIndexUpdate _node _variationOwner
+
+												_varElements = _variationXMLnode.getNodes "variation"
+
+												if _node != undefined and _node.name == _variationOwner then
+												(
+													for _varElement in _varElements do
+													(
+														_varType = (_varElement.getProperty "type")
+														if _varType != undefined then
+														(
+															_varType = _varType as Name
+															case _varType of
+															(
+																#transform:
+																(
+																	_varMeshTransform = try (execute (_varElement.getProperty "value"))  catch(undefined)
+																	
+																	if _varMeshTransform != undefined then
+																	(
+																		_node.transform = _varMeshTransform
+																	)
+																)--#transform
+															)
+														)
+													)
+												)
+											)
+										)
+
+										--Aplicamos variaciones de anim si las hay
+										for _node in _loadedData.animNodes do
+										(
+											_nodeVariationXMLnodes = _element.getNodes "nodeVariations"
+
+											for _variationXMLnode in _nodeVariationXMLNodes do
+											(			
+												_variationOwner = try(_variationXMLnode.getProperty "name") catch (undefined)
+												_varElements = _variationXMLnode.getNodes "variation"
+
+												_variationOwner = lb.presets.connectionXmlIndexUpdate _node _variationOwner
+
+												if _node != undefined and _node.name == _variationOwner then
+												(
+													for _varElement in _varElements do
+													(
+														_varType = (_varElement.getProperty "type")
+														if _varType != undefined then
+														(
+															_varType = _varType as Name
+															case _varType of
+															(
+																#animTransform:
+																(
+																	_varAnimTransform = try(_varElement.getProperty "value") as String catch(undefined)
+																	_varTrackName = try(_varElement.getProperty "track") as String catch(undefined)
+																	
+																	if _varAnimTransform != undefined and _varTrackName != undefined then
+																	(
+																		_targetTracks = lb.animInfo.getTracksFromObject _node showTitleSeparators:false showSeparators:false
+																		for _targetTrack in _targetTracks do
+																		(
+																			if _targetTrack.name == _varTrackName then
+																			(
+																				_targetTrack.track.value = _varAnimTransform As float
+																			)
+																		)
+																	)
+																)--#animTransform
+															)
+														)
+													)
+												)
+											)
+										)
+										
+										--Agregamos a su nodeInfo el preset padre
+										if renameParts then
+										(
+											for _node in _loadedData.allNodes do
+											(
+												if lb.nodeInfo.hasNodeInfo _node then 
+												(
+
+													--print ("Agregamos NodeInfo a:" + _node.name)
+													--print ("Con valor: " + presetFilename)
+													--print "------------------------------------"
+													_node.nodeInfo.fileHistory = #(presetFilename) + _node.nodeInfo.fileHistory
+													_node.nodeInfo.nameHistory = #(_node.name) + _node.nodeInfo.nameHistory
+													if _node.material != undefined then
+													(
+														_node.nodeInfo.materialNameHistory = #(_node.material.name) + _node.nodeInfo.materialNameHistory
+													)
+													else
+													(
+														_node.nodeInfo.materialNameHistory = #("undefined") + _node.nodeInfo.materialNameHistory
+													)
+													
+													_node.nodeInfo.transformHistory = #(_node.transform) + _node.nodeInfo.transformHistory
+													_node.nodeInfo.layerNameHistory = #((filterString (getFilenameFile presetFilename) "_")[1] + "_" + (filterString (getFilenameFile presetFilename) "_")[2]) + _node.nodeInfo.layerNameHistory
+													_node.nodeInfo.loadModeHistory = #("load") + _node.nodeInfo.loadModeHistory
+													_node.nodeInfo.subVersionHistory = #(lb.nodeInfo.formatNodeInfoTime (getFileCreateDate presetFilename)) + _node.nodeInfo.subVersionHistory
+												)
+												
+											)
+										)
+									)
+									else
+									(
+										_loadPresetData.abort = true
+										if stackTrace.count == 1 then
+										(
+											lb.message.show ("Preset infinite loop. Cannot call a preset within the same preset. Correct preset and reset scene before continuing. Infinite loop: " + _filename + ". Preset manager will not close, do not attempt to open it or max will crash. Reset Scene and call preset author.")
+											lb.presetManager.close()
+										) 
+									)
+								)
+								else
+								(
+									_loadPresetData.abort = true
+								)
+							)
+							else if not _loadPresetData.abort then
+							(
+								_assetNodes = lb.asset.loadAsset _filename _loadMode
+								join _loadedNodes _assetNodes
+							
+								-----------------------------------------------------------
+								-----------------------------------------------------------
+								--for _l in _loadedNodes do print _l.name
+
+								-----------------------------------------------------------
+								--	Capturamos las VARIACIONES de los nodos ANTES de ser renombrados los assets (para presets de mesh)
+								-----------------------------------------------------------
+
+								struct _strVariation (node, type, value, matId, matName, subMatName, morphChannel, morphChannelName, trackName)
+								_nodeVariationXMLnodes = _element.getNodes "nodeVariations"
+								
+								for _variationXMLnode in _nodeVariationXMLnodes do
+								(
+									_nodeName = _variationXMLnode.getProperty "name"
+
+									_node = execute ("$'" + _nodeName + "'")
+									_varElements = _variationXMLnode.getNodes "variation"
+
+									if _node != undefined and findItem _loadedNodes _node != 0 then --lo buscamos en los que hemos cargado
+									(
+										--print _node.name
+										_material = if classof _node.material == XRef_Material then (_node.material.getSourceMaterial true) else _node.material 
+										
+										if classof _material == Multimaterial then
+										(
+											--elimina el CA de material variation por si venía con ello ya de otra escena
+											lb.variations.removeMatVariationAttribute _node
+										)
+
+										for _varElement in _varElements do
+										(
+											_varType = execute ("#" + (_varElement.getProperty "type")) 
+											_loadedMorphs = #()
+											if _varType != undefined then
+											(
+												case _varType of
+												(
+													#Morph:
+													(
+														_varValue = try (_varElement.getProperty "value") as integer catch( undefined )
+														_varMorphChannel = try (_varElement.getProperty "channel") as integer catch( undefined )
+														_varMorphChannelName = try (_varElement.getProperty "channelName") as string catch( "undefined" )
+														if _varValue != undefined and _varValue != undefined then
+														(
+															_var = (_strVariation node:_node type:_varType value:_varValue morphChannel:_varMorphChannel morphChannelName:_varMorphChannelName)
+															append _meshVariations _var
+														)
+														--Si es un preset de mesh y tiene variaciones de morph y la pieza es de cabezaentonces cargaremos las variaciones de la cabeza
+														if _var.node.modifiers[#Morpher] == undefined and findString (getFilenameFile presetFilename) ("_" + lb.nc.NC_meshFilename + "_") != undefined \
+														and matchPattern _var.node.name pattern:"*_*_mesh_*_head_*_*" and findItem _loadedMorphs _var.node.name == 0 then
+														(
+															--Cargar el morph que toca
+															lb.variations.importMorphVariations _var.node
+														)
+													)
+													#material:
+													(
+														-- Si no tiene multimaterial, no tiene sentido que se aplique
+														if classof _material == Multimaterial then
+														(
+															_varMatName = try (_varElement.getProperty "matName") as String catch("undefined")
+															_varSubMatName = try (_varElement.getProperty "subMatName") as String catch("undefined")
+															if _varMatName != "undefined" and _varSubMatName != "undefined" then
+															(
+																append _meshVariations (_strVariation node:_node type:_varType matName:_varMatName subMatName:_varSubMatName)
+															)
+															else
+															(
+																_varMatId = try (_varElement.getProperty "matID") as integer catch( undefined )
+																_varValue = try (_varElement.getProperty "value") as integer catch( undefined )
+																if _varMatId != undefined and _varValue != undefined then
+																(
+																	
+																	if _varValue == -1 then
+																	(
+																		_material = if classof _node.material == XRef_Material then (_node.material.getSourceMaterial true) else _node.material
+																		_varValue = _material[_varMatId].materialIDList[_material[_varMatId].materialIDList.count] As integer
+																	)
+																	append _meshVariations (_strVariation node:_node type:_varType value:_varValue matId:_varMatId)
+																)
+															)
+														)
+													)
+													
+													#transform:
+													(
+														--print "Tiene Transform"
+														--print _node.name
+														_varTransform = try(_varElement.getProperty "value") as String catch(undefined)
+														if _varTransform != undefined then
+														(
+															_varTransform = execute _varTransform -- Lo almacenamos como matrix 3
+															append _meshVariations (_strVariation node:_node type:_varType value:_varTransform) 
+														)
+													)--#transform
+
+													#animTransform:
+													(
+														_varTransform = try(_varElement.getProperty "value") as String catch(undefined)
+														_varTrackName = try(_varElement.getProperty "track") as String catch(undefined)
+														if _varTrackName != undefined and _varTrackName != undefined then
+														(
+															append _meshVariations (_strVariation node:_node type:_varType value:_varTransform trackName:_varTrackName)
+														)
+													)
+												)--case
+											)
+										)
+									)
+								)
+								
+								-----------------------------------------------------------
+								-----------------------------------------------------------
+								
+								-----------------------------------------------------------
+								-----------------------------------------------------------
+
+								-------------------------------------------------------------
+								--	Aplicamos las transformaciones de mesh antes de renombrar
+								-------------------------------------------------------------
+								for _variation in _meshVariations where (_variation.type As name) == #transform do
+								(
+									_variation.node.transform = _variation.value
+								)
+
+								-----------------------------------------------------------
+								--	Capturamos el ASSET cargado y realizamos operaciones sobre el como el RENOMBRADO de piezas como el preset
+								-----------------------------------------------------------
+
+								_asset = (lb.asset.getAssetsFromNodes _assetNodes)[1]
+
+								
+								if _asset != undefined then
+								(
+									--	para los asset de tipo mesh o facial capturamos sus nodos mesh a los que 
+									--	luego se les cargará el skin
+									if _asset.subType == lb.nc.NC_meshFileName or _asset.subType == lb.nc.NC_facialFileName or _asset.subType == lb.nc.NC_draftFileName then
+									(
+										join _loadPresetData.meshNodes _asset.meshNodesAll		
+										for i = 1 to _asset.meshNodesAll.count do append _loadPresetData.meshAssets _asset
+
+										join _loadPresetData.facialNodes _asset.facialNodesAll
+										for i = 1 to _asset.facialNodesAll.count do append _loadPresetData.facialAssets _asset
+
+										join _loadPresetData.animNodes _asset.animNodesAll
+										for i = 1 to _asset.animNodesAll.count do append _loadPresetData.animAssets _asset
+									)--if
+									
+									
+									-- indicamos que existen assets de tipo animación para poder cargar los skin
+									if _asset.subType == "anim" then _animFileLoaded = true
+									
+									-----------------------------------------------------------
+									--	renombramos el asset para que tengan el prefijo correcto incluyendo el preset
+									-----------------------------------------------------------
+									_presetFileType = _presetFileParts[3]
+									
+									if renameParts then
+									(
+										--renombrado de los assets que componen el preset como el preset
+										if (_filenamePrefix == _presetAssetType) and (_presetFileParts.count > 1) then lb.asset.renameAsset _asset _presetName renameMaterials:renamePartsMaterials
+
+										--Añadimos una entrada en los objetos con el nombre del preset
+										for _node in _asset.nodes where lb.nodeInfo.hasNodeInfo _asset.nodes[1] do
+										(
+											_node.nodeInfo.fileHistory = #(presetFilename) + _node.nodeInfo.fileHistory
+											_node.nodeInfo.nameHistory = #(_node.name) + _node.nodeInfo.nameHistory
+											_node.nodeInfo.layerNameHistory = #(((filterString (getFilenameFile presetFilename) "_")[1] + "_" + (filterString (getFilenameFile presetFilename) "_")[2])) + _node.nodeInfo.layerNameHistory
+											_node.nodeInfo.materialNameHistory = #(_node.nodeInfo.materialNameHistory[_node.nodeInfo.materialNameHistory.count]) + _node.nodeInfo.materialNameHistory
+											_node.nodeInfo.transformHistory = #(_node.nodeInfo.transformHistory[1]) + _node.nodeInfo.transformHistory
+											_node.nodeInfo.loadModeHistory = #("load") + _node.nodeInfo.loadModeHistory
+											
+											_modifiedDate = getFileModDate presetFileName
+ 
+											if (filterString _modifiedDate " ")[3] == "PM" then
+											(
+												_modifiedDate = (filterString _modifiedDate " ")[1] + " " + (filterString _modifiedDate " ")[2]
+												if ((filterString (filterString _modifiedDate " ")[2] ":")[1] As Number) != 12 then
+												(
+													_modifiedDate = substituteString _modifiedDate " 12:" (" "+((((filterString (filterString _modifiedDate " ")[2] ":")[1] As Number) + 12) As String) + ":")
+												)
+											)
+											
+											_modifiedDate = (lb.nodeInfo.formatNodeInfoTime (lb.time.systemToLocalTime (getFileModDate presetFileName)))
+											
+											_node.nodeInfo.subVersionHistory = #(_modifiedDate) + _node.nodeInfo.subVersionHistory
+										)
+									)
+									
+									--	Si el fichero es de animación nos aseguramos de poner temporalmente el asset 
+									--	en modo skin+box para comprobar que todo está correcto
+									if _fileType == lb.nc.NC_animFileName then
+									(										
+										if not _asset.isLayoutAsset then lb.asset.setAssetSkinBoxMode _asset
+									)
+
+									--si el preset es de tipo anim
+									--se asegura de que los objetos de tipo mesh que llevan flag f están congelados
+									if _presetFileParts[3] == lb.nc.NC_animFileName then
+									(
+										for _obj in _asset.meshNodesAll where lb.nc.hasFlag _obj (lb.nc.NC_frozenFlag) do _obj.isFrozen = true
+									)
+								)--if
+
+								-----------------------------------------------------------
+								-----------------------------------------------------------						
+
+
+								-----------------------------------------------------------
+								--	Capturamos las VARIACIONES de los nodos DESPUES de ser renombrados los assets (para presets de anim en adelante)
+								-----------------------------------------------------------
+
+								struct _strVariation (node, type, value, matId, matName, subMatName, morphChannel, morphChannelName, trackName)
+								_nodeVariationXMLnodes = _element.getNodes "nodeVariations"
+
+								_assetName = ""
+								if _asset != undefined then _assetName = lb.nc.getNamePart _asset.nodes[1].name 2
+								
+								for _variationXMLnode in _nodeVariationXMLnodes do
+								(
+
+									_nodeName = _variationXMLnode.getProperty "name"
+									
+									_node = execute ("$'" + _nodeName + "'")
+									_varElements = _variationXMLnode.getNodes "variation"
+									
+									if _node != undefined and findItem _loadedNodes _node != 0 then
+									(
+										_material = if classof _node.material == XRef_Material then (_node.material.getSourceMaterial true) else _node.material
+
+										if classof _material == Multimaterial then
+										(
+											--elimina el CA de material variation por si venía con ello ya de otra escena
+											lb.variations.removeMatVariationAttribute _node
+										)
+										for _varElement in _varElements do
+										(
+											_varType = execute ("#" + (_varElement.getProperty "type"))
+
+											if _varType != undefined then
+											(
+												case _varType of
+												(
+													#Morph:
+													(
+														_varValue = try (_varElement.getProperty "value") as integer catch( undefined )
+														_varMorphChannel = try (_varElement.getProperty "channel") as integer catch( undefined )
+														_varMorphChannelName = try (_varElement.getProperty "channelName") as string catch( "undefined" )
+														if _varValue != undefined and _varValue != undefined then
+														(
+															append _meshVariations (_strVariation node:_node type:_varType value:_varValue morphChannel:_varMorphChannel morphChannelName:_varMorphChannelName)
+														)
+													)
+
+													#asset:
+													(
+														_varValue = try (_varElement.getProperty "value") as String catch( "undefined" )
+														append _meshVariations (_strVariation node:_node type:_varType value:_varValue)
+													)
+
+													#material:
+													(
+														if classof _material == Multimaterial then
+														(
+															_varMatName = try (_varElement.getProperty "matName") as String catch("undefined")
+															_varSubMatName = try (_varElement.getProperty "subMatName") as String catch("undefined")
+															if _varMatName != "undefined" and _varSubMatName != "undefined" then
+															(
+																append _meshVariations (_strVariation node:_node type:_varType matName:_varMatName subMatName:_varSubMatName)
+															)
+															else
+															(
+																_varMatId = try (_varElement.getProperty "matID") as integer catch( undefined )
+																_varValue = try (_varElement.getProperty "value") as integer catch( undefined )
+																if _varMatId != undefined and _varValue != undefined then
+																(
+																	if _varValue == -1 then
+																	(
+																		_material = if classof _node.material == XRef_Material then (_node.material.getSourceMaterial true) else _node.material
+																		_varValue = _material[_varMatId].materialIDList[_material[_varMatId].materialIDList.count] As integer
+																	)
+																	append _meshVariations (_strVariation node:_node type:_varType value:_varValue matId:_varMatId)
+																)
+															)
+														)
+													)
+
+													#animTransform:
+													(
+														_varTransform = try(_varElement.getProperty "value") as String catch(undefined)
+														_varTrackName = try(_varElement.getProperty "track") as String catch(undefined)
+														if _varTrackName != undefined and _varTrackName != undefined then
+														(
+															append _meshVariations (_strVariation node:_node type:_varType value:_varTransform trackName:_varTrackName)
+														)
+													)
+												)--case
+											)--if _varType != undefined
+										)-- for _varElement in _varElements
+									)-- if _node != undefined and finditem _loadedNodes _node != 0
+								)-- for _variationXMLNode in _nodeVariationXMLNodes
+
+								-----------------------------------------------------------
+								-----------------------------------------------------------
+
+								-----------------------------------------------------------
+								--	Capturamos las TRANSFORMACIONES de los nodos DESPUES de ser renombrados los assets (para presets de anim en adelante)
+								-----------------------------------------------------------
+								
+								--struct _strTransform (node,transform)
+								--_transformXMLnodes = _element.getNodes "nodeTransform"	
+								
+								--for _transformXMLnode in _transformXMLnodes do
+								--(
+								--	_nodeName = _transformXMLnode.getProperty "name"
+								--	_node = execute ("$'" + _nodeName + "'")
+									
+								--	if _node != undefined and findItem _loadedNodes _node != 0 then
+								--	(
+								--		_transform = execute (_transformXMLnode.getProperty "transform")
+								--		append _meshTransforms (_strTransform node:_node transform:_transform)
+								--	)
+								--)
+
+								-----------------------------------------------------------
+								-----------------------------------------------------------
+							)--if de tipo de archivo
+						)--for 
+					
+
+						gc()
+
+						-------------------------------------------------------------
+						--	Cargamos el skin, skinMorph y dynconnect
+						-------------------------------------------------------------
+						--print ("   " + ( _loadPresetData.abort As string )+ " valor de abort antes de cargar skin")
+						if loadSkinData and _animFileLoaded and not _loadPresetData.abort then
+						(
+							progressStart ("Loading Skin, skinMorph and dynConnect Data")
+
+							_progressBarTotalSteps = _loadPresetData.meshNodes.count * 2
+							_progressBarStep = 0
+							
+							-------------------------------------------
+							--skin, skinMorph y dynConnect de MESH
+							for i=1 to _loadPresetData.meshNodes.count do
+							(
+								_node = _loadPresetData.meshNodes[i]
+								_nodeAssetFolder = _loadPresetData.meshAssets[i].folder
+								
+								_nodeName = lb.nc.getSimpleObjectName _node.nodeInfo.nameHistory[_node.nodeInfo.nameHistory.count]
+								_fileHistoryName = _node.nodeInfo.fileHistory[_node.nodeInfo.fileHistory.count]
+								_fileVersion = (filterString (getFileNameFile _fileHistoryName) "_")[4]
+								
+								--Obtenemos el archivo de skin para la pieza si existe y sino cogeremos el terminado en -std (sino nada)
+								_skinFilesPathPattern = _nodeAssetFolder + "rig\\skin\\" + _fileVersion + "\\" +  _nodeName +  "_*_*.skn"
+								_skinFiles = getFiles _skinFilesPathPattern
+								if _skinFiles.count == 0 then
+								(
+									_skinFilesPathPattern = presetNamePartReplace _skinFilesPathPattern lb.nc.NC_standardPreset
+									_skinFiles = getFiles _skinFilesPathPattern
+								)
+								_skinFileName = if _skinFiles.count != 0 then _skinFiles[1] else ""
+
+								--Obtenemos el de dynConnect, sino está el terminado en -std y sino no se coge nada.
+								_skinMorphFilesPathPattern = _nodeAssetFolder + "rig\\skin\\" + _fileVersion + "\\" +  _nodeName +  "_*_*.smd"
+								_skinMorphFiles = getFiles _skinMorphFilesPathPattern
+								if _skinMorphFiles.count == 0 then
+								(
+									_skinMorphFilesPathPattern = presetNamePartReplace _skinMorphFilesPathPattern lb.nc.NC_standardPreset
+									_skinMorphFiles = getFiles _skinMorphFilesPathPattern
+								)
+								_skinMorphFileName = if _skinMorphFiles.count != 0 then _skinMorphFiles[1] else ""
+
+								--Mismo proceso para el dynConnect
+								_dynConnectFilesPathPattern = _nodeAssetFolder + "rig\\dynConnect\\" + _fileVersion + "\\" +  _nodeName +  "_*_*.dyc"
+								_dynConnectFiles = getFiles _dynConnectFilesPathPattern
+								if _dynConnectFiles.count == 0 then
+								(
+									_dynConnectFilesPathPattern = presetNamePartReplace _dynConnectFilesPathPattern lb.nc.NC_standardPreset
+									_dynConnectFiles = getFiles _dynConnectFilesPathPattern
+								)
+								_dynConnectFileName = if _dynConnectFiles.count != 0 then _dynConnectFiles[1] else ""
+
+								-------------------------------------------------------------
+								--	Si existe un fichero de SKIN para la pieza lo cargamos
+								-------------------------------------------------------------
+								--print "SKIN"
+								if (doesfileExist _skinFileName) then
+								(
+									--print _node.name
+									--print _skinFileName
+									_skinMod = lb.skin.addSkinModifier _node
+									
+									resumeEditing()
+									
+									try lb.skin.loadSkin _skinFileName _skinMod catch (print ("********* Error en carga del skin del objeto " + _node.name))
+																
+									suspendEditing()
+									
+									gc()
+								)
+								
+								_progressBarStep += 1
+								progressUpdate ((_progressBarStep * 100)/_progressBarTotalSteps)
+								
+								-------------------------------------------------------------
+								-------------------------------------------------------------
+
+
+								-------------------------------------------------------------
+								--	Si existe un fichero de SKINMORPH para la pieza lo cargamos
+								--------------------------------------------------------------------
+								--print "SKINMORPH"
+								if (doesfileExist _skinMorphFileName) then
+								(
+									_skinMorphMod = lb.skin.addSkinMorphModifier _node
+
+	 								if _skinMorphMod != undefined then
+	 								(
+	 									lb.skin.loadSkinMorph _skinMorphMod _skinMorphFileName
+										--print _node.name
+										--print _skinMorphFileName
+									)
+									gc()
+								)
+								
+								_progressBarStep += 1
+								progressUpdate ((_progressBarStep * 100)/_progressBarTotalSteps)
+
+								-------------------------------------------------------------
+								-------------------------------------------------------------
+
+								
+								-------------------------------------------------------------
+								--	Si existe un fichero de dynConnect para la pieza lo cargamos
+								-------------------------------------------------------------
+								--print "DYN"
+								if (doesfileExist _dynConnectFileName) then
+								(
+									if not (lb.dynConnect.hasDynConnectInfo _node) then
+										lb.dynConnect.addAttribute _node	
+									
+									lb.dynConnect.load _node _dynConnectFileName
+									lb.dynConnect.connect _node
+
+									--print _node.name
+									--print _dynConnectFileName
+								)
+
+								-------------------------------------------------------------
+								-------------------------------------------------------------								
+							)--for
+							
+							
+							-------------------------------------------
+
+							-------------------------------------------
+							--dynConnect de FACIAL
+							for i=1 to _loadPresetData.facialNodes.count do
+							(
+								_node = _loadPresetData.facialNodes[i]
+								_nodeAssetFolder = _loadPresetData.facialAssets[i].folder
+								
+								_nodeName = lb.nc.getSimpleObjectName _node.nodeInfo.nameHistory[_node.nodeInfo.nameHistory.count]
+
+								_fileVersion = (filterString (getFileNameFile _loadPresetData.facialAssets[i].filePath) "_")[4]
+
+								_dynConnectFilesPathPattern = _nodeAssetFolder + "rig\\dynConnect\\" + _fileVersion + "\\" +  _nodeName +  "_*_*.dyc"
+								_dynConnectFiles = getFiles _dynConnectFilesPathPattern
+								_dynConnectFileName = if _dynConnectFiles.count != 0 then _dynConnectFiles[1] else ""
+
+								-------------------------------------------------------------
+								--	Si existe un fichero de dynConnect para la pieza lo cargamos
+								-------------------------------------------------------------
+
+								if (doesfileExist _dynConnectFileName) then
+								(
+									if not (lb.dynConnect.hasDynConnectInfo _node) then
+										lb.dynConnect.addAttribute _node	
+									
+									lb.dynConnect.load _node _dynConnectFileName
+									lb.dynConnect.connect _node
+								)--if
+
+								-------------------------------------------------------------
+								-------------------------------------------------------------
+							)--for
+							-------------------------------------------
+
+
+							-------------------------------------------
+							--dynConnect de ANIM y Puppet
+							for i=1 to _loadPresetData.animNodes.count do
+							(
+								_node = _loadPresetData.animNodes[i]
+								_nodeAssetFolder = _loadPresetData.animAssets[i].folder
+								
+								_nodeName = lb.nc.getSimpleObjectName _node.nodeInfo.nameHistory[_node.nodeInfo.nameHistory.count]
+
+								_fileVersion = (filterString (getFileNameFile _loadPresetData.animAssets[i].filePath) "_")[4]
+
+								_dynConnectFilesPathPattern = _nodeAssetFolder + "rig\\dynConnect\\" + _fileVersion + "\\" +  _nodeName +  "_*_*.dyc"
+								_dynConnectFiles = getFiles _dynConnectFilesPathPattern
+								_dynConnectFileName = if _dynConnectFiles.count != 0 then _dynConnectFiles[1] else ""
+
+								-------------------------------------------------------------
+								--	Si existe un fichero de dynConnect para la pieza lo cargamos
+								-------------------------------------------------------------
+
+								if (doesfileExist _dynConnectFileName) then
+								(
+									if not (lb.dynConnect.hasDynConnectInfo _node) then
+										lb.dynConnect.addAttribute _node	
+									
+									lb.dynConnect.load _node _dynConnectFileName
+									lb.dynConnect.connect _node
+								)--if
+							)--for
+							
+							-------------------------------------------------------------
+							-- Buscamos los puppet que tenga la pieza y borramos todos los que no coincidan con el nombre del preset.
+							-------------------------------------------------------------
+							
+							-- Obtenemos de nuevo en la misma capa.
+							_asset = (lb.asset.getAssetsFromNodes _assetNodes)[1]
+							_loadPresetData.animNodes = _asset.animNodesAll
+							
+							_presetNameFilter = (filterString _presetName "{}")[2]
+							
+							_presetNameFilterParts = filterString _presetNameFilter "-"
+							_presetNameFilterStd = substituteString _presetNameFilter _presetNameFilterParts[2] "std"
+							_presetNameFilterStdStd = "std-std"
+
+							for _node in _loadPresetData.animNodes do
+							(
+								_nodePuppets = #()
+								_nodePuppetsNames = #()
+
+								for m in _node.modifiers where MatchPattern m.name pattern:lb.nc.NC_puppetPattern do
+								(
+									append _nodePuppets m
+									append _nodePuppetsNames m.name
+								)--for
+
+								_index = findItem _nodePuppetsNames (lb.nc.NC_puppetModName + "{" + _presetNameFilter + "}")
+								if _index == 0 then _index = findItem _nodePuppetsNames (lb.nc.NC_puppetModName + "{" + _presetNameFilterStd + "}")
+								if _index == 0 then _index = findItem _nodePuppetsNames (lb.nc.NC_puppetModName + "{" + _presetNameFilterStdStd + "}")
+								if _index == 0 then _index = findItem _nodePuppetsNames lb.nc.NC_puppetModName
+
+								if index != 0 then
+								(
+									for i=1 to _nodePuppets.count where i!=_index do deleteModifier _node _nodePuppets[i]
+								)--if
+							)--for
+
+							-------------------------------------------
+							--Tras todas las operaciones de rig, haremos la carga de sus variaciones de transformación en los nodos de anim
+							-------------------------------------------
+							
+							
+							progressEnd()
+							gc()
+
+						)--if
+
+						-------------------------------------------------------------
+						-------------------------------------------------------------
+						
+
+						-------------------------------------------------------------
+						--	Aplicamos las variaciones de nodos
+						-------------------------------------------------------------
+						if not _loadpresetData.abort then
+						(
+							progressStart "Applying Variations"
+
+							
+							
+							for _var in _meshVariations where _var.type != #asset and _var.type != #animTransform do
+							(
+								--print "............"
+								--print _var.node.name
+								--print "............"
+
+								_nodeVariations = lb.variations.getVariations _var.node 
+								for _nodeVar in _nodeVariations where _nodeVar.type == _var.type do
+								(
+									case _var.type of
+									(
+										#material:
+										(
+											--Si tenemos nombre compararemos con él, sino buscaremos id.
+											if (_var.matName != undefined) and (_var.matName == _nodeVar.matName) then
+											(
+												_nodeVar.setValue _var.subMatName
+												lb.variations.addMatVariationAttributeValue _var.node matName:_var.matName subMatName:_var.subMatName
+												lb.variations.setStoredMatVariation _var.node
+											)--if
+											--Si sólo hay id entonces rellenaremos nosotros el nombre de _nodeVar que si lo tiene cargado desde getVariations
+											else if  (_var.matId == _nodeVar.matId) then
+											(
+												--print "------------"
+												--print _var.node
+												--print _nodeVar.matName
+												--print _nodeVar.subMatName
+												_nodeVar.setValue _var.Value
+												lb.variations.addMatVariationAttributeValue _var.node matName:_nodeVar.matName subMatName:_nodeVar.subMatName
+												lb.variations.setStoredMatVariation _var.node
+											)
+										)--material
+
+										#morph:
+										(	
+											if _var.morphChannelName != undefined then
+												if _nodeVar.name == _var.morphChannelName then _nodeVar.setValue _var.Value
+											else
+												if _nodeVar.channel == _var.morphChannel then _nodeVar.setValue _var.Value
+										)
+									)--case
+								)--for
+							)--for
+							
+							
+							
+
+							--elimina los nodos no validos del loaded nodes
+							for i=_loadedNodes.count to 1 by -1 where not isValidNode _loadedNodes[i] do deleteItem _loadedNodes i
+
+							progressEnd()
+
+							-------------------------------------------------------------
+							-------------------------------------------------------------
+							
+							-------------------------------------------------------------
+							--	Aplicamos las transformaciones de nodos
+							-------------------------------------------------------------
+
+							for _nodeTransform in _meshTransforms do _nodeTransform.node.transform = _nodeTransform.transform
+
+							-------------------------------------------------------------
+							-------------------------------------------------------------
+							
+
+							-------------------------------------------------------------
+							--	Conexiones de RIG
+							-------------------------------------------------------------
+
+							_asset = (lb.asset.getAssetsFromNodes _loadedNodes)[1]
+							
+							if _asset != undefined then
+							(							
+								-- Conectamos el controlador de la base con el script de escala de la base, para pdoer escalar todo el chr.
+								--if _presetFileParts[3] == lb.nc.NC_animFileName and _presetFileParts[1] == lb.nc.NC_chrPrefix then lb.rig.solutions.addScaleControllerToTongueBones _asset
+								
+								-- Conectamos las piezas con dynConnect y colapsamos la conexión
+								for o in _asset.nodes where lb.dynConnect.hasDynConnectInfo o do o.dynConnectInfo.connect()
+
+								--pone el modo skin + box
+								if not _asset.isLayoutAsset then lb.asset.setAssetSkinBoxMode _asset
+							)--if
+
+							-------------------------------------------------------------
+							-------------------------------------------------------------
+							
+							-------------------------------------------------------------
+							-- variaciones de animTransform al final
+							-------------------------------------------------------------
+							--Aplicamos las variaciones de transformación tras cargar esqueletos, skin, etc.
+							for _var in _meshVariations where (_var.type As name) == #animTransform do
+							(
+								--print _var.trackName
+								--Aplicamos las transformaciones de animtracks
+								if _var.node != undefined then 
+								(
+									_targetTracks = lb.animInfo.getTracksFromObject _var.node showTitleSeparators:false showSeparators:false
+									for _targetTrack in _targetTracks where _targetTrack.name == _var.trackName do
+									(
+										_targetTrack.track.value = _var.value As float
+									)
+								)
+							)
+
+							-------------------------------------------------------------
+							-- Eliminamos los materiales duplicados
+							-------------------------------------------------------------
+							lb.materials.deleteDuplicatedMaterials _loadedNodes
+							-------------------------------------------------------------
+							-- Meteremos los nodos cargados que sigan vivos en el struct
+							-- de datos
+							-------------------------------------------------------------
+							join _loadpresetData.allNodes _loadedNodes
+						)
+						-------------------------------------------------------------
+						--	Finalizacion
+						-------------------------------------------------------------
+						
+						enableSceneRedraw()
+						setArrowCursor()			
+						progressEnd()
+						completeRedraw()
+
+						-------------------------------------------------------------
+						-------------------------------------------------------------
+						
+						_fileLoaded = true
+					)-- with undo off
+				
+					
+				)-- if _allFilesExist
+
+			)--if _xmlLoaded
+			
+			if _xmlLoaded then
+			(
+				_xmlConstraintAmountNodes = _xmlDoc.root.getNodes "preset/pointConstraints"
+				for _xmlConstraintAmountNode in _xmlConstraintAmountNodes do
+				(
+					_amount = _xmlConstraintAmountNode.getProperty "amount"
+					_xmlConstraintNodes = _xmlDoc.root.getNodes "preset/pointConstraints/pointConstraint"
+					for _xmlConstraintNode in _xmlConstraintNodes do
+					(
+						_from = _xmlConstraintNode.getProperty "from"
+						_to = _xmlConstraintNode.getProperty "to"
+						_fromNode = undefined
+						_toNode = undefined	
+						for _node in _loadPresetData.animNodes do 
+						(							
+							_strippedVersionNodeName = lb.nc.removeAssetNumber _node.name
+							if (matchpattern _strippedVersionNodeName pattern: (_from+"*")) then 
+							(
+								_from = lb.presets.connectionXmlIndexUpdate _node _from
+							)
+							if (matchpattern _strippedVersionNodeName pattern: (_to+"*")) then 
+							(
+								_to = lb.presets.connectionXmlIndexUpdate _node _to
+							)
+
+							if matchpattern  _node.name pattern: (_from+"_*") then _fromNode = _node
+							if matchpattern _node.name pattern: (_to+"_*") then _toNode = _node
+						)	
+						if ((_fromNode!= undefined)and(_toNode!= undefined)) then lb.links.pointConstraint.addTarget _fromNode _toNode 
+					)
+				)
+			)	
+			
+			_loadPresetData
+		),
+		------------------------------------------------
+		--@fn: string | connectionXmlIndexUpdate | Actualiza el nombre leido del xml, si presets por duplicado en la escena
+		--Para casos de copias de presets, en los que el nodo esta renombrado a *#00X y la referencia del xml no
+		--@gets: node | node | el nodo a trabajar
+		--@gets: string | variationName | nombre leido del xml
+		--@returns: string | actualización correcta del nombre del recurso a cargar
+		------------------------------------------------
+		fn connectionXmlIndexUpdate _node _variationName= 
+		(
+			_nodePartNames = filterstring _node.name "_"
+			_variationNameParts = filterString _variationName "_"
+			if ((matchpattern _nodePartNames[2] pattern:(_variationNameParts[2]+"*")) and ( _nodePartNames[2] != _variationNameParts[2])) then _variationName = substituteString _variationName _variationNameParts[2] _nodePartNames[2]
+			return _variationName
+		),
+		------------------------------------------------
+		--@fn: boolean | load | carga un preset
+		--@gets: string | presetFilename | Ruta del fichero a cargar
+		------------------------------------------------
+		fn load presetFilename renameParts:true renamePartsMaterials:true loadSkinData:true = 
+		(
+			_loadedData = loadPreset presetFilename renameParts:renameParts renamePartsMaterials:renamePartsMaterials loadSkinData:loadSkinData
+			return ((_loadedData.meshNodes + _loadedData.facialNodes + _loadedData.animNodes).count > 0)
+		),
+
+		------------------------------------------------
+		--@fn: string | animBaseFileFromPreset | Devuelve el path del anim base a partir del path del preset correspondiente
+		--@gets: string | presetFilename | Ruta del fichero de preset
+		------------------------------------------------
+		fn animBaseFileFromPreset presetFilename =
+		(
+			_animBaseFileName = substituteString presetFilename lb.nc.NC_presetFolderName lb.nc.NC_animBaseFolderName
+			_animBaseFileName = substituteString _animBaseFileName ".prt" ".max"
+			return _animBaseFileName
+		),
+
+		------------------------------------------------
+		--@fn: string | presetFileFromAnimBase | Devuelve el path del preset a partir del path del animBase correspondiente
+		--@gets: string | _animBaseFileName | Ruta del fichero de preset
+		------------------------------------------------
+		fn presetFileFromAnimBase animBaseFilename =
+		(
+			_presetFilename = substituteString animBaseFilename lb.nc.NC_animBaseFolderName lb.nc.NC_presetFolderName
+			_presetFilename = substituteString _presetFilename ".max" ".prt"
+			return _presetFilename
+		),
+
+		------------------------------------------------
+		--@fn: boolean | loadAndSaveAsAnimBase | salva un preset como anim base
+		--@gets: string | presetFilename | Ruta del fichero a cargar
+		------------------------------------------------
+		fn loadAndSaveAsAnimBase presetFilename renameParts:true renamePartsMaterials:true loadSkinData:true =
+		(
+			_success = load presetFilename renameParts:renameParts renamePartsMaterials:renamePartsMaterials loadSkinData:loadSkinData --primero carga el preset en la escena
+
+			if _success then
+			(
+				_animBaseFileName = this.animBaseFileFromPreset presetFilename
+				_animBaseDirName = lb.io.getDirName _animBaseFileName
+
+				if not doesFileExist _animBaseDirName do
+					makeDir _animBaseDirName
+			
+				if doesFileExist _animBaseFileName then deleteFile _animBaseFileName --primero lo intenta eliminar
+				_success = saveMaxFile _animBaseFileName clearNeedSaveFlag:true quiet:true --lo guarda como anim base
+			)
+
+			_success
+		),
+		
+		-----------------------------------------------------
+		-- checkea que el archivo no tiene loops infinitos
+		-----------------------------------------------------
+		fn checkInfiniteLoops filename trace:#() = 
+		(
+			_error = false
+			trace = trace + #((toLower filename))
+ 
+ 			if doesFileExist filename then 
+			(
+				_xmlDoc = lb.xml.newXmlDoc()
+				_xmlLoaded = _xmlDoc.load filename
+				
+				if _xmlLoaded then
+				(
+					_xmlFileElements = _xmlDoc.root.getNodes "preset/files/file"
+					for _element in _xmlFileElements do
+					(
+						_filePath = _element.getProperty "path"
+						if _filePath != undefined then
+						(
+							if (findItem trace (toLower _filePath)) == 0 then
+							(
+								if (getFilenameType _filepath) == ".prt" then
+								(
+									_foo = (this.checkInfiniteLoops _filePath trace:trace)
+									_error = _error or _foo
+								)
+							)
+							else
+							(
+								_error = true
+							)
+						)
+					)
+				)
+			)-- Existe el archivo?
+			else
+			(
+				_error = true
+			)
+
+			_error
+		),
+		------------------------------------------------
+		--@fn: integer | quickSortIndexFunction | función para ordenar mediante qsort las copias de elementos de una array de assets
+		--@gets: int | _firstElem | _secondElem | Indices del primer y segundo elemento a intercambiar (Requeridos en Qsort)
+		------------------------------------------------
+		fn quickSortIndexFunction _firstElem _secondElem =
+		(
+			if lb.nc.removeAssetNumber (_firstElem.fullname) == lb.nc.removeAssetNumber (_secondElem.fullname) then
+			(
+				if lb.nc.getAssetNamingIndex (_firstElem.fullname) < lb.nc.getAssetNamingIndex (_secondElem.fullname) then -1
+				else 1
+			)
+			else 1
+		),
+		------------------------------------------------
+		--@fn: boolean | save | Guarda un fichero de preset
+		--@gets: string | filename | Ruta del fichero a guardar
+		------------------------------------------------
+		fn save filename =
+		(
+			--print "ojete"
+			_success = false
+			_xmlDoc = lb.xml.newXmlDoc()	--	documento xml con el contenido que se añadirá al fichero .max
+			_assets = lb.asset.getSceneAssets()
+			
+			--	Cabecera
+			_rootNode = _xmlDoc.root		--	nodo root del documento
+			_presetNode = _rootNode.newChild "preset"
+			_presetNode.setProperty "version" "1.0"
+			
+			--	Files
+			_filesNode = _presetNode.newChild "files"
+			
+			--	Assets
+			_assetsFiles = #()
+			_assetsFilesAssets = #()
+			_assetsComesFromPrt = #()
+
+			_infiniteLoop = false
+			--print filename
+		
+			for ast in (lb.asset.getSceneAssets()) where not _infiniteLoop do
+			(
+				_aFiles = lb.asset.getAssetNodeInfoFiles ast
+				for _af in _afiles where (getFilenameType _af) == ".prt" do
+				(
+					--print _af
+					_infiniteLoop = (checkInfiniteLoops _af trace:#(filename)) or _infiniteLoop
+					--print _infiniteLoop
+				)
+
+				-- Ordenamos los presets primero y los maxes al final
+				for _af in _aFiles do
+					if (lb.str.endsWith _af ".prt") then
+					(
+						_assetsFiles = #(_af) + _assetsFiles
+						_assetsFilesAssets = #(ast) + _assetsFilesAssets
+						_assetsComesFromPrt = #(true) + _assetsComesFromPrt
+					)
+					else
+					(
+						append _assetsFiles _af 
+						append _assetsFilesAssets ast 
+						append _assetsComesFromPrt false 
+					)
+			)--for
+			--Como en el codigo anterior si hay copias del mismo elemento las ordena en descendiente, lo corregimos con un quickSort
+			qsort _assetsFilesAssets quickSortIndexFunction
+
+			if _assetsFiles.count > 0 and not _infiniteLoop then
+			(
+				for i=1 to _assetsFiles.count do
+				(
+					_fileNode = _filesNode.newChild "file"
+					_fileNode.SetProperty "path" _assetsFiles[i]
+					_fileNode.SetProperty "loadMode" _assetsFilesAssets[i].loadMode
+					--	variaciones (sólo para archivos que no sean prt)
+					if _assetsComesFromPrt[i] == false then
+					(
+						--print _meshAndAnimNodes.count
+
+						for _o in _assetsFilesAssets[i].meshNodesAll do
+						(
+							_nodeVariations = undefined
+							if lb.variations.hasVariations _o then
+							(
+								_nodeVariations = _fileNode.newChild "nodeVariations"
+								_nodeVariations.setProperty "name" _o.name
+								
+								_variations = lb.variations.getVariations _o
+								for _var in _variations do
+								(
+									_varNode = _nodeVariations.newChild "variation"
+									_varNode.setProperty "type" _var.type
+									
+									case _var.type of
+									(
+										--#asset:
+										--(
+										--	_varNode.setProperty "value" _var.value
+										--	_varNode.setProperty "value" _var.name
+										--)
+										#material:
+										(
+											_varNode.setProperty "matName" _var.matName
+											_varNode.setProperty "subMatName" _var.subMatName
+										)
+										#morph:
+										(
+											_varNode.setProperty "value" _var.value
+											_varNode.setProperty "channelName" _var.name
+										)
+									)--case
+								)--for
+							)
+							--print (_o.name + " tiene variaciones de transformación?")
+							--Variaciones de transformación
+							--Para guardar una variación de mesh tiene que ser una pieza de mesh cuya transformación haya variado de su freeze pose, sin padre y sin skin.
+							if lb.controller.isPoseFrozen _o #all and _o.parent == undefined and _o.modifiers[#Skin] == undefined then
+							(
+								--print "Por el momento tiene freeze pose"
+								if _o.skinPos != _o.position or ((eulerToQuat (eulerAngles _o.skinRot.x _o.skinRot.y _o.skinRot.z)) != _o.rotation) or _o.skinScale != _o.scale then
+								(
+									--print "Y se mueve!!"
+									if _nodeVariations == undefined then
+									(
+										_nodeVariations = _fileNode.newChild "nodeVariations"
+										_nodeVariations.setProperty "name" _o.name
+									)
+
+									_varNode = _nodeVariations.newChild "variation"
+									_varNode.setProperty "type" "transform"
+									_varNode.setProperty "value" (_o.transform As String)
+								)
+							)
+						)--for
+						
+						--	transformaciones modificadas
+						for _o in _assetsFilesAssets[i].meshNodesAll where not (lb.controller.isNodeInZeroPose _o #all) do
+						(
+							_meshNode = _fileNode.newChild "nodeTransform"
+							_meshNode.setProperty "name" _o.name
+							_meshNode.setProperty "transform" _o.transform
+						)--for
+
+						for _o in _assetsFilesAssets[i].animNodesAll do
+						(
+							_nodeVariationsNode = undefined
+							--Obtenemos tracks y vemos si se han modificado
+							_nodeTracks = lb.animInfo.getTracksFromObject _o showTitleSeparators:false showSeparators:false
+							
+							for j=1 to _nodeTracks.count where (filterString _nodeTracks[j].name ":")[1] == "transform" do
+							(
+								if _nodeTracks[j].track.value != _nodeTracks[j].defaultVal then
+								(
+									if _nodeVariationsNode == undefined then
+									(
+										_nodeVariationsNode = _fileNode.newChild "nodeVariations"
+										_nodeVariationsNode.setProperty "name" _o.name
+									)
+									_varNode = _nodeVariationsNode.newChild "variation"
+									_varNode.setProperty "type" "animTransform"
+									_varNode.setProperty "track" _nodeTracks[j].name
+									_varNode.setProperty "value" (_nodeTracks[j].track.value As String)
+								)
+							)
+						)
+					)
+					else
+					(
+						--Variaciones en las transformaciones de mesh
+						for _o in _assetsFilesAssets[i].meshNodesAll do
+						(
+							
+							if lb.controller.isPoseFrozen _o #all and _o.parent == undefined and _o.modifiers[#Skin] == undefined then
+							(
+								--print "Por el momento tiene freeze pose"
+								if _o.skinPos != _o.position or ((eulerToQuat (eulerAngles _o.skinRot.x _o.skinRot.y _o.skinRot.z)) != _o.rotation) or _o.skinScale != _o.scale then
+								(
+									--print "Y se mueve!!"
+									if _nodeVariations == undefined then
+									(
+										_nodeVariations = _fileNode.newChild "nodeVariations"
+										_nodeVariations.setProperty "name" _o.name
+									)
+
+									_varNode = _nodeVariations.newChild "variation"
+									_varNode.setProperty "type" "transform"
+									_varNode.setProperty "value" (_o.transform As String)
+								)
+							)
+						)
+						
+						--Variaciones en las transformaciones de piezas de anim
+						for _o in _assetsFilesAssets[i].animNodesAll do
+						(
+							_nodeVariationsNode = undefined
+							--Obtenemos tracks y vemos si se han modificado
+							_nodeTracks = lb.animInfo.getTracksFromObject _o showTitleSeparators:false showSeparators:false
+							
+							for j=1 to _nodeTracks.count where (filterString _nodeTracks[j].name ":")[1] == "transform" do
+							(
+								if _nodeTracks[j].track.value != _nodeTracks[j].defaultVal then
+								(
+									if _nodeVariationsNode == undefined then
+									(
+										_nodeVariationsNode = _fileNode.newChild "nodeVariations"
+										_nodeVariationsNode.setProperty "name" _o.name
+									)
+									_varNode = _nodeVariationsNode.newChild "variation"
+									_varNode.setProperty "type" "animTransform"
+									_varNode.setProperty "track" _nodeTracks[j].name
+									_varNode.setProperty "value" (_nodeTracks[j].track.value As String)
+								)
+							)
+						)
+					)
+				)
+
+				_constraintInfo = lb.links.pointConstraint.getScenePointConstraintInfoNodes()
+				if _constraintInfo.count > 0 do
+				(
+					_constraintNode = _presetNode.newChild "pointConstraints"
+					_constraintNode.setProperty "amount" _constraintInfo.count
+					
+					for i = 1 to _constraintInfo.count do
+					(
+						_constraint= _constraintNode.newChild "pointConstraint" 
+						_constraint.setProperty "from " _constraintInfo[i][1]
+						_constraint.setProperty "to"  _constraintInfo[i][2]
+					)
+					
+
+				)
+
+				--escritura del archivo de preset				
+				_f = openFile filename mode:"wt"
+				format (_xmlDoc.toString()) to:_f
+				close _f
+				
+
+				--if checkInfiniteLoops filename then
+				--(
+				--	print "LIB.PRESETS.SAVE: Infinite loop found."
+				--	_success = false
+				--	deleteFile filename
+				--)
+
+				_success = true
+				
+			)
+			else
+			(
+				_success = false
+			)
+			
+			_success
+		),
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addLibrary this --añade la libreria a la principal
+		)
+	)
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	
+	lib_presets() --crea la libreria
+)

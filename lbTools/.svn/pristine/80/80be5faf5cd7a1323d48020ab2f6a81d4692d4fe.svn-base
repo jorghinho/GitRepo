@@ -1,0 +1,1169 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--Descripcion: Herramienta Plantilla.
+------------------------------------------------------------------------------------------------------------------------------------------------
+(
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollMain | Contiene la herramienta stereoManager.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollStereoManagerDef "Stereo Manager"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) --@var : parent | Herramienta o rolllout del que depende y/o contiene el rollout actual
+		
+		local minRollWidth = 200		--@var: minRollWidth | Ancho mínimo de la herramienta.
+		local minRollHeight = 230		--@var: minRollHeight | Alto mínimo de la herramienta.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		
+		--@control | controlName | Plantilla de comentario para controles
+		groupbox grpCreate "General: " pos:[20,7] width:175 height:68
+		button btnConvert "Create Stereo Scene" pos:[30,23] width:155 height:20 tooltip:"Saves the Scene with the correct naming on the correct ubication."
+		button btnAddSteroCam "Add Stereo Cam" pos:[30,50] width:155 height:20 tooltip:"Creates de duplicated stereo Cam and configures viewports."
+
+		groupbox grpCams "Make Preview: " pos:[20,75] width:175 height:120
+		button btnCamL "L" pos:[30,95] width:75 height:50
+		button btnCamR "R" pos:[110,95] width:75 height:50
+		button btnBothCams "L + R" pos:[30,155] width:155 height:30
+		button btnOpenPreviewFolder "Open preview folder" pos:[30,200] width:155 height:20 tooltip:"Open folder where video was created"
+
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollMainDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollMainDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--almacena posicion
+			lb.xml.setAttribute parent.cfgFile ("rollMain/pos") "x" (((getDialogPos rollMainDef).x) as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/pos") "y" (((getDialogPos rollMainDef).y) as string)
+			
+			--almacena tamaño
+			lb.xml.setAttribute parent.cfgFile ("rollMain/size") "width" (rollMainDef.width as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/size") "height" (rollMainDef.height as string)
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			_width = (lb.xml.getAttribute parent.cfgFile ("rollMain/size") "width") as integer
+			_height = (lb.xml.getAttribute parent.cfgFile ("rollMain/size") "height") as integer
+				
+			--posicion
+			_posX = (lb.xml.getAttribute parent.cfgFile ("rollMain/pos") "x") as integer
+			_posY = (lb.xml.getAttribute parent.cfgFile ("rollMain/pos") "y") as integer
+				
+			--establece minimos
+			if _width < minRollWidth then _width = minRollWidth
+			if _height < minRollHeight then _height = minRollHeight
+			if _posX < 0 then _posX = 0
+			if _posY < 0 then _posY = 0
+				
+			--aplica los valores
+			rollMainDef.width = _width
+			rollMainDef.height = _height
+			setDialogPos rollMainDef [_posX,_posY]
+		)
+
+		------------------------------------------------
+		--@fn: undefined | createStereoCamSetup | Crea el fichero de stereo 
+		------------------------------------------------
+		fn createStereoCamSetup = 
+		(
+			--Construimos la ruta del folder de los archivos de stereo
+			_maxRenderFile = maxFilePath
+			_maxRenderFileParts = FilterString _maxRenderFile "\\"
+			if _maxRenderFileParts[_maxRenderFileParts.count] == lb.nc.NC_renderFileName then
+			(
+				_maxRenderFile = substituteString _maxRenderFile lb.nc.NC_camRenderFolder lb.nc.NC_camStereoFolder
+			
+				--Comprobamos que la carpeta existe, en el caso que no se crea
+				_process = lb.fileIOFunctions.doesFolderExist _maxRenderFile create:true
+				if _process do 
+				(
+					--Construimos el fichero de Stereo a partir del pattern de render, siguiendo el NC
+					_stereoFile = _maxRenderFile + maxfilename
+					_stereoFile = substituteString _stereoFile (lb.nc.NC_renderFileName + "_(pass-all)") lb.nc.NC_stereoFileName
+					_file = getFiles _stereoFile
+					--Si el fichero de stereo ya existe pregunta antes de sobrescribir.
+					if _file.count == 1 do
+					(
+						if doesFileExist _file[1] do _process = lb.message.show "File already Exists, do you want to overwrite it?" type:#Query
+					)
+					if _process do
+					(
+						--Guardamos el fichero de  Estereo
+						savemaxfile _stereoFile
+					)
+				)
+			)
+			else lb.message.show "The file is not a valid render scene."
+
+		)
+
+		------------------------------------------------
+		--@fn: undefined | configStereoScene | Crea la camara duplicada de esteroscopia. y configura los viewports con las propiedades de visibilidad.
+		------------------------------------------------		
+		fn configStereoScene =
+		(
+			if cameras.count == 1 then
+			(
+				_camName = FilterString cameras[1].name "_"
+				if (_camName.count == 2 ) then
+				(
+					lb.stereoCamCreator.run()
+					viewport.setLayout #layout_4
+					viewport.activeViewport=3
+					viewport.setCamera cameras[1]
+					(NitrousGraphicsManager.GetActiveViewportSetting()).VisualStyleMode = #shaded
+					(NitrousGraphicsManager.GetActiveViewportSetting()).ShowEdgedFacesEnabled = true
+					viewport.activeViewport=4
+					viewport.setCamera cameras[2]
+					(NitrousGraphicsManager.GetActiveViewportSetting()).VisualStyleMode = #shaded
+					(NitrousGraphicsManager.GetActiveViewportSetting()).ShowEdgedFacesEnabled = true
+				)
+				else lb.message.show "The Scene camera doesn't follow the naming convention."
+			)
+			else 
+			(
+				if cameras.count == 0 then
+				(
+					lb.message.show "No camera on scene."
+				)
+				else 
+				(
+					_process = lb.message.show "Only one camera in scene is allowed to do this process.\nAccepting will automatically clean the scene" type:#query
+					if _process do
+					(
+						for i = cameras.count to 2 by -1 do
+						(
+							delete cameras[i]
+						)
+						configStereoScene()
+					)
+				)
+			)
+		)
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+
+		------------------------------------------------
+		--@event: close | Evento que se lanza al pulsar el boton 
+		------------------------------------------------
+		on btnCamL pressed do 
+		(
+			viewport.activeViewport=3
+			lb.preview.toggleEdgedFacesPreview()
+			lb.preview.makePreview cam:(viewport.getCamera()) percent:100 style:#shaded quality:4 openWhenFinished:true
+		)
+
+		------------------------------------------------
+		--@event: close | Evento que se lanza al pulsar el boton 
+		------------------------------------------------
+		on btnCamR pressed do 
+		(
+			viewport.activeViewport=4
+			lb.preview.toggleEdgedFacesPreview()
+			lb.preview.makePreview cam:(viewport.getCamera()) percent:100 style:#shaded quality:4 openWhenFinished:true
+		)
+
+		------------------------------------------------
+		--@event: close | Evento que se lanza al pulsar el boton 
+		------------------------------------------------
+		on btnBothCams pressed do 
+		(
+			lb.preview.toggleEdgedFacesPreview()
+			viewport.activeViewport=3
+			lb.preview.makePreview cam:(viewport.getCamera()) percent:100 style:#shaded quality:4 openWhenFinished:false
+			viewport.activeViewport=4
+			lb.preview.makePreview cam:(viewport.getCamera()) percent:100 style:#shaded quality:4 openWhenFinished:false
+		)
+
+		------------------------------------------------
+		--@event: close | Evento que se lanza al pulsar el boton 
+		------------------------------------------------
+		on btnConvert pressed do 
+		(
+			createStereoCamSetup()	
+		)		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al pulsar el boton 
+		------------------------------------------------
+		on btnAddSteroCam pressed do 
+		(
+			configStereoScene()	
+		)
+		
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollMain | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		--@gets: point2 | size | tamaño al que se ha redimensionado el rollout
+		------------------------------------------------
+		on rollMainDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollMain | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollMainDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+			--if parent.rollMain != undefined then resize [parent.rollMain.width, parent.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollMain | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollMainDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+			
+			parent.opened = false --indica que la herramienta está cerrada.
+			updateToolbarButtons()
+		)
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al hacer click en el botón de Open Preview Folder
+		--@control: button | btnOpenPreviewFolder | Botón que abre la carpeta
+		------------------------------------------------
+		on btnOpenPreviewFolder pressed do 
+		(
+			folder = lb.makePreviewSettings.rollMain.getPreviewFolder()
+			if folder != false then
+				shellLaunch "explorer.exe" folder
+			else
+				messagebox "Could not open folder.\nFilename does not follow naming convention."
+		)
+	)--rollMainDef
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollZoomDef | Contiene la herramienta plantilla.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollGridDef "Grid"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local minRollWidth = 350	--@var: minRollWidth | Minimun tool width.
+		local minRollHeight = 170	--@var: minRollHeight | Minimun tool height.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+
+		local cameraGrids = #() --array de structs de tipo grid	
+		local standardGridWidth = 1 --ancho estandar del grid
+		local standardGridDistanceFromCam = 1.5
+		--colores de las lineas por defecto
+		local colorGridLine = color 0 0 0
+		local colorGridDiagonal = color 50 50 50
+		local colorGridCross = color 10 10 10
+		local colorSafeFrame = color 0 0 0
+		local lastHrztlCount = 1
+		local lastVrtclCount = 2
+		local sceneCameras	
+		struct cameraGrid --strunct con el grid
+		(
+			completeGrid = undefined,		--grupo en el que estan almacenados los elementos del grid
+			cameraParent = undefined,	--camara a la que esta asociada el grid
+			hGridLines = #(),					--lineas del grid horizontales
+			vGridLines = #(),					--lineas del grid horizontales
+			diagonals = undefined,			--diagonales
+			centerCross = undefined,		--cross central
+			safeFrame = undefined,		--safe frame propio de cada camara
+			allSplines = #()					--todas las partes del grid en un array
+		)
+
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+
+		checkbox chkShowGrids "Show camera grids" pos:[5,5] width:150 height:15
+
+		GroupBox grpGridLines "Grid Lines" pos:[5,25] width:205 height:55 
+		spinner spnHorizontalLines "Horizontal" pos:[20,40] width:100 height:16 fieldWidth:30 range:[1,100,1] type:#integer scale:1
+		spinner spnVerticalLines "Vertical" pos:[35,60] width:85 height:16 fieldWidth:30 range:[1,100,2] type:#integer scale:1
+		button btnUpdate "Update" pos:[135,40] width:70 height:32 toolTip:"Updates cameraGrids"
+				
+		GroupBox grpGridOptions "Grid options" pos:[5,85] width:205 height:80
+		checkbox chkGrid "grid lines" pos:[10,100] width:60 height:15 checked:true
+		colorPicker clrGrid "" pos:[80,100] width:20 height:15 color:(color 0 0 0) fieldWidth:15 title:""
+			
+		checkbox chkDiagonals "diagonal" pos:[10,120] width:60 height:15 checked:false
+		colorPicker clrDiagonals "" pos:[80,120] width:20 height:15 color:(color 50 50 50) fieldWidth:15 title:""
+			
+		checkbox chkCross "cross" pos:[115,100] width:60 height:15 checked:false
+		colorPicker clrCross "" pos:[185,100] width:20 height:15 color:(color 10 10 10) fieldWidth:15 title:""
+			
+		checkbox chkSafeFrame "safe frame" pos:[115,120] width:73 height:15 checked:true
+		colorPicker clrSafeFrame "" pos:[185,120] width:20 height:15 color:(color 0 0 0) fieldWidth:15 title:""
+			
+			
+		spinner spnLinesWidth "Line width" pos:[20,140] width:80 height:16 fieldWidth:30 range:[0,10,0] type:#integer scale:1
+
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+
+		------------------------------------------------
+		--@fn: undefined | getCameraGrids | rellena un array de structs de grids y lo devuelve
+		------------------------------------------------
+		fn getCameraGrids =
+		(
+			grids = #()
+			
+			--recorre las camaras buscando si tienen grids asociado a ellas o no
+			for c in cameras where superclassof c == camera do
+				for ch in c.children where (classof ch == Dummy) and (ch.name == (c.name + "_grid")) do
+				(
+					hLines = #()
+					vLines = #()
+					dLine = undefined
+					crossLine = undefined
+					sfLine = undefined
+					
+					--rellena los arrays anteriores
+					for obj in ch do
+						if findString obj.name "horizontalSpline" != undefined then
+							append hLines obj
+						else if findString obj.name "verticalSpline" != undefined then
+							append vLines obj
+						else if findString obj.name "diagonalSpline" != undefined then
+							dLine = obj
+						else if findString obj.name "crossSpline" != undefined then
+							crossLine = obj
+						else if findString obj.name "safeFrameSpline" != undefined then
+							sfLine = obj
+						
+					newGrid = (cameraGrid cameraParent:c completeGrid:ch hGridLines:hLines vGridLines:vLines diagonals:dLine centerCross:crossLine allSplines:(hLines + vLines + #(dLine)) safeFrame:sfLine)
+					append grids newGrid
+				)
+			
+			grids
+		)
+
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		------------------------------------------------
+		--@fn: undefined | createStandardCameraGrid | crate camera grid standar
+		------------------------------------------------
+		fn createStandardCameraGrid numHorizontalLines:1 numVerticalLines:2 =
+		(
+			standardGrid = undefined
+			nodesToGroup = #()
+			
+			imageAspect = getRendImageAspect() --obtiene la relacion de aspecto del render para poder ajustar el tamaño del grid
+			gridHeight = (standardGridWidth*1.0)/imageAspect
+			
+			--crea el shape horizontal---------------------------------
+			hSplines = #()
+			dist = gridHeight/(numHorizontalLines + 1)
+			for i=1 to numHorizontalLines do
+			(
+				hSpline = SplineShape pos:[0,0,0]
+				addNewSpline hSpline
+				addKnot hSpline 1 #corner #line [-(standardGridWidth/2.0),((-gridHeight/2.0) + dist*i),0.001]
+				addKnot hSpline 1 #corner #line [(standardGridWidth/2.0),((-gridHeight/2.0) + dist*i),0.001]
+				updateShape hSpline
+				hSpline.name = "horizontalSpline#" + (i-1) as string
+				hSpline.wirecolor = colorGridLine
+				append hSplines hSpline
+			)
+			
+			nodesToGroup += hSplines
+			--------------------------------------------------------------
+			
+			--crea los dos shapes verticales -------------------------
+			vSplines = #()
+			dist = (standardGridWidth*1.0)/(numVerticalLines + 1)
+			
+			for i=1 to numVerticalLines do
+			(
+				vSpline = SplineShape pos:[0,0,0]
+				addNewSpline vSpline
+				addKnot vSpline 1 #corner #line [((-standardGridWidth/2.0) + dist*i),(standardGridWidth/(imageAspect*2.0)),0.001]
+				addKnot vSpline 1 #corner #line [((-standardGridWidth/2.0) + dist*i),-(standardGridWidth/(imageAspect*2.0)),0.001]
+				updateShape vSpline
+				vSpline.name = "verticalSpline#" + (i-1) as string
+				vSpline.wirecolor = colorGridLine
+				append vSplines vSpline
+			)
+			
+			nodesToGroup += vSplines
+			--------------------------------------------------------------
+				
+			--crea las diagonales---------------------------------------
+			diagSpline = SplineShape pos:[0,0,0]
+			addNewSpline diagSpline
+			addKnot diagSpline 1 #corner #line [-(standardGridWidth/2.0),(standardGridWidth/(imageAspect*2.0)),0]
+			addKnot diagSpline 1 #corner #line [(standardGridWidth/2.0),-(standardGridWidth/(imageAspect*2.0)),0]
+			addNewSpline diagSpline
+			addKnot diagSpline 2 #corner #line [(standardGridWidth/2.0),(standardGridWidth/(imageAspect*2.0)),0]
+			addKnot diagSpline 2 #corner #line [-(standardGridWidth/2.0),-(standardGridWidth/(imageAspect*2.0)),0]
+			updateShape diagSpline
+			diagSpline.name = "diagonalSpline#01"
+			diagSpline.wirecolor = colorGridDiagonal
+			append nodesToGroup diagSpline
+			--------------------------------------------------------------
+				
+			--crea la cruz central--------------------------------------
+			crossSpline = SplineShape pos:[0,0,0]
+			addNewSpline crossSpline
+			addKnot crossSpline 1 #corner #line [0,(standardGridWidth/(imageAspect*10.0)),0.02]
+			addKnot crossSpline 1 #corner #line [0,-(standardGridWidth/(imageAspect*10.0)),0.02]
+			addNewSpline crossSpline
+			addKnot crossSpline 2 #corner #line [(standardGridWidth/20.0),0,0.002]
+			addKnot crossSpline 2 #corner #line [-(standardGridWidth/20.0),0,0.002]
+			updateShape crossSpline
+			crossSpline.name = "crossSpline#01"
+			crossSpline.wirecolor = colorGridCross
+			append nodesToGroup crossSpline
+			--------------------------------------------------------------
+			
+			--crea el safe frame personalizado------------------------
+			safeFrameSpline = WalledRectangle transform:(matrix3 1) wrect_width:(standardGridWidth) wrect_length:(standardGridWidth/imageAspect*1.0) wrect_thickness:(-standardGridWidth/2.0) wrect_syncCornerFillets:off
+			safeFrameSpline.pos.z = 0.003
+			safeFrameSpline.name = "safeFrameSpline#01"
+			safeFrameSpline.wirecolor = colorSafeFrame
+			addmodifier safeFrameSpline (Extrude())
+			safeFrameSpline.modifiers[#Extrude].amount = 0
+			append nodesToGroup safeFrameSpline	
+			--------------------------------------------------------------
+				
+			--agrupa los nodos------------------------------------------
+			group nodesToGroup name:"standardGrid"
+			gridGroup = $'standardGrid'
+			--------------------------------------------------------------
+			
+			--crea el struct del grid-----------------------------------
+			standardGrid = (cameraGrid completeGrid:gridGroup hGridLines:hSplines vGridLines:vSplines diagonals:diagSpline centerCross:crossSpline allSplines:(hSplines + vSplines + #(diagSpline,crossSpline)) safeFrame:safeFrameSpline)
+			--------------------------------------------------------------
+			
+			--bloquea los objetos y les desactiva el frozen in gray
+			gridGroup.isfrozen = true
+			gridGroup.showFrozenInGray = off
+			(LayerManager.getLayer 0).addNode gridGroup
+				
+			nodesToGroup.renderable = false
+			nodesToGroup.isfrozen = true
+			nodesToGroup.showFrozenInGray = off
+			nodesToGroup.render_displayRenderMesh = false
+			nodesToGroup.optimize = false
+			nodesToGroup.adaptive = false
+			nodesToGroup.steps = 0
+			
+			--mete los grids en la capa 0
+			for o in nodesToGroup do (LayerManager.getLayer 0).addNode o
+			
+			standardGrid
+		)
+
+		------------------------------------------------
+		--@fn: undefined | createCameraGrids | crea los cameragrids en las camaras
+		------------------------------------------------
+		fn createCameraGrids numHorizontalLines:1 numVerticalLines:2 =
+		( --start = timeStamp()
+			newGrids = #() --nuevos grids creados
+			referenceGrid = createStandardCameraGrid numHorizontalLines:numHorizontalLines numVerticalLines:numVerticalLines --crea el grid de referencia
+			
+			--crea instancias del grid de referencia y las coloca en las camaras de la escena
+			for cam in sceneCameras do
+			(				
+				--crea las instancias
+				newLines = #()
+				for sp in referenceGrid.allSplines do
+				(
+					spI = copy sp
+					spI.wirecolor = sp.wirecolor
+					spI.parent = undefined					
+					append newLines spI
+				)
+				
+				newSafeFrame = copy (referenceGrid.safeFrame)
+				newSafeFrame.wirecolor =  referenceGrid.safeFrame.wirecolor
+				newSafeFrame.parent = undefined
+				append newLines newSafeFrame
+				
+				--agrupa los nodos------------------------------------------
+				group newLines name:"auxGrid"
+				gridGroup = $'auxGrid'
+				--------------------------------------------------------------
+				
+				--arrays para almacenar los objetos del grupo
+				--gridGroup = auxGrid[1]
+				hLines = #()
+				vLines = #()
+				dLine = undefined
+				crossLine = undefined
+				
+				--rellena los arrays anteriores
+				for obj in newLines do
+					if findString obj.name "horizontalSpline" != undefined then
+						append hLines obj
+					else if findString obj.name "verticalSpline" != undefined then
+						append vLines obj
+					else if findString obj.name "diagonalSpline" != undefined then
+						dLine = obj
+					else if findString obj.name "crossSpline" != undefined then
+						crossLine = obj
+				
+				--crea el struct
+				newGrid = (cameraGrid completeGrid:gridGroup cameraParent:cam hGridLines:hLines vGridLines:vLines diagonals:dLine centerCross:crossLine allSplines:(hLines + vLines + #(dLine) + crossLine) safeFrame:newSafeFrame)
+				
+				--coloca el grid en su sitio respecto a la camara y personaliza el nombre y propiedades------	
+				newGrid.completeGrid.transform = cam.transform
+					
+				--utilizamos el teorema del seno para calcular la distancia a la camara a la que colocar el grid
+					
+				catAdy = 0 --cateto adyacente, es el resultado que queremos obtener
+				catOp = standardGridDistanceFromCam --catOp = standardGridWidth/2.0 --cateto opuesto, es el ancho del grid/2, es un dato que conocemos
+				
+				alfa = 90 - cam.fov/2.0 --alfa = cam.fov/2 --alfa es la mitad del fov de la camara
+					
+				--formulas:
+				--Sen alfa = catOp / hip
+				--Cos alfa = catAdy / hip
+				--Tg alfa = catOp / catAdy
+				
+				catAdy = (cos alfa)*(catOp/(sin alfa)) --halla la distancia
+				scaleFactor = catAdy/(standardGridWidth/2.0 )
+					
+				in coordsys local move newGrid.completeGrid [0,0,(-standardGridDistanceFromCam)]--[0,0,-catAdy] --coloca el grid en su sitio				
+				newGrid.completeGrid.scale = [scaleFactor,scaleFactor,scaleFactor]
+				--------------------------------------------------------------------------------------------------------
+					
+				newGrid.completeGrid.parent = cam
+				newGrid.completeGrid.name = cam.name  + "_grid"
+				newGrid.completeGrid.isfrozen = true
+				newGrid.completeGrid.showFrozenInGray = off
+				
+				newGrid.allSplines.renderable = false
+				newGrid.allSplines.isfrozen = true
+				newGrid.allSplines.showFrozenInGray = off
+				newGrid.allSplines.render_displayRenderMesh = false
+				newGrid.allSplines.optimize = false
+				newGrid.allSplines.adaptive = false
+				newGrid.allSplines.steps = 0
+				
+				newGrid.safeFrame.renderable = false
+				newGrid.safeFrame.isfrozen = true
+				newGrid.safeFrame.showFrozenInGray = off
+				newGrid.safeFrame.renderable = false
+				newGrid.safeFrame.optimize = false
+				newGrid.safeFrame.adaptive = false
+				newGrid.safeFrame.steps = 0
+				
+				(LayerManager.getLayer 0).addNode newGrid.completeGrid
+				(LayerManager.getLayer 0).addNode newGrid.safeFrame
+				for o in newGrid.allSplines do (LayerManager.getLayer 0).addNode o
+				
+				-----------------------------------------------------------------------------------------------------	
+					
+				append newGrids newGrid --añade el grid al array de grids
+			)--for
+			
+			delete referenceGrid.completeGrid --elimina el grid de referencia
+			newGrids
+		)
+
+
+		------------------------------------------------
+		--@fn: undefined | deleteCameraGrids | elimina los cameragrids en las camaras
+		------------------------------------------------
+		fn deleteCameraGrids =
+		(
+			for g in cameraGrids do delete g.completeGrid
+			cameraGrids = #()
+			
+			(LayerManager.getLayer 0).nodes &auxGrids
+			for o in auxGrids where findString o.name "_grid" != undefined do delete o
+		)
+
+		------------------------------------------------
+		--@fn: undefined | updateCameraGrids | actualiza los grids cuando hay un cambio en el interface
+		------------------------------------------------
+		fn updateCameraGrids = 
+		(
+			for camGrid in cameraGrids do --recorre los grids aplicando los cambios
+			(
+				--cambios en el color de las lineas-----------------------------------------------------
+				for sp in camGrid.hGridLines do --recorre las lineas horizontales
+					sp.wirecolor = clrGrid.color --aplica el color
+					
+				for sp in camGrid.vGridLines do --recorre las lineas verticales
+					sp.wirecolor = clrGrid.color --aplica el color
+				
+				camGrid.diagonals.wirecolor = clrDiagonals.color --cambia el color de las lineas diagonales
+				camGrid.centerCross.wirecolor = clrCross.color --cambia el color de la cruz central
+				camGrid.safeFrame.wirecolor = clrSafeFrame.color --cambia el color del safe frame
+				------------------------------------------------------------------------------------------
+				
+				--cambios en la visualizacion de las lineas--------------------------------------------
+				camGrid.hGridLines.ishidden = not chkGrid.checked
+				camGrid.vGridLines.ishidden = not chkGrid.checked
+				camGrid.diagonals.ishidden = not chkDiagonals.checked
+				camGrid.centerCross.ishidden = not chkCross.checked
+				camGrid.safeFrame.ishidden = not chkSafeFrame.checked
+				------------------------------------------------------------------------------------------
+				
+				--cambios en el grosor de las lineas---------------------------------------------------
+				if spnLinesWidth.value != 0 then
+				(
+					camGrid.hGridLines.render_displayRenderMesh = true
+					camGrid.vGridLines.render_displayRenderMesh = true
+					camGrid.diagonals.render_displayRenderMesh = true
+					camGrid.centerCross.render_displayRenderMesh = true
+					
+					camGrid.hGridLines.render_rectangular = true
+					camGrid.vGridLines.render_rectangular = true
+					camGrid.diagonals.render_rectangular = true
+					camGrid.centerCross.render_rectangular = true
+					
+					camGrid.hGridLines.render_length = 0.0001
+					camGrid.vGridLines.render_length = 0.0001
+					camGrid.diagonals.render_length = 0.0001
+					camGrid.centerCross.render_length = 0.0001
+					
+					camGrid.hGridLines.render_width = spnLinesWidth.value/1000.0
+					camGrid.vGridLines.render_width = spnLinesWidth.value/1000.0
+					camGrid.diagonals.render_width = spnLinesWidth.value/1000.0
+					camGrid.centerCross.render_width = spnLinesWidth.value/1000.0
+				)
+				else
+				(
+					camGrid.hGridLines.render_width = 0
+					camGrid.vGridLines.render_width = 0
+					camGrid.diagonals.render_width = 0
+					camGrid.centerCross.render_width = 0
+					
+					camGrid.hGridLines.render_displayRenderMesh = false
+					camGrid.vGridLines.render_displayRenderMesh = false
+					camGrid.diagonals.render_displayRenderMesh = false
+					camGrid.centerCross.render_displayRenderMesh = false
+				)
+				------------------------------------------------------------------------------------------
+			)
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | updateUI | actualiza el interface con los valores de los grids
+		------------------------------------------------
+		fn updateUI =
+		(
+			if cameraGrids.count != 0 then --si hay grids creados
+			(
+				--habilita los controles
+				for c in rollGridDef.controls do c.enabled = true
+				
+				chkShowGrids.checked = true --porque ya hay grids en la escena
+				
+				auxGrid = cameraGrids[1] --grid del que coger la informacion
+				
+				--obtiene el numero de lineas de los grids----
+				spnHorizontalLines.value = auxGrid.hGridLines.count
+				spnVerticalLines.value = auxGrid.vGridLines.count
+				--------------------------------------------------
+					
+				--obtiene los colores de los grids-------------
+				clrGrid.color = auxGrid.hGridLines[1].wirecolor
+				clrDiagonals.color = auxGrid.diagonals.wirecolor
+				clrCross.color = auxGrid.centerCross.wirecolor
+				clrSafeFrame.color = auxGrid.safeFrame.wirecolor
+				--------------------------------------------------
+				
+				--obtiene la visibilidad de los grid-------------
+				chkGrid.checked = not auxGrid.hGridLines[1].ishidden
+				chkDiagonals.checked = not auxGrid.diagonals.ishidden
+				chkCross.checked = not auxGrid.centerCross.ishidden
+				chkSafeFrame.checked = not auxGrid.safeFrame.ishidden
+				--------------------------------------------------
+				
+				--obtiene el grosor de las lineas de los grids-
+				spnLinesWidth.value = ((auxGrid.hGridLines[1].render_width)*1000.0) as integer
+				--------------------------------------------------
+				
+			)
+			else --si no hay grid creados
+			(
+				for c in rollGridDef.controls do c.enabled = false
+				chkShowGrids.enabled = true
+				chkShowGrids.checked = false --porque no hay grids
+			)
+		)
+
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollGridDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollGridDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--lb.xml.setAttribute parent.cfgFile ("rollInfo/cateagory") "paramName" "paramValue"
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			--_param = (lb.xml.getAttribute parent.cfgFile ("rollInfo/category") "paramName") as <value type>
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+
+		------------------------------------------------
+		--cambios de color en las lineas de los grids
+		--cambios de grosor en las lineas de los grids
+		--cambios en la visualizacion de partes del grid
+		------------------------------------------------
+		on clrGrid changed clr do updateCameraGrids()
+		on clrDiagonals changed clr do updateCameraGrids()
+		on clrCross changed clr do updateCameraGrids()
+		on clrSafeFrame changed clr do updateCameraGrids()
+		
+		on chkGrid changed state do updateCameraGrids()
+		on chkDiagonals changed state do updateCameraGrids()
+		on chkCross changed state do updateCameraGrids()
+		on chkSafeFrame changed state do updateCameraGrids()
+		
+		on spnLinesWidth buttonUp do updateCameraGrids()
+		on spnLinesWidth entered do updateCameraGrids()
+
+
+		------------------------------------------------
+		--@event: pressed | Elimina los grids y los vuelve a crear para que actualice el numero de lineas
+		------------------------------------------------
+		on btnUpdate pressed do
+		(
+			setWaitCursor()
+			suspendEditing()
+			
+			deleteCameraGrids()
+			cameraGrids = createCameraGrids numHorizontalLines:spnHorizontalLines.value numVerticalLines:spnVerticalLines.value
+			updateCameraGrids()
+			
+			resumeEditing()
+			completeRedraw()
+			setArrowCursor()
+		)
+
+		------------------------------------------------
+		--@event: changed | crea o elimina los grids
+		------------------------------------------------
+		on chkShowGrids changed state do
+		(
+			if sceneCameras.count != undefined then
+			(
+				setWaitCursor()
+				suspendEditing()
+				
+				if state then --muestra los grids
+				(
+					cameraGrids = createCameraGrids numHorizontalLines:spnHorizontalLines.value numVerticalLines:spnVerticalLines.value
+					updateCameraGrids()
+				)
+				else -- elimina los grids
+					deleteCameraGrids()
+				
+				resumeEditing()
+				completeRedraw()
+				setArrowCursor()
+				
+				updateUI() --actualiza el interface
+			)
+			else
+				messageBox "There are no cameras in scene"
+		)
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollMain | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		--@gets: point2 | size | tamaño al que se ha redimensionado el rollout
+		------------------------------------------------
+		on rollGridDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollMain | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollGridDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+			sceneCameras = lb.misc.sortNodesByName (lb.cameraFunctions.getSceneCameras()) ignoreCase:true
+			cameraGrids = getCameraGrids() --busca los grids de las camaras
+			updateUI() --actualiza el interface
+			--if lb.cameraManager.rollMain != undefined then resize [lb.cameraManager.rollMain.width, lb.cameraManager.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollMain | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollGridDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+		)
+	)--rollGridDef	
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: templateFltTool | Contiene la herramienta plantilla.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct tl_stereoManager
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,					--@var: category | Categoria de la tool.
+		className = lb.getFileToolName (getThisScriptFilename() as string),	--@var: className | Nombre de la tool.
+		description = "Tool plantilla",		--@var: description | Descripcion de la tool.
+		
+		cfgFile = (lb.config.getToolsIniPath()) + (lb.getFileToolName (getThisScriptFilename() as string)) + ".cfg",	--@var: cfgFile | Archivo de configuracion de la tool.
+			
+		opened = false,			--@var: opened | Indica si la herramienta está abierta.
+		
+		minWidth = 200,		--@var: minWidth | Ancho mínimo de la herramienta.
+		minHeight = 453,		--@var: minHeight | Alto mínimo de la herramienta.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--ROLLOUTS
+		------------------------------------------------------------------------------------------------
+		
+		rollStereoManager = rollStereoManagerDef,	--@var: rollExample1 | Almacena el rollout de ejemplo1 de la herramienta.
+		rollGrid = rollGridDef,	--@var: rollExample2 | Almacena el rollout de ejemplo2 de la herramienta.
+		rollMain = undefined,
+		
+		subRollouts = #(this.rollStereoManager, this.rollGrid), --@var: subRollouts | Almacena los rolllouts flotantes.
+
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--almacena posicion
+			lb.xml.setAttribute this.cfgFile ("rollMain/pos") "x" (this.rollMain.pos.x as string)
+			lb.xml.setAttribute this.cfgFile ("rollMain/pos") "y" (this.rollMain.pos.y as string)
+			
+			--almacena tamaño
+			lb.xml.setAttribute this.cfgFile ("rollMain/size") "width" (this.rollMain.size.x as string)
+			lb.xml.setAttribute this.cfgFile ("rollMain/size") "height" (this.rollMain.size.y as string)
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			_width = (lb.xml.getAttribute this.cfgFile ("rollMain/size") "width") as integer
+			_height = (lb.xml.getAttribute this.cfgFile ("rollMain/size") "height") as integer
+				
+			--posicion
+			_posX = (lb.xml.getAttribute this.cfgFile ("rollMain/pos") "x") as integer
+			_posY = (lb.xml.getAttribute this.cfgFile ("rollMain/pos") "y") as integer
+				
+			--establece minimos
+			if _width < this.minWidth then _width = this.minWidth
+			if _height < this.minHeight then _height = this.minHeight
+			if _posX < 0 then _posX = 0
+			if _posY < 0 then _posY = 0
+				
+			--aplica los valores
+			this.rollMain.size.x = _width
+			this.rollMain.size.y = _height
+			this.rollMain.pos = [_posX,_posY]
+		),
+
+		------------------------------------------------
+		--@fn: boolean | isOpen | Devuelve información true o false, si la herramienta está abierta o cerrada.
+		------------------------------------------------
+		fn isOpen =
+		(
+			this.opened
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | refreshInterface | Refresca el interface inicial de la herramienta
+		------------------------------------------------
+		fn refreshInterface =
+		(
+			--refresca el interface de la herramienta
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | addSubRollouts | Añade los subRollouts flotantes de la herramienta.
+		------------------------------------------------
+		fn addSubRollouts =
+		(
+			if this.rollMain != undefined then
+				for _sbr in this.subRollouts do
+					addRollout _sbr this.rollMain --border:false
+		),
+
+		------------------------------------------------
+		--@fn: undefined | createInterface | Crea el interface inicial de la herramienta
+		------------------------------------------------
+		fn createInterface =
+		(
+			--crea el interface, lo redimensiona y lo reposiciona
+			this.rollMain = newRolloutFloater "Stereo Manager"  230 453 -10000 0
+			this.loadSettings()
+			this.addSubRollouts()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | destroyInterface | Destruye el interface de la herramienta.
+		------------------------------------------------
+		fn destroyInterface =
+		(
+			if this.rollMain != undefined then
+			(
+				this.saveSettings()
+				closeRolloutFloater this.rollMain --cierra la herramienta.
+			)
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | run | Lanza la herramienta.
+		------------------------------------------------
+		fn run =
+		(
+			this.createInterface() --crea el interface.
+			this.opened = true --indica que la herramienta está abierta
+		),--execute
+		
+		------------------------------------------------
+		--@fn: undefined | close | Cierra la herramienta.
+		------------------------------------------------
+		fn close =
+		(
+			this.destroyInterface() --destruye el interface.
+			this.opened = false --indica que la herramienta está cerrada.
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addTool this --añade la tool a la libreria principal	
+		)		
+		
+	)--tl_templateFltTool
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------	
+	
+	tl_stereoManager() --crea la herramienta
+)

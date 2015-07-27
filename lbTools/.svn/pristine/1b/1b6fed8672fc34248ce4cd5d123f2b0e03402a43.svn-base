@@ -1,0 +1,746 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--Descripcion: Librería de funciones de previo
+------------------------------------------------------------------------------------------------------------------------------------------------
+(
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: template | Contiene la libreria de plantilla.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct lib_preview
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,					--@var: category | Categoria de la libreria.
+		className = lb.getFileLibName (getThisScriptFilename() as string),	--@var: className | Nombre de la libreria.
+		description = "Libreria de previos",	--@var: description | Descripcion de la libreria.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+			
+		previewDir = (getDir #preview) + "\\",					--@var: previewDir | Directorio donde se almacena por defecto el preview.
+		previewLogFile = previewDir + "previewLog.txt",			--@var: previewLogFile | Fichero de log del preview.
+		
+		ffmpegDir = lb.config.getExePath(),					--@var: ffmpegDir | Ruta en la que se encuentra el fichero que permite codificar ffmpeg.
+		tmpFileName = "_scene",
+
+		-- Ubicación donde el comando createPreview genera los videos sin compresión
+		previewRawVideo = previewDir + tmpFileName + ".avi",
+
+		visualStyles = #(#Realistic, #Shaded, #Facets, #ConsistentColors, #HiddenLine, #Wireframe, #BoundingBox, #Clay, #_null, #Ink, #ColorInk, #Acrylic, #Tech, #Graphite, #ColorPencil, #Pastel),
+		percents = #("25%","50%","75%","100%"),
+		qualities = #("Very low", "Low", "Medium", "High", "Very high"),
+		visualStyle = #Shaded,
+
+		cfgFile = (lb.config.getToolsIniPath()) + "makePreviewSettings.cfg",  -- settings de Make Preview
+		stampsCfgFile = (lb.config.getToolsIniPath()) + "cameraStamps.cfg",  -- settings de Stamps
+
+		------------------------------------------------------------------------------------------------
+		--AUXILIARY VARIABLES
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+
+		------------------------------------------------
+		--@fn: string | getPreviewFileNameForCam | Devuelve el nombre del vídeo de preview que correspondería a la cámara especificada del fichero actual. Si cumple NC la colocará en su carpeta de secuencia, si no lo llevará a la carpeta de previews del Max
+		--@gets: camera | cam | cámara que se va a evaluar
+		--@opt: name | type | #quicktime | formato de salida del nombre del vídeo
+		--@returns: string | Si consigue crear el video devuelve el path del video creado, si no devuelve undefined.
+		------------------------------------------------
+		fn getPreviewFileNameForCam cam type:#quicktime =
+		(
+			_fileType = if type == #quicktime then ".mov" else ".avi"
+			_previewFileName = previewDir + cam.name + _fileType
+			
+			-- if (lb.nc.ncOK maxFileName type:#seqFile) and (lb.nc.ncOK cam.name type:#cam) then -- lb.nc.ncOK devuelve false con la nueva nomenclatura de secuencias, nos saltamos la comprobación hasta que se arregle
+			if (lb.nc.ncOK cam.name type:#cam) then
+			(
+				_fileParts = filterstring (getFileNameFile maxFileName) "_" -- #("seq", "030d-frank", "layout") ó #("seq", "030d-frank", "cam010", "anim")
+				_folderParts = filterString maxFilePath "\\" -- #("Y:", "sequence", "movie", "seq_030d-frank", "layout") ó #("Y:", "sequence", "seq_500-ts3", "cam", "cam010")
+				_camParts = filterstring cam.name "_"
+				_camNamePart = ""
+				for _part in _camparts do 
+				(
+					_camNamePart += _part
+				)
+				_camNameFolder = _camParts[1] + _camParts[2]
+				
+				--	Obtenemos la ruta de salida para el vídeo. 
+				_previewPath = _folderParts[1] + "\\" + _folderParts[2] + "\\" + _folderParts[3] + "\\" -- "Y:\sequence\movie\" ó "Y:\sequence\seq_500-ts3\"
+				if _folderParts[3] == "movie" then
+				(
+					_sequenceName = _folderParts[4]
+					_previewPath += _sequenceName + "\\" -- "Y:\sequence\movie\seq_030d-frank\"
+				) else
+					_sequenceName = _folderParts[3]
+				_switch = FilterString maxfilepath "\\"
+				if _switch[_switch.count] != "stereo" then
+				(
+					_previewPath += "cam\\" + _camNameFolder + "\\video\\" -- "Y:\sequence\movie\seq_030d-frank\cam\cam010\video" ó "Y:\sequence\seq_500-ts3\cam\cam010\video\"
+				)
+				else _previewPath += "cam\\" + _camNameFolder + "\\stereo\\" -- "Y:\sequence\movie\seq_030d-frank\cam\cam010\video" ó "Y:\sequence\seq_500-ts3\cam\cam010\stereo\"
+				
+				--	Si no existe la generamos.
+				if not (doesFileExist _previewPath) then makeDir _previewPath
+				
+				_previewFileName = _previewPath + _fileParts[1] + "_" + _fileParts[2] + "_" + _camNamePart + "_" + _fileParts[_fileParts.count] + _fileType
+			)
+			
+			_previewFileName
+		),
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		------------------------------------------------
+		--@fn:  | hideCharRoots | Desactiva la visibilidad de los controles root (flotadores rojos) de los personajes en escena
+		--@returns: array | hideCharRoots | Lista de los roots ocultados
+		------------------------------------------------
+		fn hideCharRoots =
+		(
+			hiddenRoots = #()
+
+			for ast in (lb.asset.getSceneAssets type:#char) do
+				for nod in ast.nodes where matchPattern (nod as string) pattern:"*_root_*" do 
+					if not nod.ishidden do
+					(
+						hide nod
+						append hiddenRoots nod
+					)
+
+			hiddenRoots
+		),
+
+
+		------------------------------------------------
+		--@fn: integer | fov2mm | Devuelve el equivalente en mm a la lente dada en FOV
+		--@gets: float | fov | Valor en FOV de la lente
+		--@returns: integer | Valor equivalente de mm
+		------------------------------------------------
+		fn fov2mm fov =
+		(
+			(lb.math.round(0.5*(GetRendApertureWidth()/tan(fov/2.0))) as integer)
+		),
+
+		------------------------------------------------
+		--@fn: integer | mm2fov | Devuelve el equivalente en FOV a la lente dada en mm
+		--@gets: float | fov | Valor en mm de la lente
+		--@returns: integer | Valor equivalente de FOV
+		------------------------------------------------
+		fn mm2fov mm =
+		(
+			2.0*atan(GetRendApertureWidth()/mm*0.5)
+		),
+
+		------------------------------------------------
+		--@fn: null | setPreviewRenderLevel | Abre la ventana de preferencias de previos y cambia el nivel de render al mismo que haya en el viewport activo
+		------------------------------------------------
+		fn setPreviewRenderLevel = 
+		(
+			-- Función llamada por callback al abrir las preferencias de previos
+			fn PreferenceCallback = 
+			(
+				-- Mofifica la selección del combobox pasado por parámetro. Level puede ser #Realistic o cualquier otro valor (que se interpretará como Shaded) 
+				fn setRenderLevel comboBox level = 
+				(	
+					-- Niveles de renderizado ordenados según su posición en el combobox de la ventana de previos
+					--local _levels = #(#Realistic, #Shaded, #Facets, #ConsistentColors, #HiddenLine, #Wireframe, #BoundingBox, #Clay, #_null, #Ink, #ColorInk, #Acrylic, #Tech, #Graphite, #ColorPencil, #Pastel) 
+
+					-- Valores hexadecimales para los comandos internos de la interfaz de Windows
+					local WM_COMMAND = 0x111 -- llamar a comando
+					local CB_SETCURSEL = 0x014E -- cambiar selección de combobox
+					local CBN_SELCHANGE = 1 -- finalizar cambio
+
+					-- Obtener ventana padre del comboBox (preferencias de previos) e ID interno del combobox
+					local parent = UIAccessor.getParentWindow comboBox
+					local id = UIAccessor.getWindowResourceID comboBox
+
+					-- Pasar dos mensajes de windows, uno para cambiar la selección del combo y otro para finalizar el cambio
+					windows.sendMessage comboBox CB_SETCURSEL ((finditem lb.preview.visualStyles level)-1) 0
+					windows.sendMessage parent WM_COMMAND ((bit.shift CBN_SELCHANGE 16) + id) comboBox	
+					ok
+				)
+
+				-- Valor hexadecimal de comando que obtiene el número de items en un combobox
+				local CB_GETCOUNT = 0x0146
+				local comboBox = undefined
+
+				-- Obtener handle de la ventana y asegurarnos que es la de preferencias de previos
+				hWND = DialogMonitorOPS.GetWindowHandle()
+				if (UIAccessor.GetWindowText hWND) != "Make Preview" do return true
+				
+				-- Recorrer todos los controles de la ventana hasta obtener un combobox con mas de 8 elementos (el combo de nivel de renderizado)
+				for k in UIAccessor.getChildWindows hWND where (UIAccessor.GetWindowClassName k) == "ComboBox" do if (windows.sendMessage k CB_GETCOUNT 0 0) > 8 do comboBox = k
+				
+				-- Llamar a la función que cambia el combobox de la ventana de previos
+				setRenderLevel comboBox lb.preview.visualStyle
+				
+				-- Mandar el comando de cerrar la ventana de previos
+				UIAccessor.SendMessageID hWND #IDCANCEL
+				true
+			)
+
+			-- Activar callback para llamada a función cuando se abra la ventana de previo
+			DialogMonitorOPS.RegisterNotification PreferenceCallback id:#preferencesConfigure
+			DialogMonitorOPS.Enabled = true	
+			
+			-- Abrir ventana de previo, forzando la llamada al callback
+			max preview
+
+			-- Desactivar callback, ya no lo necesitamos
+			DialogMonitorOPS.unRegisterNotification id:#preferencesConfigure
+			DialogMonitorOPS.Enabled = false
+		),
+
+		------------------------------------------------
+		--@fn: null | toggleEdgedFacesPreview | Abre la ventana de preferencias de previos y cambia el checkbox de edged faces.
+		------------------------------------------------
+		fn toggleEdgedFacesPreview = 
+		(
+			-- Función llamada por callback al abrir las preferencias de previos
+			fn PreferenceCallback = 
+			(
+				-- Mofifica la selección del combobox pasado por parámetro. Level puede ser #Realistic o cualquier otro valor (que se interpretará como Shaded) 
+        		BM_SETCHECKED = 0x00F1
+        		BM_CHECKED = 0x0001
+
+				-- Obtener handle de la ventana y asegurarnos que es la de preferencias de previos
+				hWND = DialogMonitorOPS.GetWindowHandle()
+				if (UIAccessor.GetWindowText hWND) != "Make Preview" do return true
+				
+				-- Recorrer todos los controles de la ventana hasta obtener un combobox con mas de 8 elementos (el combo de nivel de renderizado)
+				for kidHWND in (UIAccessor.GetChildWindows hWND) where (UIAccessor.GetWindowText kidHWND) == "Edged Faces" do
+				(
+					UIAccessor.SendMessage kidHWND BM_SETCHECKED BM_CHECKED 0
+				)
+				
+				UIAccessor.SendMessageID hWND #IDOK
+				-- Mandar el comando de cerrar la ventana de previos
+				UIAccessor.SendMessageID hWND #IDCANCEL
+				true
+			)
+
+			-- Activar callback para llamada a función cuando se abra la ventana de previo
+			DialogMonitorOPS.RegisterNotification PreferenceCallback id:#preferencesConfigure
+			DialogMonitorOPS.Enabled = true	
+			
+			-- Abrir ventana de previo, forzando la llamada al callback
+			max preview
+
+			-- Desactivar callback, ya no lo necesitamos
+			DialogMonitorOPS.unRegisterNotification id:#preferencesConfigure
+			DialogMonitorOPS.Enabled = false
+		),
+
+		------------------------------------------------
+		--@fn: null | disableLiveAreaAndStatistics | Deshabilita el marco coloreado alrededor del frame y las estadísticas
+		------------------------------------------------
+		fn disableLiveAreaAndStatistics = 
+		(
+			-- Función llamada por callback al abrir las preferencias de previos
+			fn PreferenceCallback = 
+			(
+				hWND = DialogMonitorOPS.GetWindowHandle()
+				
+				if (UIAccessor.GetWindowText hWND) != "Viewport Configuration" do return true
+				
+				TCM_SETCURFOCUS = 0x1330	
+				BM_SETCHECKED = 0x00F1
+				BM_UNCHECKED = 0x0000
+				BM_CHECKED = 0x0001
+				
+				-- Switch to the 'Safe Frames' Panel (it's number 3)
+				for kidHWND in (UIAccessor.GetChildWindows hWND) where ((UIAccessor.GetWindowClassName kidHWND) == "SysTabControl32") do
+				(
+					UIAccessor.SendMessage kidHWND TCM_SETCURFOCUS 3 0 
+				)
+				
+				-- Uncheck the 'Live Area' checkbox
+				for kidHWND in (UIAccessor.GetChildWindows hWND) where (UIAccessor.GetWindowText kidHWND) == "Live Area" do
+				(
+					UIAccessor.SendMessage kidHWND BM_SETCHECKED BM_UNCHECKED 0
+				)
+				
+				-- Switch to the 'Statistics' Panel (it's number 6)
+				for kidHWND in (UIAccessor.GetChildWindows hWND) where ((UIAccessor.GetWindowClassName kidHWND) == "SysTabControl32") do
+				(
+					UIAccessor.SendMessage kidHWND TCM_SETCURFOCUS 6 0 
+				)
+				
+				for kidHWND in (UIAccessor.GetChildWindows hWND) where (UIAccessor.GetWindowText kidHWND) == "Show Statistics in Active View" do
+				(
+					UIAccessor.SendMessage kidHWND BM_SETCHECKED BM_UNCHECKED 0
+				)	
+				
+				UIAccessor.SendMessageID hWND #IDOK
+				
+				true
+			)
+
+			-- Activar callback para llamada a función cuando se abra la ventana de previo
+			DialogMonitorOPS.RegisterNotification PreferenceCallback id:#PokeViewportConfigure
+			DialogMonitorOPS.Enabled = true
+
+			-- Abrir configuración de viewport
+			max vptconfig
+
+			-- Desactivar callback, ya no lo necesitamos
+			DialogMonitorOPS.unRegisterNotification id:#PokeViewportConfigure
+			DialogMonitorOPS.Enabled = false
+		),
+
+
+		------------------------------------------------
+		--@fn: null | disableAutoplay | Deshabilita el autoplay del previo (el del fichero .avi, no el .mov que comprimimos luego)
+		------------------------------------------------
+		fn disableAutoplay = 
+		(
+			-- Función llamada por callback al abrir la ventana de preferencias
+			fn PreferenceCallback = 
+			(
+				hWND = DialogMonitorOPS.GetWindowHandle()
+				
+				if (UIAccessor.GetWindowText hWND) != "Preference Settings" do return true
+				
+				TCM_SETCURFOCUS = 0x1330	
+				BM_SETCHECKED = 0x00F1
+				BM_UNCHECKED = 0x0000
+				BM_CHECKED = 0x0001
+				
+				-- Switch to the 'General' Panel (it's number 0)
+				for kidHWND in (UIAccessor.GetChildWindows hWND) where ((UIAccessor.GetWindowClassName kidHWND) == "SysTabControl32") do
+				(
+					UIAccessor.SendMessage kidHWND TCM_SETCURFOCUS 0 0 
+				)
+				
+				-- Uncheck the 'AutoPlay Preview File' checkbox
+				for kidHWND in (UIAccessor.GetChildWindows hWND) where (UIAccessor.GetWindowText kidHWND) == "AutoPlay Preview File" do
+				(
+					UIAccessor.SendMessage kidHWND BM_SETCHECKED BM_UNCHECKED 0
+				)
+				
+				UIAccessor.SendMessageID hWND #IDOK
+				
+				true
+			)
+
+			-- Activar callback para llamada a función cuando se abra la ventana de preferencias
+			DialogMonitorOPS.RegisterNotification PreferenceCallback id:#PokeViewportConfigure
+			DialogMonitorOPS.Enabled = true
+
+			-- Abrir preferencias de Max
+			max file preferences
+
+			-- Desactivar callback, ya no lo necesitamos
+			DialogMonitorOPS.unRegisterNotification id:#PokeViewportConfigure
+			DialogMonitorOPS.Enabled = false
+		),
+
+
+		fn getStampSettings =
+		(
+			struct stamps (artistName, sequence, camera, frameNumbers, focallength, stage)
+
+			local st = stamps()
+
+			--carga los stamps anteriores
+			local artist = (lb.xml.getAttribute this.stampsCfgFile ("rollMain/stamps") "artist")
+			local artistName = (lb.xml.getAttribute this.stampsCfgFile ("rollMain/stamps") "artistName")
+			local stage = (lb.xml.getAttribute this.stampsCfgFile ("rollMain/stamps") "stage")
+			local stageText = (lb.xml.getAttribute this.stampsCfgFile ("rollMain/stamps") "stageText")
+			local camera = (lb.xml.getAttribute this.stampsCfgFile ("rollMain/stamps") "camera")
+			local frameNumbers = (lb.xml.getAttribute this.stampsCfgFile ("rollMain/stamps") "frame")
+			local sequence = (lb.xml.getAttribute this.stampsCfgFile ("rollMain/stamps") "sequence")
+			local focallength = (lb.xml.getAttribute this.stampsCfgFile ("rollMain/stamps") "focallength")
+
+			-- Intentar obtener valores de las preferencias. Si no hay preferencias por defecto activamos todos los stamps
+			artist = if artist == "false" then false else true
+			stage = if stage == "false" then false else true
+			camera = if camera == "false" then false else true
+			frameNumbers = if frameNumbers == "false" then false else true
+			sequence = if sequence == "false" then false else true
+			focallength = if focallength == "false" then false else true
+
+			-- Asignar valores de stamps
+			if artist == true do st.artistName = if artistName != "" then artistName else sysInfo.username
+			if stage == true do st.stage = if stageText != "" then stageText else st.stage = lb.re.match maxfilename ".*_([^_]+)\.max$"
+			if camera == true do st.camera = getActiveCamera()
+
+			-- Obtener secuencia
+
+			-- Obtener cámara
+			/*
+
+			UNIR CON EL RESTO DE METADATOS
+			
+			*/
+
+		),
+		
+		------------------------------------------------
+		--devuelve la informacion de los stamps
+		------------------------------------------------
+		fn getStampsDocData =
+		(
+			_stampsData = #()
+			_camDataStr = struct _cameraData (sequence, camera, startDate, endDate, animator)
+
+			_stampsFile = lb.config.getAnimationStampsFilePath()
+			
+			if doesFileExist _stampsFile then
+			(
+				_f = openfile _stampsFile mode:"r"
+				
+				while not eof _f do --recorre las lineas filtrando la informacion
+				(
+					_line = readLine _f
+					_lineParts = filterString _line "\t"
+					--solo si es una linea de camaras en el documento procesamos algo
+					--AQUI YA HEMOS TENIDO QUE METER DOS EXCEPCIONES EN EL PATRON PORQUE DESDE PRODUCCIÓN CAMBIAN EL FORMATO DE LA INFORMACIÓN DEL DOCUMENTO SIN AVISAR
+					_isCamLine = (MatchPattern _lineParts[1] pattern:"anim_????-*_cam_*") or (MatchPattern _lineParts[1] pattern:"anim_sq????-*_cam_*") or (MatchPattern _lineParts[1] pattern:"anim_seq_????-*_cam_*")
+
+					if _isCamLine then
+					(
+						--recopila las camaras
+						_cameras = lb.re.matches _lineParts[1] "cam_\d\d\d| \d\d\d"
+						for i=1 to _cameras.count do (_cameras[i] = substituteString _cameras[i] "cam_" ""; _cameras[i] = substituteString _cameras[i] " " "")
+
+						--averigua el nombre de la secuencia
+						_seq = (substituteString (filterString _lineParts[1] "_")[2] "sq" "")
+
+						--AQUI HEMOS TENIDO QUE METER OTRA ESCEPCION MÁS PORQUE EN PRODUCCIÓN HAN VUELTO HA CAMBIAR EL FORMATO D ELA INFORMACIÓN DEL DOCUMENTO
+						if (MatchPattern _lineParts[1] pattern:"anim_seq_????-*_cam_*") then _seq = (filterString _lineParts[1] "_")[3]
+						
+						--recorre las camaras y crea un struct de datos por cada una
+						for _cam in _cameras do
+						(
+							_camData = _camDataStr sequence:_seq camera:_cam startDate:_lineParts[4] endDate:_lineParts[5] animator:_lineParts[7]
+							append _stampsData _camData
+						)--for
+					)--if
+				)--while
+
+				close _f
+			)--if 
+
+			_stampsData
+		),
+		
+		------------------------------------------------
+		--Filtro para layout
+		------------------------------------------------
+		fn RegExrLayoutFilter =
+		(
+			-- Variables
+			local expLayout = "(seq)_(\d{3})(\w{1})-(\w+)\((\w{3})\)_(\w{3}\d{3}-\d{3}_|\w{3}\d{3}_)?(layout\.max)"
+			local rgx = dotnetObject "System.Text.RegularExpressions.Regex" ""
+			local lytPath = findString maxFilePath "layout"
+			local txt = maxfilename
+			
+			-- Compare namefile with RegExr and return true or false
+			if lytPath != undefined then rgx.IsMatch txt expLayout
+			else return true
+		),
+				
+		------------------------------------------------
+		--@fn: string | makePreview | Crea un previo en formato quicktime o avi con el audio cargado en la escena. Si consigue crear el video devuelve el path del video creado, si no devuelve undefined.
+		--@opt: name | type | #mov | Tipo de vídeo. Puede valer #quicktime o #avi
+		--@opt: integer | percent | undefined | tamaño porcentual de salida del vídeo
+		--@opt: time | start | animationRange.start | fotograma inicial del previo
+		--@opt: time | end | animationRange.end | fotograma final del previo
+		--@opt: name | style | undefined | Indica el estilo visual. Puede valer  #Realistic | #Shaded | #ConsistentColors | #HiddenLine | #Wireframe | #BoundingBox | #Clay | #Ink | #ColorInk | #Acrylic | #Tech | #Graphite | #ColorPencil | #Pastel
+		--@opt: boolean | openWhenFinished | true | Indica si se muestra el vídeo una vez se termine. Por defecto TRUE
+		--@returns: boolean | Devuelve TRUE si el video se ha generado exitosamente, FALSE si el usuario canceló
+		------------------------------------------------		
+		fn makePreview cam:undefined videoType:#mov start:animationRange.start end:animationRange.end autoname:undefined percent:undefined style:undefined quality:undefined openWhenFinished:undefined = 
+		(
+			
+			chkLayout = this.RegExrLayoutFilter()
+			if chkLayout == true then
+			(
+				struct metadata (sequence, camera, lens, recStart, recEnd, artist, stage, startDate, endDate)
+				
+				-- Valores enteros de frames de inicio y fin
+				local _startFrame = (start/ticksperframe) as integer
+				local _endFrame = (end/ticksperframe) as integer
+
+				-- Resultado a devolver. Si se cancela el previo devolveremos False
+				local _result = true
+
+				-- Obtener configuración de Nitrous del viewport activo
+				local _ni = NitrousGraphicsManager.GetActiveViewportSetting()
+				
+				--	Borramos también el log de preview
+				if doesFileExist this.previewLogFile then deleteFile this.previewLogFile
+				
+				--	Rellenamos todas las variables que se hayan pasado vacías. No podemos ponerlo directamente 
+				--	como valores por defecto en la cabecera de la función porque da un error "Struct member access requires instance
+				if autoname == undefined do
+				(
+					autoname = (lb.xml.getAttribute this.cfgFile ("rollMain/settings") "autoname")
+					if autoname != "" then
+						autoname = execute autoname
+					else -- si no hay preferencias por defecto nombramos bien los videos
+						autoname = true
+				)
+				if autoname == true and viewport.getCamera() != undefined then 
+					previewFileName = this.getPreviewFileNameForCam(viewport.getCamera()) 
+				else
+					previewFileName = this.previewDir + this.tmpFileName + "." + videoType as string
+
+				-- Guardar la calidad de renderizado y estado del DepthOfField de Nitrous actual
+				_oldQuality = NitrousGraphicsManager.MakePreviewQuality
+				_oldDof = _ni.DOFEnabled
+
+				-- Si no se ha especificado nivel de acabado visual, intentar obtener el nivel de renderizado de las preferencias
+				if style == undefined do
+				(
+					style = (lb.xml.getAttribute this.cfgFile ("rollMain/settings") "style")
+					if style != "" then
+						style = execute ("#"+style)
+					else -- si no hay preferencias obtener nivel de renderizado del viewport activo
+						style = _ni.VisualStyleMode
+				)
+				this.visualStyle = style
+
+				-- Intentar obtener preferencias de DOF. Desactivar por defecto si no hay preferencias
+				dof = (lb.xml.getAttribute this.cfgFile ("rollMain/settings") "dof")
+				if dof != "" then
+					dof = execute dof
+				else -- si no hay preferencias por defecto nombramos bien los videos
+					dof = false
+
+				-- Activar/Desactivar DOF según se haya pasado por argumento
+				_ni.DOFEnabled = dof 
+				
+				-- Si no se ha especificado porcentaje de tamaño, intentar obtenerlo de las preferencias
+				if percent == undefined do
+				(
+					percent = (lb.xml.getAttribute this.cfgFile ("rollMain/settings") "percent")
+					if percent != "" then
+						percent = (substituteString percent "%" "") as integer
+					else -- si no hay preferencias ponemos el porcentaje al 100% por defecto
+						percent = 100
+				)
+				
+				-- Cambiar la calidad de renderizado de Nitrous
+				if quality == undefined do
+				(
+					quality = (lb.xml.getAttribute this.cfgFile ("rollMain/settings") "quality")
+					if quality != "" then
+					(
+						n = finditem this.qualities quality
+						quality = 2^(n+1)
+					)
+					else 
+						quality = undefined
+				)
+				
+				if quality != undefined then 
+					NitrousGraphicsManager.MakePreviewQuality = quality
+
+				-- Modificar panel de configuración de previos para que use el mismo nivel de renderizado que el viewport activo
+				--	max2014 se pasa por el forro la configuración del viewport y hace override con lo que ponga en las preferencias de previos, así que tenemos que forzarlo
+				setPreviewRenderLevel()
+
+				-- Desactivar a capón el Live area (bordecito de color que está activado por defecto en los márgenes del frame) y las Statistics 
+				disableLiveAreaAndStatistics()
+
+				-- Desactivar a capón el autoplay
+				disableAutoplay()
+
+				-- Ocultar raíces (flotadores rojos) de los personajes
+				charRoots = hideCharRoots()
+
+				-- Mostrar barra de progreso para permitir que el usuario cancele el previo, si no la mostramos el ESC no funciona y no hay manera de interrumpir el previo
+				progressStart "Creating preview..."
+				createPreview outputAVI:true percentSize:percent start:start end:end skip:1 fps:framerate dspGeometry:true dspShapes:false dspLights:false dspCameras:false dspHelpers:false dspParticles:true dspBones:true dspGrid:false dspSafeFrame:true dspFrameNums:false dspBkg:true 
+
+				-- Mostrar raícesde los personajes
+				unhide charRoots
+
+				-- Recuperar la calidad de viewport anterior
+				NitrousGraphicsManager.MakePreviewQuality = _oldQuality
+				_ni.DOFEnabled = _oldDof
+
+				-- No hay manera de saber si el usuario ha cancelado el previo así que lo haremos comprobando la duración del video contra la duración de la cámara
+				info = lb.video.getVideoInfo(this.previewRawVideo)
+				if info.duration < (_endFrame - _startFrame + 1) then
+				(
+					pushPrompt "User cancelled"
+					_result = false
+				)
+				else 
+				(
+					-- Generar metadata para el archivo de video
+					meta = metadata()
+					meta.recStart = _startFrame
+					meta.recEnd = _endFrame
+					meta.artist = sysInfo.username
+					if cam != undefined do
+					(
+						m = lb.re.match cam.name "(cam)?_?(\d{3})"
+						meta.camera = if m != false then m[2] else undefined
+						meta.lens = (fov2mm cam.fov)
+					)
+
+					-- Obtener datos de nombre de fichero: secuencia y tipo de archivo
+					m = lb.re.match maxFilename "seq_(\d{3}\w?-([^_]+)?)((_([^_]+))+)\.max$"
+					if m != false do
+					(
+						meta.sequence = m[1]
+						parts = (filterString m[3] "_")
+						meta.stage = parts[2]                -- Cuando los de animacion añaden sufijo "blocking" el fichero ya no sigue la NC , pero como es temporal, lo permitimos.
+					)
+
+					--si la fase es animacion, busca información de stamps de producción y si la hay la usa
+					if meta.stage == "anim" then
+					(
+						_camStampsData = this.getStampsDocData()
+						--print _camStampsData
+
+						if _camStampsData.count != 0 then
+						(
+							--averigua si hay informacion de stamps de animacion
+							_candidateStamps = undefined
+							for _camData in _camStampsData where _camData.camera == meta.camera do
+							(
+								if _camData.sequence == meta.sequence then _candidateStamps = _camData
+								else if _candidateStamps == undefined and findString meta.sequence _camData.sequence != undefined then _candidateStamps = _camData
+							)--for
+
+							--si hay stamps de animacion para esta secuencia y camara los usa
+							if _candidateStamps != undefined then
+							(
+								meta.startDate = _candidateStamps.startDate
+								meta.endDate = _candidateStamps.endDate
+								meta.artist = _candidateStamps.animator
+							)--if
+						)--if
+
+						--print meta
+					)
+
+					-------------------------------------
+					--recopilacion de settings de los stamps del configurador de stamps
+					(
+						-------------------------------------
+						_artist = (lb.xml.getAttribute lb.cameraStamps.cfgFile ("rollMain/stamps") "artist")
+						
+						if _artist == "true" then
+						(
+							_artistName = (lb.xml.getAttribute lb.cameraStamps.cfgFile ("rollMain/stamps") "artistName")
+							if _artistName != undefined and _artistName != "" then meta.artist = _artistName
+						)
+						else
+						(
+							meta.artist = ""
+						)
+						-------------------------------------
+
+						-------------------------------------
+						_stage = (lb.xml.getAttribute lb.cameraStamps.cfgFile ("rollMain/stamps") "stage")
+						
+						if _stage == "true" then
+						(
+							_stageText = (lb.xml.getAttribute lb.cameraStamps.cfgFile ("rollMain/stamps") "stageText")
+							if _stageText != undefined and _stageText != "" then meta.stage = _stageText
+						)
+						else
+						(
+							meta.stage = ""	
+						)
+						-------------------------------------
+
+						_sequence = (lb.xml.getAttribute lb.cameraStamps.cfgFile ("rollMain/stamps") "sequence") == "true"
+						if not _sequence then meta.sequence = ""
+
+						_camera = (lb.xml.getAttribute lb.cameraStamps.cfgFile ("rollMain/stamps") "camera") == "true"
+						if not _camera then meta.camera = ""
+
+						_frame = (lb.xml.getAttribute lb.cameraStamps.cfgFile ("rollMain/stamps") "frame") == "true"
+						if not _frame then ( meta.recStart = ""; meta.recEnd = "")
+						
+						_focallength = (lb.xml.getAttribute lb.cameraStamps.cfgFile ("rollMain/stamps") "focallength") == "true"
+						if not _focallength then meta.lens = ""
+					)
+
+					--print this.previewRawVideo
+					--print previewFileName
+					--print videoType
+					--print meta
+					--print "-------------------------------------"
+					
+					-- Convertir video a quicktime y salvar en su ruta correcta
+					lb.video.encodeVideo this.previewRawVideo percent:percent videoFileName:previewFileName outputType:videoType meta:meta
+
+					-- Si se pasado por parámetro, abrir video
+					if openWhenFinished do shellLaunch previewFileName ""
+				)
+
+				return _result
+			)
+			else messagebox "Revisa el nombre de la escena layout. No cumplen NC."
+		),
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+			
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addLibrary this --añade la libreria a la principal
+		)
+		
+	)--lib_preview
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	
+	lib_preview()
+)
+

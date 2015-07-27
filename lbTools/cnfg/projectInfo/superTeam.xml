@@ -1,0 +1,117 @@
+<info>
+  <id>st</id>
+  <name>Super Team</name>
+  <drive>v</drive>
+  
+  <resources>
+    
+    <resource>
+      <type>svn</type>
+      <name>asset</name>
+      <url>https://lbdata001/svn/st_asset</url>
+      <localPath>v:\asset</localPath>
+      <networkPath>\\lbdata001\v\asset</networkPath>
+    </resource>
+
+    <resource>
+      <type>svn</type>
+      <name>documentation</name>
+      <url>https://lbdata001/svn/st_documentation</url>
+      <localPath>v:\documentation</localPath>
+      <networkPath>\\lbdata001\v\documentation</networkPath>
+    </resource>
+    
+    <resource>
+      <type>share</type>
+      <name>frame</name>
+      <url>none</url>
+      <localPath>none</localPath>
+      <networkPath>\\lbdata002\v\frame</networkPath>
+    </resource>
+
+    <resource>
+      <type>share</type>
+      <name>frameR</name>
+      <url>none</url>
+      <localPath>none</localPath>
+      <networkPath>\\lbdata002\v\frameR</networkPath>
+    </resource>
+
+    <resource>
+      <type>svn</type>
+      <name>management</name>
+      <url>https://lbdata001/svn/st_management</url>
+      <localPath>v:\management</localPath>
+      <networkPath>\\lbdata001\v\management</networkPath>
+    </resource>
+
+    <resource>
+      <type>svn</type>
+      <name>marketing</name>
+      <url>https://lbdata001/svn/st_marketing</url>
+      <localPath>v:\marketing</localPath>
+      <networkPath>\\lbdata001\v\marketing</networkPath>
+    </resource>
+    
+    <resource>
+      <type>svn</type>
+      <name>resource</name>
+      <url>https://lbdata001/svn/st_resource</url>
+      <localPath>v:\resource</localPath>
+      <networkPath>\\lbdata001\v\resource</networkPath>
+    </resource>
+
+    <resource>
+      <type>svn</type>
+      <name>sequence</name>
+      <url>https://lbdata001/svn/st_sequence</url>
+      <localPath>v:\sequence</localPath>
+      <networkPath>\\lbdata001\v\sequence</networkPath>
+    </resource>
+
+    <resource>
+      <type>svn</type>
+      <name>sound</name>
+      <url>https://lbdata001/svn/st_sound</url>
+      <localPath>v:\asset</localPath>
+      <networkPath>\\lbdata001\v\sound</networkPath>
+    </resource>
+
+    <resource>
+      <type>svn</type>
+      <name>video</name>
+      <url>https://lbdata001/svn/st_video</url>
+      <localPath>v:\video</localPath>
+      <networkPath>\\lbdata001\v\video</networkPath>
+    </resource>
+
+    <resource>
+      <type>share</type>
+      <name>simulation</name>
+      <url>none</url>
+      <localPath>none</localPath>
+      <networkPath>\\lbdata002\v\simulation</networkPath>
+    </resource>
+  
+  </resources>
+
+  <parameters>
+
+    <paramblock>
+      <type>general</type>
+      <name>common</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>852</height>
+        <width>2048</width>
+        <aspect>1.0</aspect>
+      </size>
+      <gamma>
+        <input>1.84</input>
+        <output>1.0</output>
+      </gamma>
+    </paramblock>
+
+  </parameters>
+  
+</info>

@@ -1,0 +1,13 @@
+<preset>
+  <name>_technology_</name>
+  <readOnly>true</readOnly>
+  <categories>
+    <category>#all</category>
+  </categories>
+  <favourites>
+    <aux>empty</aux>
+  </favourites>
+  <hidden>
+    <aux>empty</aux>
+  </hidden>
+</preset>

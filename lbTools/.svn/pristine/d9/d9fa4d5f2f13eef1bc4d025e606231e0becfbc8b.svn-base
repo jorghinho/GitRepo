@@ -1,0 +1,2514 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--Descripcion: libreria de plantilla
+------------------------------------------------------------------------------------------------------------------------------------------------
+(	
+	------------------------------------------------------------------------------------------------
+	--CUSTOM ATTRIBUTES
+	------------------------------------------------------------------------------------------------
+	------------------------------------------------
+	--@fn: attributeDef | CA_linkConstraint | Devuelve la definición del linkConstraint
+	------------------------------------------------
+	CA_linkConstraint = attributes linkConstraint
+	(
+		---------------------------------------------------------------------------
+		-------------------- VARIABLES ---------------------------------------
+		---------------------------------------------------------------------------
+		
+		local rollLinkConstraint		--	rollout
+		
+		---------------------------------------------------------------------------
+		-------------------- PARAMETROS -------------------------------------
+		---------------------------------------------------------------------------
+		
+		parameters main rollout:rollLinkConstraint
+		(
+			--guarda la descripcion del CA y su version
+			CA_description type:#string default:"Controla el link constraint para el rig de las piezas."
+			CA_version type:#integer default:1
+			
+			virtualWorld type:#node
+		)
+		
+		---------------------------------------------------------------------------
+		-------------------- FUNCIONES ------------------------------------
+		---------------------------------------------------------------------------
+				
+		---------------------------------------------------------------------------
+		-------------------- ROLLOUTS -------------------------------------
+		---------------------------------------------------------------------------
+		
+		rollout rollLinkConstraint "Link Constraint"
+		(
+			---------------------------------------------------------------------------
+			-------------------- VARIABLES ---------------------------------------
+			---------------------------------------------------------------------------
+			
+			local selectedIndex = undefined
+			
+			---------------------------------------------------------------------------
+			-------------------- CONTROLES --------------------------------------
+			---------------------------------------------------------------------------
+			
+			dotNetControl lvLinks "System.Windows.Forms.ListView" pos:[5,10] width:150 height:95
+			
+			spinner spnStartTime "Start Time: " pos:[45,110] width:80 height:15 fieldWidth:40 range:[-10000,10000,0] scale:1 type:#integer
+			
+			checkbutton btnAddLink "Add Link" pos:[5,130] width:75 height:20
+			button btnLinkToWorld "Link to World" pos:[80,130] width:75 height:20
+			button btnDeleteLink "Delete Link" pos:[5,155] width:150 height:20
+				
+			---------------------------------------------------------------------------
+			-------------------- FUNCIONES --------------------------------------
+			---------------------------------------------------------------------------
+			----------------------------------------------------------------------------------------
+			-- Inicia el estilo y columnas del listView 
+			----------------------------------------------------------------------------------------
+			fn initListView =
+			(
+				lvLinks.gridLines = true 
+				lvLinks.View = (dotNetClass "System.Windows.Forms.View").details
+				lvLinks.borderstyle = (dotnetclass "System.Windows.Forms.BorderStyle").fixedSingle
+				lvLinks.headerStyle = (dotnetclass "System.Windows.Forms.ColumnHeaderStyle").nonClickable
+				
+				lvLinks.showItemTooltips = true
+				lvLinks.labelEdit = false
+				lvLinks.fullRowSelect = true
+				lvLinks.hideSelection = false
+				lvLinks.scrollable = true
+				lvLinks.gridlines = false
+				
+				lvLinks.Columns.add "Frame" 45
+				lvLinks.Columns.add "Frame" 105
+			)
+			
+			----------------------------------------------------------------------------------------
+			--	Rellena el listView con los targets del controlador linkConstraint que 
+			--	tiene el objeto. Si no tiene el controlador 
+			----------------------------------------------------------------------------------------
+			fn fillListView = 
+			(
+				_LCNode = lb.links.getLinkNode()
+				
+				if _LCNode != undefined then
+				(
+					_LCcontroller = _LCNode.transform.controller
+					lvLinks.items.clear()
+					
+					for i = 1 to _LCcontroller.getNumTargets() do
+					(
+						_target = "World"
+						
+						if (_LCcontroller.getNode i) != undefined then 
+						(
+							_target = (_LCcontroller.getNode i).name
+							if virtualWorld != undefined and ((_LCcontroller.getNode i).name == virtualWorld.name) then
+								_target = "Virtual World: " + _target
+						)						
+						
+						lvLinks.items.add (_LCcontroller.getFrameNo i as string)
+						lvLinks.items.item[i-1].subitems.add _target
+					)
+				)
+
+			)
+			
+			----------------------------------------------------------------------------------------
+			--	Actualiza el estado de los controles del rollout, activándolos o desactivándolos
+			--	dependiendo de si encuentra el controlador linkConstraint en la pieza
+			----------------------------------------------------------------------------------------
+			fn initControls = 
+			(
+				_LCNode = lb.links.getLinkNode()
+				
+				rollLinkConstraint.initListView()
+				
+				if _LCNode != undefined then
+				(
+					fillListView()
+					btnAddLink.enabled = btnDeleteLink.enabled = btnLinkToWorld.enabled = true
+				)
+				else
+				(
+					lvLinks.items.add ""
+					lvLinks.items.item[0].subitems.add "No Link constraint found"
+					btnAddLink.enabled = btnDeleteLink.enabled = btnLinkToWorld.enabled = false
+				)
+			)
+			
+			-------------------------------------------------------------------------
+			-------------------- EVENTOS --------------------------------------
+			-------------------------------------------------------------------------
+			
+			----------------------------------------------------------------------------------------
+			on rollLinkConstraint open do
+			(
+				initControls()
+			)
+			
+			----------------------------------------------------------------------------------------
+			on btnAddLink changed val do
+			(
+				_LCNode = lb.links.getLinkNode()
+				
+				if _LCNode != undefined then
+				(
+					_o = pickObject() 
+					
+					lb.links.linkConstraint.addTarget _LCNode _o
+				)
+				
+				btnAddLink.checked = false
+				rollLinkConstraint.fillListView()
+			)
+			
+			----------------------------------------------------------------------------------------
+			on btnLinkToWorld pressed do
+			(			
+				if _LCNode != undefined then
+				(
+					_baseObj = virtualWorld
+						
+					lb.links.linkConstraint.addTarget _LCNode _baseObj
+				)
+				
+				rollLinkConstraint.fillListView()
+			)
+			
+			----------------------------------------------------------------------------------------
+			on btnDeleteLink pressed do
+			(
+				_LCNode = lb.links.getLinkNode()
+				
+				for i = lvLinks.selectedItems.count to 1 by -1 do
+				(
+					index = (lvLinks.selectedItems.item[i-1].index + 1)
+					lb.links.linkConstraint.deleteTarget _LCNode index
+				)
+				
+				rollLinkConstraint.fillListView()
+			)
+			
+			----------------------------------------------------------------------------------------
+			on lvLinks SelectedIndexChanged e do
+			(
+				_LCcontroller = lb.links.linkConstraint.getLCcontroller()
+				
+				if (lvLinks.SelectedIndices.count) != 0 then
+				(
+					selectedIndex = ((lvLinks.SelectedIndices.item[0] + 1))
+					spnStartTime.value = _LCcontroller.getFrameNo selectedIndex
+				)
+			)
+			
+			----------------------------------------------------------------------------------------
+			on spnStartTime changed value do
+			(
+				if selectedIndex != undefined then
+				(
+					LCcontroller.setFrameNo selectedIndex value
+					rollLinkConstraint.fillListView()
+				)
+			)
+			
+		)	-- rollout rollLinkConstraint
+	) -- CA_linkConstraint
+	
+	------------------------------------------------
+	--@fn: attributeDef | CA_pointConstraint | Devuelve la definición del pointConstraint
+	------------------------------------------------
+	CA_pointConstraint = attributes pointConstraint
+	(
+		---------------------------------------------------------------------------
+		-------------------- VARIABLES ----------------------------------
+		---------------------------------------------------------------------------
+		
+		---------------------------------------------------------------------------
+		-------------------- PARAMETROS ------------------------------
+		---------------------------------------------------------------------------
+		
+		parameters main rollout:rollPointConstraint
+		(
+			--guarda la descripcion del CA y su version
+			CA_description type:#string animatable:false default:"Controla el point constraint de la pieza."
+			CA_version type:#integer animatable:false default:1.1
+			syncTimeLine type:#boolean animatable:false ui:chkSyncronizeCurrentTime
+		)
+		
+		---------------------------------------------------------------------------
+		-------------------- FUNCIONES ----------------------------------
+		---------------------------------------------------------------------------
+		
+		---------------------------------------------------------------------------
+		-------------------- ROLLOUTS ------------------------------------
+		---------------------------------------------------------------------------
+		
+		rollout rollPointConstraint "Point Constraint"
+		(
+			---------------------------------------------------------------------------
+			-------------------- VARIABLES ---------------------------------------
+			---------------------------------------------------------------------------
+			local allowUpdate = false
+
+			local callbackIndex = -1 --indice del callback de actualizacion
+			
+			local bgColor = (dotNetClass "System.Drawing.Color").white  --color de fondo normal
+			local bgSelColor = (dotNetClass "System.Drawing.Color").fromargb 30 90 180 --color de fondo seleccionado
+			
+			local textColor = (dotNetClass "System.Drawing.Color").black --color del texto normal
+			local textSelColor = (dotNetClass "System.Drawing.Color").white --color del texto seleccionado
+			
+			---------------------------------------------------------------------------
+			-------------------- CONTROLES --------------------------------------
+			---------------------------------------------------------------------------
+			
+			dotNetControl lvLinks "System.Windows.Forms.ListView" pos:[5,10] width:150 height:170
+			
+			checkbox chkSyncronizeCurrentTime "sync timeline frame" pos:[5,180] checked:false
+			spinner spnStartTime "Start Time: " pos:[75,200] width:80 height:15 fieldWidth:65 range:[-1000000,1000000,0] scale:1 type:#integer
+						
+			checkbutton btnAddLink "Add Link" pos:[5,220] width:75 height:20
+			button btnLinkToWorld "Link to World" pos:[80,220] width:75 height:20
+			button btnDeleteLink "Delete Link" pos:[5,245] width:150 height:20
+			
+			groupBox grpSnaps "Align links" pos:[5,270] width:150 height:40
+			button btnSnapPrevToThis "prev to this" pos:[10,285] width:68 height:20
+			button btnSnapThisToPrev "this to prev" pos:[82,285] width:68 height:20
+			
+			timer updateClock "updatePointLinkList" interval:100 active:false --timer de actualizacion cada segundo y medio.
+			
+			-----------------------------------------------------------------------
+			-------------------- FUNCIONES ---------------------------------
+			-----------------------------------------------------------------------
+			----------------------------------------------------------------------------------------
+			--actualiza el estado que deben tener los controles del rollout de PC en funcion de varias varaibles
+			----------------------------------------------------------------------------------------
+			fn updateControlsState =
+			(
+				_PCNode = lb.links.getLinkNode()
+				
+				lb.links.pointConstraint.getPointData _PCNode
+				
+				_pointData = lb.links.pointConstraint.pointData
+				
+				--si no hay lincajes o no hay licajes selecionados en la lista no se puede dar al boton eliminar, ni al spinner ni a los snaps
+				spnStartTime.enabled = btnDeleteLink.enabled = btnSnapPrevToThis.enabled = btnSnapThisToPrev.enabled = not (_pointData.pointLinks.count == 0 or lvLinks.selectedItems.count == 0)
+								
+				--si el slidertime no esta en el frame del lincaje seleccionado, no se habilitan los controles de snaps
+				if (_pointData.pointLinks.count != 0 and lvLinks.selectedItems.count != 0) then
+				(
+					btnSnapPrevToThis.enabled = btnSnapThisToPrev.enabled = ((lvLinks.selectedItems.item[0].subitems.item[0].text as time) == slidertime)
+					
+					if (lvLinks.items.item[0].subitems.item[0].text == lvLinks.selectedItems.item[0].subitems.item[0].text) then
+						btnSnapPrevToThis.enabled = btnSnapThisToPrev.enabled = false
+				)--if
+			)
+
+			----------------------------------------------------------------------------------------
+			--Inicia el estilo y columnas del listView 
+			----------------------------------------------------------------------------------------
+			fn initListView =
+			(
+				lvLinks.gridLines = true 
+				lvLinks.View = (dotNetClass "System.Windows.Forms.View").details
+				lvLinks.borderstyle = (dotnetclass "System.Windows.Forms.BorderStyle").fixedSingle
+				lvLinks.headerStyle = (dotnetclass "System.Windows.Forms.ColumnHeaderStyle").nonClickable
+				lvLinks.hideSelection = true
+				
+				lvLinks.showItemTooltips = true
+				lvLinks.labelEdit = false
+				lvLinks.fullRowSelect = true
+				lvLinks.scrollable = true
+				lvLinks.gridlines = false
+				
+				lvLinks.Columns.add "Fr" 30
+				lvLinks.Columns.add "Target" 100
+			)--fn initListView
+			
+			----------------------------------------------------------------------------------------
+			--Actaliza el color de fondo de las filas sen funcion de lo seleccionado
+			----------------------------------------------------------------------------------------
+			fn updateRowsColor =
+			(
+				for i=1 to lvLinks.items.count do --recorre las filas poniendo el color correspondiente
+				(
+					lvLinks.items.item[i-1].backColor = bgColor
+					lvLinks.items.item[i-1].foreColor = textColor
+					
+					if lvLinks.items.item[i-1].selected then
+					(
+						lvLinks.items.item[i-1].backColor = bgSelColor
+						lvLinks.items.item[i-1].foreColor = textSelColor
+					)--if
+				)--for
+			)--fn updateRowsColor
+			
+			----------------------------------------------------------------------------------------
+			--	Rellena el listView con los targets del controlador linkConstraint que 
+			--	tiene el objeto. Si no tiene el controlador 
+			----------------------------------------------------------------------------------------
+			fn fillListView = 
+			(
+				_PCNode = lb.links.getLinkNode()
+				lb.links.pointConstraint.getPointData _PCNode
+				
+				_pointData = lb.links.pointConstraint.pointData
+				
+				--si tiene los controladores de constraint
+				if _pointData.pcController != undefined and _pointData.ocController != undefined then
+				(
+					selIndexBackup = 0 --indice seleccionado antes del redibujado
+					
+					if lvLinks.selectedItems.count != 0 then --si hay algun elemento seleccionado
+						selIndexBackup = (lvLinks.selectedItems.item[0].index + 1) --obtiene el indice del seleccionado
+					
+					lvLinks.items.clear() --vacia el listado
+					_pointData.pointLinks = #() --array con las relaciones linkTime-linkTarget-realIndex
+					
+					--recorre los targets. (recorremos solo el de posicion porque el de orientación estará sincronizado)
+					for i = 1 to _pointData.pcController.getNumTargets() do
+					(
+						frame =  0 as time
+						target = (_pointData.pcController.getNode i).parent
+						
+						--averigua el nombre del target
+						if target == undefined then target = "_World_"
+						else target = target.name
+						
+						--averigua el frame en el que empieza a actuar-----------------------
+						stop = false
+						wController = _pointData.pcController.weight[i].controller
+						if wController != undefined then --si el peso tiene controlador asignado
+							for j=1 to (numKeys wController) where not stop and (at time (getKeyTime wController j) _pointData.pcController.weight[i]) == 1.0 do
+							(
+								frame = (getKeyTime wController j)
+								stop = true --para
+							)
+						
+						append _pointData.pointLinks #(frame, target, i) --añade una relacion linkTime-linkTarget-realIndex	
+					)--for
+					
+					--recorre las claves del controlador del peso de los constraints buscando las que estén a 0, lo que indica un lincaje a WORLD
+					for i=1 to (numKeys _pointData.cWeightController) do
+					(
+						frame = getKeyTime _pointData.cWeightController i
+						if (at time frame _pointData.cWeightController.value) == 0.0 then
+						(
+							if _PCNode.parent != undefined then
+								append _pointData.pointLinks #(frame, ("Virtual World: " + (_PCNode).parent.name), i) --añade una relacion linkTime-linkTarget-realKeyIndex	
+							else
+								append _pointData.pointLinks #(frame, "World", i) --añade una relacion linkTime-linkTarget-realKeyIndex	
+						)--if
+					)--for
+					
+					--ordena los links antes de llenar el listado
+					qsort _pointData.pointLinks lb.links.pointConstraint.compareByLinkTime
+					
+					--rellena el listado
+					for i=1 to _pointData.pointLinks.count do
+					(
+						lvLinks.items.add (((_pointData.pointLinks[i][1] as string) as integer) as string)
+						lvLinks.items.item[i-1].subitems.add _pointData.pointLinks[i][2]
+						
+						if selIndexBackup == i then
+						(
+							lvLinks.items.item[i-1].selected = true
+							lvLinks.EnsureVisible (i-1)
+						)
+					)--for
+					
+					updateRowsColor() --actualiza el color de las filas
+				)--if pcController ocController
+
+				-- TODO : EXTERNALIZACION DE FUNCIONALIDAD A LA LIBRERIA DE LINKS DESDE EL CUSTOM ATTRIBUTE
+				-- actualizamos el sinoptico que contiene el mismo panel
+				--if lb.synopticBox.rollmain != undefined do 
+				--	lb.synopticBox.rollmain.updateConstraintsUI updateList:true clearSelections:true
+								
+				--Habilita o deshabilita partes del UI
+				--btnDeleteLink.enabled = spnStartTime.enabled = (_pointData.pointLinks.count != 0)
+					
+			)
+			
+			----------------------------------------------------------------------------------------
+			--	Actualiza el estado de los controles del rollout, activándolos o desactivándolos
+			--	dependiendo de si encuentra los controladores de constraint en la pieza
+			----------------------------------------------------------------------------------------
+			fn initControls = 
+			(
+				initListView()
+				
+				_PCNode = lb.links.getLinkNode()
+				lb.links.pointConstraint.getPointData _PCNode
+				
+				_pointData = lb.links.pointConstraint.pointData
+				
+				if _pointData.pcController != undefined and _pointData.ocController != undefined then
+				(
+					--btnAddLink.enabled = btnDeleteLink.enabled = btnLinkToWorld.enabled = spnStartTime.enabled = true
+					fillListView()
+				)
+				else
+				(
+					lvLinks.items.add ""
+					lvLinks.items.item[0].subitems.add "No point constraint found"
+					--btnAddLink.enabled = btnDeleteLink.enabled = btnLinkToWorld.enabled = spnStartTime.enabled = false
+				)
+			)--fn initControls
+			
+			----------------------------------------------------------------------------------------
+			--funcion que se ejecuta cuando hay cambios. CFFn:callback filter function
+			----------------------------------------------------------------------------------------
+			fn updatePointLinksListCFFn theAnimatable theParent theSubAnimIndex theGrandParent theNode =
+			( 	
+				if (lb.links.pointConstraint.hasPcAttribute theNode.modifiers[1]) do --recorre los modificadores
+					if not allowUpdate then --
+						allowUpdate = true --activa la actualizacion porque ha habido cambios en las claves
+				
+				true
+			)
+			
+			----------------------------------------------------------------------------------------
+			--funcion de auditoria. CAFn:callback audition function
+			----------------------------------------------------------------------------------------
+			fn updatePointLinksListCAFn arg1 arg2 = (true)
+			
+			----------------------------------------------------------------------------------------
+			--crea el callback
+			----------------------------------------------------------------------------------------
+			fn createCallbacks =
+			(
+				auxInterface = maxOps.trackbar --interface del trackbar
+				callbackIndex = auxInterface.registerFilter updatePointLinksListCFFn updatePointLinksListCAFn "updatePointLinksList" 1983 active:true stopTraversal:false --registra el callback
+				
+				-- Para actualizar el estado de los bótones del snap
+				registerTimeCallback updateControlsState
+				
+			)
+			
+			----------------------------------------------------------------------------------------
+			--elimina el callback
+			----------------------------------------------------------------------------------------
+			fn removeCallbacks =
+			(
+				auxInterface = maxOps.trackbar --interface del trackbar
+				if callbackIndex != -1 then auxInterface.unRegisterFilter callbackIndex --quita el callback
+					
+				-- Para quitar callback de del estado de los bótones del snap
+				unRegisterTimeCallback updateControlsState
+			)
+			
+			---------------------------------------------------------------------------
+			---------------------------------------------------------------------------
+			--------------------------------------------------------------------------
+			--selecciona el lincaje mas cercano al currentTime
+			---------------------------------------------------------------------------
+			fn selectNearestPoitLink =
+			(
+				_PCNode = lb.links.getLinkNode()
+				lb.links.pointConstraint.getPointData _PCNode
+				
+				_pointData = lb.links.pointConstraint.pointData
+				
+				_nearestPointLinkFrameIndex = 0 --variable con el frame del lincaje mas cercano al current time
+				_minDistance = 1000000
+				
+				for i=1 to _pointData.pointLinks.count where (abs (currentTime - _pointData.pointLinks[i][1])) < _minDistance do
+				(
+					_nearestPointLinkFrameIndex = i
+					_minDistance = (abs (currentTime - _pointData.pointLinks[i][1]))
+				)
+					
+				--selecciona el lincaje mas cercano y pone el sliderTime en ese frame
+				if _nearestPointLinkFrameIndex != 0 then
+				(
+					lvLinks.items.item[_nearestPointLinkFrameIndex - 1].selected = true
+					sliderTime = _pointData.pointLinks[_nearestPointLinkFrameIndex][1]
+				)--if
+			)	
+			
+			---------------------------------------------------------------------------
+			--coloca el sliderTime del timeline en el frame del lincaje seleccionado del listado
+			---------------------------------------------------------------------------
+			fn setSelectedLinkFrameAsCurrentTime =
+			(
+				_PCNode = lb.links.getLinkNode()
+				lb.links.pointConstraint.getPointData _PCNode
+				_pointData = lb.links.pointConstraint.pointData
+				
+				if lvLinks.items.count == _pointData.pointLinks.count then --para prevenir que salte mientras se esta actualizando el listado.
+					for i=1 to _pointData.pointLinks.count where lvLinks.items.item[i-1].selected do sliderTime = _pointData.pointLinks[i][1] --selecciona el frame del lincaje actual.
+			)
+			
+			---------------------------------------------------------------------------
+			-------------------- EVENTOS -----------------------------------------
+			---------------------------------------------------------------------------
+			---------------------------------------------------------------------------
+			--rellena las variables iniciales necesarias
+			--rellena el UI por primera vez
+			---------------------------------------------------------------------------
+			on rollPointConstraint open do
+			(
+				_PCNode = lb.links.getLinkNode()
+				lb.links.pointConstraint.getPointData _PCNode
+				
+				_pointData = lb.links.pointConstraint.pointData
+				
+				--obtiene los controladores de position constraint y orientation constraint
+				--si no tiene, le pone unos
+				lb.links.pointConstraint.addPCconstrollers _PCNode
+				
+				--rellena el listado de targets
+				initControls()
+				updateControlsState()
+ 				--if chkSyncronizeCurrentTime.checked then selectNearestPoitLink()
+				
+				--inicia el timer
+				updateClock.active = true
+				
+				--inicia el callback del trackbar para reconocer cuando se estan moviendo claves y actualizar el listado
+				createCallbacks()
+			)
+			
+			---------------------------------------------------------------------------
+			--cuando se activa el check de seleccionar el mas cercano, se ejecuta
+			---------------------------------------------------------------------------
+			on chkSyncronizeCurrentTime changed state do
+				if state then
+					selectNearestPoitLink()
+			
+			---------------------------------------------------------------------------
+			--elimina el callback para que no esté quitando rendimiento
+			---------------------------------------------------------------------------
+			on rollPointConstraint close do
+			(
+				removeCallbacks() --quita el callback
+			)
+			
+			---------------------------------------------------------------------------
+			--pasado un tick del timer permitimos la actualizacion
+			---------------------------------------------------------------------------
+			on updateClock tick do
+			(
+				if allowUpdate then
+				(
+					fillListView() --actualiza el listado si ha habido cambios
+					allowUpdate = false --desactiva el update hasta que haya algun cambio
+				)
+			)
+
+			/*
+			TODO: EXTERNALIZAR EL CODIGO, SERIA ASI. ESTO IMPLICA ACTUALIZAR LOS PERSONAJES.
+			UNA IDEA ES CAMBIAR EL BOTON DE ADD LINK A UN BOTON NORMAL Y ACTIVARLO Y DESACTIVARLO, PARA QUE NO EMITA SEÑALES
+			on btnAddLink pressed do
+			(
+				btnAddLink.enabled = false
+
+				if lb.links.pointConstraint.addLink() then
+					fillListView() --redibuja el listado
+				else
+					lb.message.show "Chosen object not valid, point link not created." type:#message pos:undefined size:[300,75] modal:true
+
+				btnAddLink.enabled = true
+			)*/
+			
+			---------------------------------------------------------------------------
+			--añade un nuevo lincaje a un objeto
+			---------------------------------------------------------------------------
+			on btnAddLink changed val do
+			(
+				_PCNode = lb.links.getLinkNode()
+				lb.links.pointConstraint.getPointData _PCNode
+				
+				_pointData = lb.links.pointConstraint.pointData
+				
+				_o = pickObject filter:lb.links.pointConstraint.filterObject --obtiene un objeto mediante pick
+					
+				if isValidNode _o then 
+				(
+					if isValidNode _o then --si el objeto pickado es valido
+					(	
+						hasLinkYet = false --flag para saber si ya hay un lincaje en ese frame
+						index = 0 --indice del target a eliminar si hay nuo ya en ese frame
+						
+						--comprueba si hay un lincaje ya en el fotograma actual
+						for i=1 to _pointData.pointLinks.count where _pointData.pointLinks[i][1] == currentTime do
+						(
+							hasLinkYet = true
+							index = i
+						)--for
+						
+						undo "Add Point Link" on
+						(
+							--si ya hay un lincaje en ese fotograma lo elimina
+							if hasLinkYet then
+							(
+								lb.links.pointConstraint.deleteTarget _PCNode index
+								fillListView() --redibuja el listado
+							)
+							
+							lb.links.pointConstraint.addTarget _PCNode _o --añade un lincaje
+							
+						)--undo
+					)--if isValidNode
+					
+					btnAddLink.checked = false --suelta el boton					
+				)
+				else
+					lb.message.show "Chosen object not valid, point link not created." type:#message pos:undefined size:[300,75] modal:true
+			)
+			
+			---------------------------------------------------------------------------
+			--añade un nuevo lincaje al mundo
+			---------------------------------------------------------------------------
+			on btnLinkToWorld pressed do
+			(
+
+				_PCNode = lb.links.getLinkNode()
+				lb.links.pointConstraint.getPointData _PCNode
+				
+				_pointData = lb.links.pointConstraint.pointData
+				
+				btnAddLink.checked = false --desactiva el otro boton
+				
+				--si hay que hacer un link al mundo
+				if (_pointData.pcController != undefined and _pointData.ocController != undefined) then
+				(
+					hasLinkYet = false --flag para saber si ya hay un lincaje en ese frame
+					index = 0 --indice del target a eliminar si hay nuo ya en ese frame
+					
+					--comprueba si hay un lincaje ya en el fotograma actual
+					for i=1 to _pointData.pointLinks.count where _pointData.pointLinks[i][1] == currentTime do
+					(
+						hasLinkYet = true
+						index = i
+					)--for
+					
+					undo "Add Link to World" on
+					(
+						--si ya hay un lincaje en ese fotograma lo elimina
+						if hasLinkYet then
+						(
+							lb.links.pointConstraint.deleteTarget (_PCNode) index
+							fillListView() --redibuja el listado
+						)
+							
+						lb.links.pointConstraint.addTarget _PCNode undefined --añade un lincaje al mundo
+					)
+				
+					fillListView() --redibuja el listado
+					
+					--recorre el listado de lincajes deseleccionando todos excepto el que se acaba de crear, que se debe seleccionar.
+					for i=1 to lvLinks.items.count do
+					(
+						lvLinks.items.item[i-1].selected = false
+						
+						if lvLinks.items.item[i-1].subitems.item[0].text == ((currentTime.frame as integer) as string) then
+							lvLinks.items.item[i-1].selected = true
+					)--for
+				)
+			)
+			
+			---------------------------------------------------------------------------
+			--elimina el lincaje seleccionado	
+			---------------------------------------------------------------------------
+			on btnDeleteLink pressed do
+			(
+				_PCNode = lb.links.getLinkNode()
+
+				if lvLinks.selectedItems.count != 0 then --si hay algun elemento seleccionado
+				(
+					index = (lvLinks.selectedItems.item[0].index + 1)
+					
+					undo "Delete Link" on
+						lb.links.pointConstraint.deleteTarget (_PCNode) index
+					
+					fillListView() --redibuja el listado
+					
+					--selecciona el elemento siguiente al eliminado
+					if lvLinks.items.count != 0 then
+					(
+						if lvLinks.items.count > index then
+							lvLinks.items.item[index - 1].selected = true
+						else
+							lvLinks.items.item[lvLinks.items.count - 1].selected = true
+					)--if 
+				)--if			
+			)
+			
+			---------------------------------------------------------------------------
+			--hace snap del link anterior con el actual, para poder ir retificando animación.
+			---------------------------------------------------------------------------
+			on btnSnapPrevToThis pressed do
+			(
+				_PCNode = lb.links.getLinkNode()
+				
+				if lvLinks.selectedItems.count != 0 then --si hay algun elemento seleccionado
+				(
+					index = (lvLinks.selectedItems.item[0].index + 1) --obtiene el indice del seleccionado
+					
+					if index > 1 then --no podemos hacer snap del link anterior al primer lincaje, por eso lo limitamos a partir del segunco
+					(
+						undo "Snap link" on lb.links.pointConstraint.snapLink _PCNode index way:#prevToThis --hace snap de el link anterior al actual
+					)--if index > 1
+				)--if lvLinks
+			)
+			
+			---------------------------------------------------------------------------
+			--hace snap del link actual con el anterior, para poder ir retificando animación.
+			---------------------------------------------------------------------------
+			on btnSnapThisToPrev pressed do
+			(
+				_PCNode = lb.links.getLinkNode()
+				
+				if lvLinks.selectedItems.count != 0 then --si hay algun elemento seleccionado
+				(
+					index = (lvLinks.selectedItems.item[0].index + 1) --obtiene el indice del seleccionado
+					
+					if index > 1 then --no podemos hacer snap del link anterior al primer lincaje, por eso lo limitamos a partir del segunco
+					(
+						undo "Snap link" on lb.links.pointConstraint.snapLink _PCNode index way:#thisToPrev --hace snap de el link actual al anterior
+					)--if index > 1
+				)--if lvLinks
+			)
+			
+			---------------------------------------------------------------------------
+			--mueve una clave de lincaje
+			---------------------------------------------------------------------------
+			on spnStartTime buttonup cancel do
+			(
+				_PCNode = lb.links.getLinkNode()
+				lb.links.pointConstraint.getPointData _PCNode
+				
+				_pointData = lb.links.pointConstraint.pointData
+				
+				--si no es una cancelacion de boton derecho
+				--si los controladores de constraint estan llenos
+				--solo lo hace si hay algun target seleccionado en el listado
+				if not cancel and (_pointData.pcController != undefined and _pointData.ocController != undefined) and lvLinks.selectedItems.count != 0 then 
+				(
+					newFrame = spnStartTime.value --nuevo frame de start
+					index = (lvLinks.selectedItems.item[0].index + 1) --indice del target seleccionado
+					
+					undo "Move Link" on	
+						lb.links.pointConstraint.setFrameNo (_PCNode) index newFrame --mueve el lincaje al nuevo punto
+					
+					fillListView() --redibuja el listado
+					lvLinks.items.item[index - 1].selected = true --selecciona el elemento que ya estaba seleccionado
+					
+					if chkSyncronizeCurrentTime.checked then setSelectedLinkFrameAsCurrentTime() --selecciona en el timeline el frame del link
+				)
+			)
+			
+			---------------------------------------------------------------------------
+			--mueve una clave de lincaje
+			---------------------------------------------------------------------------
+			on spnStartTime entered spinning cancel do
+			(
+				_PCNode = lb.links.getLinkNode()
+				lb.links.pointConstraint.getPointData _PCNode
+				
+				_pointData = lb.links.pointConstraint.pointData
+				
+				--si no es una cancelacion de boton derecho
+				--si los controladores de constraint estan llenos
+				--solo lo hace si hay algun target seleccionado en el listado
+				if not cancel and not spinning and lvLinks.selectedItems.count != 0 then 
+				(
+					newFrame = spnStartTime.value --nuevo frame de start
+					index = (lvLinks.selectedItems.item[0].index + 1) --indice del target seleccionado
+					
+					undo "Move Link" on
+						lb.links.pointConstraint.setFRameNo _PCNode index newFrame --mueve el lincaje al nuevo punto
+					
+					fillListView() --redibuja el listado
+					lvLinks.items.item[index - 1].selected = true --selecciona el elemento que ya estaba seleccionado
+					
+					if chkSyncronizeCurrentTime.checked then setSelectedLinkFrameAsCurrentTime() --selecciona en el timeline el frame del link
+				)
+			)
+			
+			---------------------------------------------------------------------------
+			--rellena el spinner starTime con el frame de lincaje del target seleccionado
+			---------------------------------------------------------------------------
+			on lvLinks ItemSelectionChanged events do
+			(
+				_PCNode = lb.links.getLinkNode()
+				lb.links.pointConstraint.getPointData _PCNode
+				
+				_pointData = lb.links.pointConstraint.pointData
+				
+				if lvLinks.selectedItems.count != 0 then --si hay algun elemento seleccionado
+				(
+					index = (lvLinks.selectedItems.item[0].index + 1) --obtiene el indice del seleccionado
+					spnStartTime.value = _pointData.pointLinks[index][1] --cambia el valor del spinner
+					if chkSyncronizeCurrentTime.checked then setSelectedLinkFrameAsCurrentTime() --selecciona en el timeline el frame del link
+				)
+				
+				updateRowsColor() --actualza el color de las filas si están seleccionadas o no
+				updateControlsState() --actualiza los controles del UI
+			)
+		)--rollout rollPointConstraint
+	) -- CA_pointConstraint
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: templateLib | Contiene la libreria de plantilla.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct lib_linkConstraint
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,					--@var: category | Categoria de la libreria.
+		className = lb.getFileLibName (getThisScriptFilename() as string),	--@var: className | Nombre de la libreria.
+		description = "Librería de linkConstraint",	--@var: description | Descripcion de la libreria.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		linkConstraintCA = CA_linkConstraint,
+
+		--chr----------------------------------------------------------------------
+		LC_chrNeedsLC = #("base", "footStep", "breakKnee", "knee", "breakElbow", "elbow", "handIk"),
+		LC_chrNeedsVW = #("footStep", "breakKnee", "knee", "breakElbow", "elbow", "handIk"),
+		LC_chrNoNeedsVW = #("base"),
+		LC_chrNeedsKeyToW = #("base"),
+		LC_chrNeedsKeyToVW = #("footStep", "breakKnee", "knee", "breakElbow", "elbow", "handIk"),
+		--el resto de objetos que lleven link constraint necesitan clave a su virtual world y si no tienen a otro objeto
+		--chr----------------------------------------------------------------------	
+			
+		--prp----------------------------------------------------------------------	
+		LC_prpNeedsLC = #("root", "base"),
+		LC_prpNeedsVW = #(),
+		LC_prpNoNeedsVW = #("root", "base"),
+		LC_prpNeedsKeyToW = #("root", "base"),
+		LC_prpNeedsKeyToVW = #(),			
+		--el resto de objetos que lleven link constraint necesitan clave a su virtual world y si no tienen a otro objeto
+		--prp----------------------------------------------------------------------	
+		
+		--spr----------------------------------------------------------------------	
+		LC_sprNeedsLC = #("root", "base"),
+		LC_sprNeedsVW = #(),
+		LC_sprNoNeedsVW = #("root", "base"),
+		LC_sprNeedsKeyToW = #("root", "base"),
+		LC_sprNeedsKeyToVW = #(),
+		--el resto de objetos que lleven link constraint necesitan clave a su virtual world y si no tienen a otro objeto
+		--spr----------------------------------------------------------------------
+		
+		--fx----------------------------------------------------------------------	
+		LC_fxNeedsLC = #("root", "base"),
+		LC_fxNeedsVW = #(),
+		LC_fxNoNeedsVW = #("root", "base"),
+		LC_fxNeedsKeyToW = #("root", "base"),
+		LC_fxNeedsKeyToVW = #(),			
+		--el resto de objetos que lleven link constraint necesitan clave a su virtual world y si no tienen a otro objeto
+		--fx----------------------------------------------------------------------					
+
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		------------------------------------------------
+		--@fn: CA | getCA | Devuelve el CA del linkConstraint.
+		------------------------------------------------
+		fn getCA =
+		(
+			this.linkConstraintCA
+		),
+		
+		------------------------------------------------
+		--@fn: CA | getLCcontroller | Devuelve el controlador del LinkConstraint
+		------------------------------------------------
+		fn getLCcontroller =
+		(			
+			_LCcontroller = undefined
+			
+			_LCNode = lb.links.getLinkNode()
+			if _LCNode != undefined then _LCcontroller = _LCNode.transform.controller
+			
+			_LCcontroller
+		),
+		
+		------------------------------------------------
+		--@fn: CA | getLCcontroller | Devuelve el controlador del LinkConstraint
+		------------------------------------------------
+		fn getLCVirtualWorld =
+		(			
+			_LCvirtualWorld = undefined
+			
+			_LCNode = lb.links.getLinkNode()
+			if _LCNode != undefined then 
+				_LCvirtualWorld = _LCNode.modifiers[#Link_Controls].linkConstraint.virtualWorld
+			
+			_LCvirtualWorld
+		),
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		------------------------------------------------
+		--@fn: boolean | hasLCAttribute | Indica si el objeto especificado tiene linkConstraint
+		--@gets: node | obj | al que preguntar si tiene linkConstraint
+		------------------------------------------------
+		fn hasLCattribute obj = 
+		(
+			_hasLC = false
+			
+			_hasLC = lb.customAttributes.hasAttribute obj #linkConstraint
+
+			if not _hasLC and isProperty obj #modifiers and superclassof obj != modifier then
+				for m in obj.modifiers where not _hasLC and lb.customAttributes.hasAttribute m #linkConstraint do _hasLC = true
+
+			_hasLC
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | add | Añade el pointConstraint al objeto pasado por parámetro. Devuelve true o false dependiendo si ha conseguido crearlo
+		--@gets: node | obj | nodo al que hay que iniciarle el pointConstraint
+		------------------------------------------------
+		mapped fn addAttribute obj =
+		(
+			_added = false
+			
+			-- Eliminamos primero el customAttribute de la pieza si ya lo tenía y creamos uno nuevo
+			this.removeAttribute obj
+			custAttributes.add obj (this.getCA()) #unique baseobject:false
+				
+			_added = true
+			
+			_added
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | removeAttribute | Elimina el pointConstraint al fichero pasado por parámetro
+		--@gets: node | obj | nodo al que hay que iniciarle el objectSets
+		------------------------------------------------
+		mapped fn removeAttribute obj =
+		(
+			_removed = false
+			
+			if this.hasLCAttribute obj then 
+			(
+				custAttributes.delete obj (custAttributes.getdef obj.linkConstraint) baseobject:false
+				_removed = true
+			)
+			
+			_removed
+		),
+			
+		------------------------------------------------
+		--@fn: undefined | add | Añade el linkConstraint al objeto pasado por parámetro
+		--@gets: node | obj | nodo al que hay que pasarle para trabajar
+		------------------------------------------------
+		mapped fn add obj virtualWorld:undefined =
+		(
+
+			-- Ponemos el controlador link constraint al objeto
+			if classof obj.transform.controller != Link_Constraint then
+				obj.transform.controller = Link_Constraint()						
+			
+			-- Añade el modificador y lo renombra
+			if obj.modifiers[#Link_Controls] == undefined then
+			(
+				addModifier obj (EmptyModifier ()) ui:on 
+				obj.modifiers[#Attribute_Holder].name = "Link_Controls" 
+			)
+			
+			-- Añade el custAttribute linkConstraint
+			custAttributes.add obj.modifiers[#Link_Controls] (lb.links.linkConstraint.getCA()) #unique
+
+			-- Rellena los parametros del link constraint
+			obj.modifiers[#Link_Controls].linkConstraint.virtualWorld = virtualWorld
+						
+			if obj.transform.controller.getNumTargets != 0 then
+				if obj.transform.controller.getFrameNo 1 == 0 then obj.transform.controller.DeleteTarget 1
+			
+			-- Aisgnamos el virtualWorld				 
+			if virtualWorld != undefined then
+				obj.transform.controller.addTarget virtualWorld 0
+			else
+				obj.transform.controller.addWorld frameNo:0
+			
+			lb.controller.freezeTransform obj #all
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | remove | Borra el linkConstraint al objeto pasado por parámetro
+		--@gets: node | obj | nodo al que hay que pasarle para trabajar
+		------------------------------------------------
+		mapped fn remove obj =
+		(
+			-- Ponemos el controlador link constraint al objeto
+			if classof obj.transform.controller == Link_Constraint and (this.hasLCAttribute obj.modifiers[1]) then
+			(	
+				obj.transform.controller = prs()
+				if obj.modifiers[#Link_Controls] != undefined then deleteModifier obj obj.modifiers[#Link_Controls]
+				lb.controller.freezeTransform obj #all
+			)
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | addTarget | Añade un target nuevo al linkConstraint, si el targetObj es undefined se linka al mundo
+		--@gets: node | sourceObj | nodo donde tenemos el linkConstraint
+		--@gets: node | targetObj | nodo que añadimos como target
+		------------------------------------------------
+		mapped fn addTarget sourceObj targetObj frameNo:currentTime =
+		(
+			_LCNode = lb.links.getLinkNode()
+			_LCcontroller = lb.links.linkConstraint.getLCcontroller()
+			_LCVirtualWorld = lb.links.linkConstraint.getLCVirtualWorld() 
+			
+			if targetObj != undefined then
+				_LCcontroller.addTarget targetObj frameNo
+			else
+				if _LCVirtualWorld != undefined then
+					targetObj = _LCVirtualWorld
+				else
+					_LCcontroller.addWorld frameNo:currentTime
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | deleteTarget |  Borra un target al linkConstraint
+		--@gets: node | sourceObj | nodo donde tenemos el linkConstraint
+		--@gets: node | targetObj | nodo que borramos como target
+		------------------------------------------------
+		mapped fn deleteTarget sourceObj index =
+		(
+			_LCcontroller = sourceObj.transform.controller 
+			_LCcontroller.deleteTarget index	
+		),
+				
+		------------------------------------------------
+		--@fn: undefined | setFrameNo |  Borra un target al linkConstraint
+		--@gets: node | sourceObj | nodo donde tenemos el linkConstraint
+		--@gets: node | index | nodo que borramos como target
+		------------------------------------------------
+		mapped fn setFrameNo sourceObj index newFrame =
+		(
+			_LCcontroller = sourceObj.transform.controller
+			_LCcontroller.setFrameNo index newFrame	
+		),
+		
+		------------------------------------------------
+		-- COMMON
+		------------------------------------------------
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addLibrary this --añade la libreria a la principal
+		)
+		
+	)--lib_templateLib
+	
+	------------------------------------------------
+	--@fn: attributeDef | CA_pointConstraint | Devuelve la definición del pointConstraint
+	------------------------------------------------
+	struct str_pointData
+	(
+		pcController = undefined,			--controlador position constraint que tiene el objeto.
+		ocController = undefined,			--controlador orientation constraint que tiene el objeto.
+		CWeightController = undefined,
+		ZWeightController = undefined,
+		pointLinks = #(),					--array con los targets de los pointConstraint, su frame y su orden.
+		pointTargets = #()					--array con los points que crea el point constraint para manejar cada objeto.
+	)
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: pointConstraint | Contiene la libreria de pointConstraint.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct lib_pointConstraint
+	(
+		------------------------------------------------------------------------------------------------
+		-- COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,					--@var: category | Categoria de la libreria.
+		className = lb.getFileLibName (getThisScriptFilename() as string),	--@var: className | Nombre de la libreria.
+		description = "Libreria pointConstraint",	--@var: description | Descripcion de la libreria.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		pointConstraintCA = CA_pointConstraint,
+		pointData = str_pointData(),
+
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		-- Vacía la informacion del point data sustituyendo por la nueva del objeto para poder obtener los datos
+		-----------------------------------------------
+		fn getPointData sourceObj =
+		(
+			if sourceObj != undefined do 
+				this.fillPointData sourceObj --rellena la informacion
+
+			this.pointData --devuelve la informacion
+		),
+		
+		------------------------------------------------
+		--@fn: CA | getCA | Devuelve el CA del pointConstraint.
+		------------------------------------------------
+		fn getCA =
+		(
+			this.pointConstraintCA
+		),
+			
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		
+		---------------------------------------------------------------------------
+		--funcion de filtro para decidir si se puede usar un objeto como lincaje de point constraint
+		---------------------------------------------------------------------------
+		fn filterObject obj =
+		(
+			if findString obj.name "pCtr>>" != undefined then false else true --si es un point de lincaje no permite lincarse de nuevo a el
+		),
+
+
+		----------------------------------------------------------------------------------------
+		-- Crea un link nuevo para el objeto seleccionado. Pide elegir otro en la escena. 
+		-- Si todo va bien, devuelve True, si no, devuelve False.
+		----------------------------------------------------------------------------------------
+		fn addLink = 
+		(
+			--obtiene un objeto destino mediante pick
+			_o = pickObject filter:filterObject 
+			
+			-- Si ese objeto elegido es valido
+			if isValidNode _o then 
+			(
+				-- obtiene el objeto
+				_PCNode = lb.links.getLinkNode()
+
+				-- y rellena los structs de datos internos al struct (pointData...)
+				getPointData _PCNode
+
+				hasLinkYet = false --flag para saber si ya hay un lincaje en ese frame
+				index = 0 --indice del target a eliminar si hay nuo ya en ese frame
+				
+				-- Para cada enlace existente, comprueba si hay un lincaje ya en el fotograma actual
+				for i=1 to pointData.pointLinks.count where pointData.pointLinks[i][1] == currentTime do
+				(
+					hasLinkYet = true
+					index = i
+				)
+				
+				undo "Add Point Constraint" on
+				(
+					--si ya hay un lincaje en ese fotograma lo elimina
+					if hasLinkYet then
+						lb.links.pointConstraint.deleteTarget _PCNode index
+					
+					--añade un enlace
+					lb.links.pointConstraint.addTarget _PCNode _o 
+					
+				)
+				true
+			)
+			else
+				false
+		),
+
+
+		----------------------------------------------------------------------------------------
+		-- Crea un link nuevo para el objeto seleccionado, pero esta vez significa que esta unido al mundo y no a un elemento concreto (sin link)
+		-- Si todo va bien, devuelve True, si no, devuelve False.
+		----------------------------------------------------------------------------------------
+		fn addLinkToWorld = 
+		(
+			-- obtiene el objeto
+			_PCNode = lb.links.getLinkNode()
+
+			-- y rellena los structs de datos internos al struct (pointData...)
+			this.getPointData _PCNode
+			
+			--si hay que hacer un link al mundo
+			if (this.pointData.pcController != undefined and this.pointData.ocController != undefined) then
+			(
+				hasLinkYet = false --flag para saber si ya hay un lincaje en ese frame
+				index = 0 --indice del target a eliminar si hay nuo ya en ese frame
+				
+				--comprueba si hay un lincaje ya en el fotograma actual
+				for i=1 to this.pointData.pointLinks.count where this.pointData.pointLinks[i][1] == currentTime do
+				(
+					hasLinkYet = true
+					index = i
+				)
+				
+				undo "Add Link to World" on
+				(
+					--si ya hay un lincaje en ese fotograma lo elimina
+					if hasLinkYet then
+						this.deleteTarget (_PCNode) index
+						
+					--añade un lincaje al mundo
+					this.addTarget _PCNode undefined 
+				)
+			)
+
+			true
+		),
+
+		----------------------------------------------------------------------------------------
+		-- Elimina el link con indice indicado de la lista de links del nodo seleccionado ahora mismo
+		-- Si todo va bien, devuelve True, si no, devuelve False.
+		----------------------------------------------------------------------------------------
+		fn deleteLink index = 
+		(
+			_PCNode = lb.links.getLinkNode()
+
+			if _PCNode != undefined then
+			(				
+				undo "Delete Link" on
+					res = this.deleteTarget _PCNode index
+				
+				res
+			)
+			else 
+				false
+		),
+	
+		----------------------------------------------------------------------------------------
+		-- Modificar el tiempo del enlace
+		-- Si todo va bien, devuelve True, si no, devuelve False.
+		----------------------------------------------------------------------------------------	
+		fn setLinkStartTime index newFrame = 
+		(
+			-- obtiene el objeto
+			_PCNode = lb.links.getLinkNode()
+
+			-- y rellena los structs de datos internos al struct (pointData...)
+			this.getPointData _PCNode
+			
+			--si los controladores de constraint estan llenos
+			if _PCNode != undefined and pointData.pcController != undefined and pointData.ocController != undefined then 
+			(
+				undo "Move Link" on	
+					this.setFrameNo _PCNode index newFrame
+
+				true
+			)
+			else
+				false
+		),
+	
+		----------------------------------------------------------------------------------------
+		-- Pegar la posicion del point del link anterior al indicado. Se utiliza cuando hay un salto por haber modificado 
+		-- la posicion del keyframe de cambio a traves de la interfaz. Al principio siempre funciona bien, pero al modificarlo
+		-- se produce un salto siempre y podemos ajustarlo con esto.
+		-- Si todo va bien, devuelve True, si no, devuelve False.
+		----------------------------------------------------------------------------------------	
+		fn snapPrevLinkToThis index =
+		(
+			-- Si tiene un item anterior a este.
+			if index > 1 then
+			(
+				-- obtengo el nodo 
+				_PCNode = lb.links.getLinkNode()
+
+				-- y rellena los structs de datos internos al struct (pointData...)
+				getPointData _PCNode
+
+ 				--hace snap de el link anterior al actual activando undo
+				undo "Snap link" on 
+					this.snapLink _PCNode index way:#prevToThis
+
+				true
+			)
+			else 
+				false
+		),
+	
+		----------------------------------------------------------------------------------------
+		-- Pegar la posicion del point del link indicado al anterior. Se utiliza cuando hay un salto por haber modificado 
+		-- la posicion del keyframe de cambio a traves de la interfaz. Al principio siempre funciona bien, pero al modificarlo
+		-- se produce un salto siempre y podemos ajustarlo con esto.
+		-- Si todo va bien, devuelve True, si no, devuelve False.
+		----------------------------------------------------------------------------------------	
+		fn snapThisLinkToPrev index =
+		(
+			-- Si tiene un item anterior a este.
+			if index > 1 then
+			(
+				-- obtengo el nodo 
+				_PCNode = lb.links.getLinkNode()
+
+				-- y rellena los structs de datos internos al struct (pointData...)
+				getPointData _PCNode
+
+ 				--hace snap de el link indicado al anterior activando undo
+				undo "Snap link" on 
+					this.snapLink _PCNode index way:#thisToPrev
+
+				true
+			)
+			else 
+				false
+		),
+
+		----------------------------------------------------------------------------------------
+		--compara dos links por el frame de lincaje para ver cual va antes
+		----------------------------------------------------------------------------------------
+		fn compareByLinkTime l1 l2 =
+		(
+			a = l1[1] as integer
+			b = l2[1] as integer
+			
+			if a < b then
+				-1
+			else if a > b then
+				1
+			else
+				0
+		),--fn compareByLinkTime.
+
+		----------------------------------------------------------------------------------------
+		--rellena la informacion de point links en el point data
+		----------------------------------------------------------------------------------------
+		fn fillPointDataLinks sourceObj = 
+		(
+			this.pointData.pointLinks = #() --primero vacia el array
+			this.pointData.pointTargets = #() --primero vacia el array
+
+			--si tiene los controladores de constraint
+			if sourceObj != undefined and this.pointData.pcController != undefined and this.pointData.ocController != undefined then
+			(
+				this.pointData.pointLinks = #() --array con las relaciones linkTime-linkTarget-realIndex
+				
+				for i = 1 to this.pointData.pcController.getNumTargets() do
+				(
+					frame =  0 as time
+					_targetPoint = this.pointData.pcController.getNode i
+					_target = _targetPoint.parent
+					
+					--averigua el nombre del target
+					if _target == undefined then
+					(
+						_target = "_World_"
+						_targetPoint = "_World_"
+					)
+					else
+					(
+						_target = _target.name
+						_targetPoint = _targetPoint.name
+					)
+					
+					--averigua el frame en el que empieza a actuar-----------------------
+					stop = false
+					wController = this.pointData.pcController.weight[i].controller
+					if wController != undefined then --si el peso tiene controlador asignado
+						for j=1 to (numKeys wController) where not stop and (at time (getKeyTime wController j) this.pointData.pcController.weight[i]) == 1.0 do
+						(
+							frame = (getKeyTime wController j)
+							stop = true --para
+						)
+					
+					append this.pointData.pointLinks #(frame, _target, i) --añade una relacion linkTime-linkTarget-realIndex
+					append this.pointData.pointTargets #(frame, _targetPoint, i) --añade una relacion linkTime-linkPoint-realIndex
+				)--for
+				
+				--recorre las claves del controlador del peso de los constraints buscando las que estén a 0, lo que indica un lincaje a WORLD
+				for i=1 to (numKeys this.pointData.cWeightController) do
+				(
+					frame = getKeyTime this.pointData.cWeightController i
+					if (at time frame this.pointData.cWeightController.value) == 0.0 then
+					(
+						if sourceObj.parent != undefined then
+						(
+							append this.pointData.pointLinks #(frame, ("Virtual World: " + (sourceObj).parent.name), i) --añade una relacion linkTime-linkTarget-realKeyIndex
+							append this.pointData.pointTargets #(frame, ("Virtual World: " + (sourceObj).parent.name), i) --añade una relacion linkTime-linkPoint-realKeyIndex
+						)
+						else
+						(
+							append this.pointData.pointLinks #(frame, "World", i) --añade una relacion linkTime-linkTarget-realKeyIndex
+							append this.pointData.pointTargets #(frame, "World", i) --añade una relacion linkTime-Point-realKeyIndex
+						)
+					)--if
+				)--for
+				
+				--ordena los links antes de llenar el listado
+				qsort this.pointData.pointLinks lb.links.pointConstraint.compareByLinkTime
+				qsort this.pointData.pointTargets lb.links.pointConstraint.compareByLinkTime
+			)--if				
+		),
+
+		---------------------------------------------------------------------------------------
+		--rellena la informacion de point data. Si el objeto no existe, se vaciaran los datos
+		----------------------------------------------------------------------------------------
+		fn fillPointData sourceObj =
+		(
+			this.pointData.pcController = undefined
+			this.pointData.ocController = undefined
+			this.pointData.CWeightController = undefined
+			this.pointData.ZWeightController = undefined
+		
+			if sourceObj != undefined do 
+			(	
+				this.pointData.pcController = if sourceObj.position.controller[#PC_pointConstraint] != undefined then sourceObj.position.controller[#PC_pointConstraint].controller
+				this.pointData.ocController = if sourceObj.rotation.controller[#OC_pointConstraint] != undefined then sourceObj.rotation.controller[#OC_pointConstraint].controller
+				this.pointData.CWeightController = if sourceObj.position.controller.weights[#Weight__PC_pointConstraint] != undefined then sourceObj.position.controller.weights[#Weight__PC_pointConstraint].controller
+				this.pointData.ZWeightController = if sourceObj.rotation.controller.weights[#Weight__OC_pointConstraint] != undefined then sourceObj.rotation.controller.weights[#Weight__OC_pointConstraint].controller
+			)
+
+			this.fillPointDataLinks sourceObj
+		),
+		
+		-----------------------------------------------------------------------------------------------
+		--hace snap entre lincajes
+		--#thisToPrev hace snap del lincaje actual al anterior
+		--#prevToThis hace snap del lincaje anterior al actual
+		-- TODO: añadir devolver true o false segun error o no error
+		-----------------------------------------------------------------------------------------------
+		mapped fn snapLink sourceObj index way:#prevToThis =
+		(
+			-- Prueba provisional para que no entre y de errores si algo no esta definido.
+			-- No es del todo correcto usar return (lentitud) pero ocurrirá probablemente nunca.
+			if this.pointData == undefined or this.pointData.pointLinks == undefined do 
+				return false		
+
+			frame = this.pointData.pointLinks[index][1] --fotograma en el que está el lincaje
+					
+			sourceNode = undefined --objeto al que hay que snapear
+			targetNode = undefined --objeto que hay que snapear	
+
+			_cWeightController = this.pointData.cWeightController
+			
+			
+			if this.pointData.pointLinks[index][2] != "World" and (findString this.pointData.pointLinks[index][2] "Virtual World" == undefined) then --si el lincaje actual es a un point
+			(
+				auxIndex = this.pointData.pointLinks[index][3] --obtiene el indice del lincaje actual
+				sourceNode = this.pointData.pcController.getNode auxIndex --obtiene el sourceNode
+			)
+			else --si el lincaje actual es al mundo
+				sourceNode = sourceObj --el sourceNode es el propio objeto
+			
+			if this.pointData.pointLinks[index - 1][2] != "World" and (findString this.pointData.pointLinks[index - 1][2] "Virtual World" == undefined) then --si el lincaje anterior es a un point
+			(
+				auxIndex = this.pointData.pointLinks[index - 1][3] --obtiene el indice del lincaje anterior
+				targetNode = this.pointData.pcController.getNode auxIndex --obtiene el targetNode
+			)
+			else --si el lincaje actual es al mundo
+				targetNode = sourceObj --el targetNode es el propio objeto
+			
+			if way == #thisToPrev then --si el snap debe ser del actual al anterior, intercambia source y target
+			(
+				aux = sourceNode
+				sourceNode = targetNode
+				targetNode = aux
+			)--if
+				
+			with animate on --con el modo de animacion activado se hace el snap
+			(
+				--------------------------------------------------------
+				--antes de aplicarle la nueva transformacion, hay que crearle clave al target en el frame
+				--del anterior lincaje y del siguiente lincaje para evitar que si no tuviera de antemano, se mueva al hacer el snap.
+				
+				--lincaje anterior
+				if index > 1 then --si no es le pirmer lincaje
+				(
+					at time (this.pointData.pointLinks[index-1][1])
+					(
+						if targetNode != sourceObj then --si el target es un point
+							targetNode.transform = targetNode.transform
+						else
+						(
+							valBckp = _cWeightController.value --guarda el valor del peso del constraint
+							_cWeightController.value = 0.0 --pone el peso a 0
+							targetNode.transform = targetNode.transform
+							_cWeightController.value = valBckp --restaura el valor del peso del cosntraint
+						)
+					)
+				)
+				
+				--lincaje posterior
+				if index < this.pointData.pointLinks.count then --si no es ultimo lincaje
+				(
+					at time (this.pointData.pointLinks[index+1][1])
+					(
+						if targetNode != sourceObj then --si el target es un point
+							targetNode.transform = targetNode.transform
+						else
+						(
+							valBckp = _cWeightController.value --guarda el valor del peso del constraint
+							_cWeightController.value = 0.0 --pone el peso a 0
+							targetNode.transform = targetNode.transform
+							_cWeightController.value = valBckp --restaura el valor del peso del cosntraint
+						)
+					)
+				)
+					
+				if index < this.pointData.pointLinks.count then --si no es ultimo lincaje
+					targetNode.transform = targetNode.transform
+				--------------------------------------------------------
+				
+				at time frame --en el frame del lincaje actual
+				(
+					newTransform = at time frame sourceNode.transform --almacena la transformacion a aplicar
+						
+					--si el nodo source es el propio nodo de point constraint quiere decir que el lincaje anterior es al WORLD
+					--hay que bajar el peso del lincaje un momento a 0, cogr el valor y luego volver a ponerlo a 1
+					if sourceNode == sourceObj then
+					(
+						valBckp = _cWeightController.value --guarda el valor del peso del constraint
+						_cWeightController.value = 0.0 --pone el peso a 0
+						newTransform = at time frame sourceNode.transform
+						_cWeightController.value = valBckp --restaura el valor del peso del cosntraint
+					)--if
+					
+					if targetNode != sourceObj then --si el target es un point
+						targetNode.transform = newTransform
+					else
+					(
+						valBckp = _cWeightController.value --guarda el valor del peso del constraint
+						_cWeightController.value = 0.0 --pone el peso a 0
+						targetNode.transform = newTransform --pone la nueva transformacion
+						_cWeightController.value = valBckp --restaura el valor del peso del cosntraint
+					)--if targetNode								
+				)-- at frame
+			)--with animate 
+			
+			if currentTime != 0 then
+			(
+				with animate off
+				(
+					--almacena los controladores de posicion y rotacion Zero de sourceObj
+					posZeroController = sourceObj.position.controller[#Zero_Pos_XYZ].controller --controlador Zero de posicion
+					rotZeroController = sourceObj.rotation.controller[#Zero_Euler_XYZ].controller --controlador Zero de rotacion
+					
+					_linksBetween = false
+					_linkInZero = false
+					
+					if currentTime < 0 then
+					(
+						------------------------------------------------------------------------------------
+						--si el frame actual es menor que cero y entre el frame actual y el cero no hay licajes, tambien debe eliminar las claves del 0 aunque haya mas lincajes antes o despues.
+						for i=1 to this.pointData.pointLinks.count where (this.pointData.pointLinks[i][1] <= 0 and this.pointData.pointLinks[i][1] > currentTime) do _linksBetween = true
+					)
+					else
+					(
+						------------------------------------------------------------------------------------
+						--si el lincaje se esta haciendo en un frame positivo, tiene que mirar si hay lincajes antes del frame actual, si los hay tiene que eliminar las claves del cero,
+						--a no ser que en el cero haya un lincaje
+						for i=1 to this.pointData.pointLinks.count where (this.pointData.pointLinks[i][1] == 0f) do _linkInZero = true
+					)--if else
+					
+					if (currentTime < 0 and not _linksBetween) or (currentTime > 0 and not _linkInZero) then
+					(
+						if (getKeyIndex _cWeightController 0) != 0 then deleteKey _cWeightController (getKeyIndex _cWeightController 0)
+						
+						if (getKeyIndex posZeroController[1].controller 0) != 0 then deleteKey posZeroController[1].controller (getKeyIndex posZeroController[1].controller 0)
+						if (getKeyIndex posZeroController[2].controller 0) != 0 then deleteKey posZeroController[2].controller (getKeyIndex posZeroController[2].controller 0)
+						if (getKeyIndex posZeroController[3].controller 0) != 0 then deleteKey posZeroController[3].controller (getKeyIndex posZeroController[3].controller 0)
+						if (getKeyIndex rotZeroController[1].controller 0) != 0 then deleteKey rotZeroController[1].controller (getKeyIndex rotZeroController[1].controller 0)
+						if (getKeyIndex rotZeroController[2].controller 0) != 0 then deleteKey rotZeroController[2].controller (getKeyIndex rotZeroController[2].controller 0)
+						if (getKeyIndex rotZeroController[3].controller 0) != 0 then deleteKey rotZeroController[3].controller (getKeyIndex rotZeroController[3].controller 0)
+						
+						for i=1 to (this.pointData.pcController.getNumTargets()) where (getKeyIndex this.pointData.pcController.weight[i].controller 0) != 0 do
+							deleteKey this.pointData.pcController.weight[i].controller (getKeyIndex this.pointData.pcController.weight[i].controller 0)
+					)--if
+					------------------------------------------------------------------------------------
+				)--with
+			)--if currentTime
+
+			true
+			
+		),--snapLink
+		
+		-----------------------------------------------------------------------------------------------
+		--mueve el lincaje marcado por INDEX al nuevo frame NEWFRAME
+		-----------------------------------------------------------------------------------------------
+		mapped fn setFrameNo sourceObj index newFrame =
+		(	
+			_PCNode = lb.links.getLinkNode()
+			lb.links.pointConstraint.getPointData _PCNode
+				
+			_pointData = lb.links.pointConstraint.pointData
+			
+			_cWeightController = this.pointData.cWeightController
+			currFrame = this.pointData.pointLinks[index][1] --frame actual
+			
+			if (_pointData.pcController != undefined and _pointData.ocController != undefined) then
+			(
+				_prevLink = undefined
+				if index > 1 then _prevLink = if this.pointData.pointLinks[index - 1] != undefined then this.pointData.pointLinks[index - 1][1] else undefined --frame del link anterior
+				_nextLink = if this.pointData.pointLinks[index + 1] != undefined then this.pointData.pointLinks[index + 1][1] else undefined --frame del link siguiente
+				
+				nTargets = this.pointData.pcController.getNumTargets() --obtiene el numero de targets que hay
+				
+				_proccess = true --inicialmente a true
+				if _proccess and _prevLink != undefined and (newFrame <= _prevLink) then (newFrame = _prevLink + 1) --no debe rebasar el link anterior
+				if _proccess and _nextLink != undefined and (newFrame >= _nextLink) then (newFrame = _nextLink - 1) --no debe rebasar el link siguiente
+				
+				_proccess = (currFrame != newFrame) --si el nuevo frame y el actual son el mismo no hay que hacer nada
+				if _proccess and _prevLink != undefined and (newFrame <= _prevLink) then _proccess = false --no debe rebasar el link anterior
+				if _proccess and _nextLink != undefined and (newFrame >= _nextLink) then _proccess = false --no debe rebasar el link siguiente
+				
+				if _proccess then --si no hay impedimentos
+				(
+					--almacena los controladores
+					posZeroController = sourceObj.position.controller[#Zero_Pos_XYZ].controller --controlador Zero de posicion
+					rotZeroController = sourceObj.rotation.controller[#Zero_Euler_XYZ].controller --controlador Zero de rotacion
+					scaleZeroController = sourceObj.scale.controller[#Zero_Scale_XYZ].controller --controlador Zero de rotacion
+					
+					transControllers = #(posZeroController,rotZeroController,scaleZeroController) --los tres controladores en un array para recorrerlos
+					
+					--mueve las claves de transformacion al nuevo frame
+					for trC in transControllers do --recorre los controladores
+						for i=1 to trC.numSubs do --recorre los subControladores
+						(
+							ctrlr = trC[i].controller
+							
+							keyIndex = getKeyIndex ctrlr newFrame --obtiene el indice de la clave
+							if keyIndex != 0 then --si es cero es que no hay clave en ese frame
+								moveKey ctrlr keyIndex (-1000001 - newFrame) --mueve la clave al frame -1000001
+							
+							keyIndex = getKeyIndex ctrlr currFrame --obtiene el indice de la clave
+							if keyIndex != 0 then --si es cero es que no hay clave en ese frame
+								moveKey ctrlr keyIndex (newFrame - currFrame) --mueve la clave al nuevo frame
+							
+							keyIndex = getKeyIndex ctrlr -1000001 --obtiene el indice de la clave
+							if keyIndex != 0 then --si es cero es que no hay clave en ese frame
+								moveKey ctrlr keyIndex (currFrame + 1000001) --mueve la clave al nuevo frame
+						)--for
+						
+					--mueve la clave del peso de los constraints al nuevo frame
+					keyIndex = getKeyIndex _cWeightController newFrame --obtiene el indice de la clave
+					if keyIndex != 0 then --si es cero es que no hay clave en ese frame
+						moveKey _cWeightController keyIndex (-1000001 - newFrame) --mueve la clave al frame -1000001
+					
+					keyIndex = getKeyIndex _cWeightController currFrame --obtiene el indice de la clave
+					if keyIndex != 0 then --si es cero es que no hay clave en ese frame
+						moveKey _cWeightController keyIndex (newFrame - currFrame) --mueve la clave al nuevo frame
+					
+					keyIndex = getKeyIndex _cWeightController -1000001 --obtiene el indice de la clave
+					if keyIndex != 0 then --si es cero es que no hay clave en ese frame
+						moveKey _cWeightController keyIndex (currFrame + 1000001) --mueve la clave al nuevo frame
+					
+					--mueve las claves que pudiera haber en el nuevo frame al -1000001 para no perderlas
+					--mueve las claves del frame actual al nuevo frame
+					--mueve las claves del frame -1000001 al frame actual para no perderlas
+					for i=1 to nTargets do
+					(
+						wController = this.pointData.pcController.weight[i].controller --almacena el controlador
+						
+						keyIndex = getKeyIndex wController newFrame --obtiene el indice de la clave
+						if keyIndex != 0 then --si es cero es que no hay clave en ese frame
+							moveKey wController keyIndex (-1000001 - newFrame) --mueve la clave al frame -1000001
+						
+						keyIndex = getKeyIndex wController currFrame --obtiene el indice de la clave
+						if keyIndex != 0 then --si es cero es que no hay clave en ese frame
+							moveKey wController keyIndex (newFrame - currFrame) --mueve la clave al nuevo frame
+						
+						keyIndex = getKeyIndex wController -1000001 --obtiene el indice de la clave
+						if keyIndex != 0 then --si es cero es que no hay clave en ese frame
+							moveKey wController keyIndex (currFrame + 1000001) --mueve la clave al nuevo frame
+					)--for
+				)
+			)
+		),
+		
+		-----------------------------------------------------------------------------------------------
+		--crea un point en el objeto pasado por parametro SOURCEOBJ y lo emparenta al TARGETOBJ
+		--freezeal point y lo mete en la capa de objetos auxiliares
+		--devuelve el POINT creado
+		--"pCtr>>c_tadeo_r_r_footStep>>p_tadeoHat_r_x_root>>001"
+		-----------------------------------------------------------------------------------------------
+		mapped fn createHelperTarget sourceObj targetObj =
+		(
+			p = undefined --point que devolver, inicialmente undefined
+			
+			with animate off 
+			(
+				--pone el nombre inicial al point a partir del source
+				if sourceObj != undefined and targetObj != undefined then --si hay source y target
+				(
+					_size = nodeLocalBoundingBox sourceObj
+					
+					_size = distance _size[1] _size[2]
+					
+					p = point axistripod:off box:off cross:on centermarker:off size:_size
+					nameArray = undefined --variable para almacenar las partes del nombre en caso de cumplir el NC
+					
+					p.name = "pCtr>>"
+					
+					if lb.nc.ncOK sourceObj.name then --si cumple el NC
+						p.name += lb.nc.getSimpleObjectName sourceObj.name + ">>"
+					else
+						p.name += sourceObj.name + ">>"
+				
+					if lb.nc.ncOK targetObj.name then --si cumple el NC
+						p.name += lb.nc.getSimpleObjectName targetObj.name + ">>"
+					else
+						p.name += targetObj.name + ">>"
+						
+					--busca si hay más points con el mismo nombre en la escena y le pone un indice
+					auxPoints = execute ("$'" + p.name + "*'")
+					index = auxPoints.count as String
+					for i=index.count to 2 do index = "0" + index
+					
+					p.name += index
+					
+					--cambia el valor de algunos parametros del point----------------
+					p.transform = sourceObj.transform
+					
+					p.wireColor = yellow --if targetObj != undefined then targetObj.wireColor else sourceObj.wireColor
+					p.parent = targetObj
+					-----------------------------------------------------------------------
+					
+					--freezea el point
+					lb.controller.freezeTransform p #all
+					
+					--crea los animtracks al point---------------------------------------------------------------
+					aTracks = #()
+					
+					aTracks[1] = #(#separator, "Separator01", false, "Transforms")
+					aTracks[2] = #(p[#transform][#Position][#Zero_Pos_XYZ][#X_Position], "transform:position:Zero_Pos_XYZ:x_position", true, undefined, 0.0)
+					aTracks[3] = #(p[#transform][#Position][#Zero_Pos_XYZ][#Y_Position], "transform:position:Zero_Pos_XYZ:y_position", true, undefined, 0.0)
+					aTracks[4] = #(p[#transform][#Position][#Zero_Pos_XYZ][#Z_Position], "transform:position:Zero_Pos_XYZ:z_position", true, undefined, 0.0)
+					aTracks[5] = #(#separator, "Separator02", false, "")
+					aTracks[6] = #(p[#transform][#Rotation][#Zero_Euler_XYZ][#X_Rotation], "transform:rotation:Zero_Euler_XYZ:x_rotation", true, undefined, 0.0)
+					aTracks[7] = #(p[#transform][#Rotation][#Zero_Euler_XYZ][#Y_Rotation], "transform:rotation:Zero_Euler_XYZ:y_rotation", true, undefined, 0.0)
+					aTracks[8] = #(p[#transform][#Rotation][#Zero_Euler_XYZ][#Z_Rotation], "transform:rotation:Zero_Euler_XYZ:z_rotation", true, undefined, 0.0)
+ 					--aTracks[9] = #(#separator, "Separator03", false, "")
+ 					--aTracks[10] = #(p[#transform][#Scale][#Zero_Scale_XYZ][#X_Scale], "transform:scale:Zero_Scale_XYZ:x_scale", true, undefined, 100.0)
+ 					--aTracks[11] = #(p[#transform][#Scale][#Zero_Scale_XYZ][#Y_Scale], "transform:scale:Zero_Scale_XYZ:y_scale", true, undefined, 100.0)
+ 					--aTracks[12] = #(p[#transform][#Scale][#Zero_Scale_XYZ][#Z_Scale], "transform:scale:Zero_Scale_XYZ:z_scale", true, undefined, 100.0)
+					
+					lb.animInfo.setAnimTracks p aTracks
+					------------------------------------------------------------------------------------------------
+					
+					--Si no existe la capa de objetos auxiliares la creamos
+					if (layerManager.getLayerFromName lb.nc.NC_layerAuxObjPointConstraint) == undefined then
+						layermanager.newLayerFromName lb.nc.NC_layerAuxObjPointConstraint
+					
+					--metemos el point en la capa de objetos auxiliares
+					(layerManager.getLayerFromName lb.nc.NC_layerAuxObjPointConstraint).addNode p
+				)--if sourceObj and targetObj
+			)--with animate off
+			
+			--crea una clave al point con los valores actuales de los tracks.
+			if isValidNode p then lb.animInfo.createAnimTracksKey p
+			
+			p --devuelve el point
+		),
+		
+		-----------------------------------------------------------------------------------------------
+		--hace un nuevo link point en SOURCEOBJ a TARGETOBJ
+		--si TARGETOBJ es UNDEFINED hace un LINK TO WORLD
+		-----------------------------------------------------------------------------------------------
+		mapped fn addTarget sourceObj targetObj frameNo:currentTime =
+		(
+			----------------------------------------
+			--adapta el frame actual y el rango a lo necesario para que haga bien las operaciones y lo restaura al final
+
+			_currentTimeBckp = currentTime
+			_animRangeBckp = animationRange
+
+			if frameNo < animationRange.start then animationRange = (interval frameNo animationRange.end)
+			if frameNo > animationRange.end then animationRange = (interval animationRange.start frameNo)
+			slidertime = frameNo
+			----------------------------------------
+
+			_PCNode = lb.links.getLinkNode obj:sourceObj
+			lb.links.pointConstraint.getPointData _PCNode
+			_pointData = lb.links.pointConstraint.pointData
+			
+			-- Comprobamos que no haya dependencias cuando añadimos el target. Si es undefined significa que se hace un linkToWorld
+			_dependencyLoop = if  ( targetObj != undefined and _PCNode != undefined ) then (refs.dependencyLoopTest targetObj _PCNode) else false
+			
+			if not _dependencyLoop then
+			(
+				ntwController = undefined --controlador del peso del nuevo target
+				_cWeightController = this.pointData.cWeightController
+				
+				--si hay que añadir un target
+				if (_pointData.pcController != undefined and _pointData.ocController != undefined) then
+				(
+					--almacena los controladores de posicion y rotacion Zero de sourceObj
+					posZeroController = sourceObj.position.controller[#Zero_Pos_XYZ].controller --controlador Zero de posicion
+					rotZeroController = sourceObj.rotation.controller[#Zero_Euler_XYZ].controller --controlador Zero de rotacion
+					
+					if targetObj != undefined then --si es un lincaje a un objeto y no al mundo
+					(
+						newP = this.createHelperTarget sourceObj targetObj --crea un point de lincaje en el punto en el que se encuentra sourceObj en ese momento
+						--with animate on newP.transform = newP.transform --crea una clave de transformacion al nuevo point
+						
+						with animate off
+						(
+							--añade el nuevo punto como target
+							this.pointData.pcController.appendTarget newP 0.0
+							this.pointData.ocController.appendTarget newP 0.0
+							nTargets = this.pointData.pcController.getNumTargets() --numero de targets actual
+							
+							--pone el controlador del target como booleano y lo instancia para la posicion y la orientacion
+							if nTargets != 0 then
+								ntwController = this.pointData.pcController.weight[nTargets].controller = this.pointData.ocController.weight[nTargets].controller = boolean_Float()
+						) --with animate off
+												
+						--almacena la transformacion actual de la pieza
+						currentPos = sourceObj.transform.position
+						currentRot = sourceObj.transform.rotation
+						
+						with animate on
+						(
+							rotate sourceObj (sourceObj.transform.rotation - currentRot)
+							move sourceObj (currentPos - sourceObj.transform.position)
+							
+							_cWeightController.value = 100.0 --activa los constraints
+						)
+					)
+					else --si es un lincaje al mundo
+					(
+						--almacena los controladores de posicion y rotacion Zero de sourceObj
+						posZeroController = sourceObj.position.controller[#Zero_Pos_XYZ].controller --controlador Zero de posicion
+						rotZeroController = sourceObj.rotation.controller[#Zero_Euler_XYZ].controller --controlador Zero de rotacio
+						
+						currentPos = sourceObj.transform.position --almacena la transformacion actual de la pieza
+						currentRot = sourceObj.transform.rotation --almacena la transformacion actual de la pieza
+						
+						--desactiva los cosntraints y activa la animacion de la pieza
+						with animate on
+						(
+							_cWeightController.value = 0.0 --desactiva los constraints
+							
+							rotate sourceObj (sourceObj.transform.rotation - currentRot)
+							move sourceObj (currentPos - sourceObj.transform.position)
+							
+							stop = false --flag de parada
+							
+							for i=1 to this.pointData.pointLinks.count where not stop and this.pointData.pointLinks[i][1] > frameNo and this.pointData.pointLinks[i][2] != "World" and (findString this.pointData.pointLinks[i][2] "Virtual World" == undefined) do
+							(
+								--almacena el valor actual
+								posZeroControllerValue = posZeroController.value
+								rotZeroControllerValue = rotZeroController.value
+								--EN UN FUTURO HABRA QUE PREPARARLO PARA LA ESCALA -- scaleZeroControllerValue = scaleZeroController.value
+								
+								--crea la clave en el lincaje siguiente
+								at time this.pointData.pointLinks[i][1]
+								(
+									posZeroController.value = posZeroControllerValue
+									rotZeroController.value = rotZeroControllerValue
+									--EN UN FUTURO HABRA QUE PREPARARLO PARA LA ESCALA -- scaleZeroController.value = scaleZeroControllerValue
+								)
+								
+								stop = true
+							)--for
+						)
+					)--if else
+					
+					with animate on
+					(
+						nTargets = this.pointData.pcController.getNumTargets() --numero de targets actual
+						
+						if ntwController != undefined then --si es un lincaje a un objeto y no al mundo
+						(
+							nTargets -= 1 --hace que en el for que recorre los targets no baje el peso del ultimo añadido
+							ntwController.value = 1.0 --pone en el fotograma actual el peso a 1
+						)
+						
+						--para el resto de targets hay que poner los pesos a 0 en ese fotograma
+						--para este target hay que poner el peso a cero en cuanto se ponga activo otro target
+						for i=1 to nTargets do
+						(
+							this.pointData.pcController.weight[i] = 0.0
+							
+							if ntwController != undefined then --si es un lincaje a un objeto y no al mundo
+							(
+								wController = this.pointData.pcController.weight[i].controller
+								for j=1 to (numKeys wController) where (at time (getKeyTime wController j) this.pointData.pcController.weight[i]) == 1.0 do
+									at time (getKeyTime wController j) ntwController.value = 0.0
+							)--if
+						)--for
+					)--with animate on
+					
+					if frameNo != 0 then
+					(
+						with animate off
+						(
+							_linksBetween = false
+							_linkInZero = false
+							
+							if frameNo < 0 then
+							(
+								------------------------------------------------------------------------------------
+								--si el frame actual es menor que cero y entre el frame actual y el cero no hay licajes, tambien debe eliminar las claves del 0 aunque haya mas lincajes antes o despues.
+								for i=1 to this.pointData.pointLinks.count where (this.pointData.pointLinks[i][1] <= 0 and this.pointData.pointLinks[i][1] > frameNo) do _linksBetween = true
+							)
+							else
+							(
+								------------------------------------------------------------------------------------
+								--si el lincaje se esta haciendo en un frame positivo, tiene que mirar si hay lincajes antes del frame actual, si los hay tiene que eliminar las claves del cero,
+								--a no ser que en el cero haya un lincaje
+								for i=1 to this.pointData.pointLinks.count where (this.pointData.pointLinks[i][1] == 0f) do _linkInZero = true
+							)--if else
+							
+							if (frameNo < 0 and not _linksBetween) or (frameNo > 0 and not _linkInZero) then
+							(
+								if (getKeyIndex _cWeightController 0) != 0 then deleteKey _cWeightController (getKeyIndex _cWeightController 0)
+								
+								if (getKeyIndex posZeroController[1].controller 0) != 0 then deleteKey posZeroController[1].controller (getKeyIndex posZeroController[1].controller 0)
+								if (getKeyIndex posZeroController[2].controller 0) != 0 then deleteKey posZeroController[2].controller (getKeyIndex posZeroController[2].controller 0)
+								if (getKeyIndex posZeroController[3].controller 0) != 0 then deleteKey posZeroController[3].controller (getKeyIndex posZeroController[3].controller 0)
+								if (getKeyIndex rotZeroController[1].controller 0) != 0 then deleteKey rotZeroController[1].controller (getKeyIndex rotZeroController[1].controller 0)
+								if (getKeyIndex rotZeroController[2].controller 0) != 0 then deleteKey rotZeroController[2].controller (getKeyIndex rotZeroController[2].controller 0)
+								if (getKeyIndex rotZeroController[3].controller 0) != 0 then deleteKey rotZeroController[3].controller (getKeyIndex rotZeroController[3].controller 0)
+								
+								for i=1 to (this.pointData.pcController.getNumTargets()) where (getKeyIndex this.pointData.pcController.weight[i].controller 0) != 0 do
+									deleteKey this.pointData.pcController.weight[i].controller (getKeyIndex this.pointData.pcController.weight[i].controller 0)
+							)--if
+							------------------------------------------------------------------------------------
+						)--with
+					)--if frameNo
+				) -- if
+			)
+
+			----------------------------------------
+			--restaura el rango y el frame actual
+
+			animationRange = _animRangeBckp --restaura el rango
+			slidertime = _currentTimeBckp --restaura el currentTime original 
+			----------------------------------------
+
+			_dependencyLoop			
+		),
+		
+		-----------------------------------------------------------------------------------------------
+		--elimina el target indicado en INDEX
+		-----------------------------------------------------------------------------------------------
+		mapped fn deleteTarget sourceObj index =
+		(
+			_PCNode = lb.links.getLinkNode obj:sourceObj
+			lb.links.pointConstraint.getPointData _PCNode
+				
+			_pointData = lb.links.pointConstraint.pointData
+			
+			_success = false
+			
+			--si hay que eliminar un target
+			if (_pointData.pcController != undefined and _pointData.ocController != undefined) and this.pointData.pointLinks.count > 0 then
+			(
+				_success = true
+				
+				_cWeightController = this.pointData.cWeightController
+				
+				linkTime = this.pointData.pointLinks[index][1]
+				
+				if this.pointData.pointLinks[index][2] != "World" and (findString this.pointData.pointLinks[index][2] "Virtual World" == undefined) then --si intentamos eliminar un lincaje a un objeto y no al mundo
+				(
+					auxIndex = this.pointData.pointLinks[index][3] --obtiene el indice del target a eliminar
+					nodeToDelete = this.pointData.pcController.getNode auxIndex --obtiene el target
+					this.pointData.pcController.deleteTarget auxIndex --elimina el target
+					this.pointData.ocController.deleteTarget auxIndex --elimina el target
+					delete nodeToDelete --elimina el nodo target de la escena
+				)
+					
+				auxIndex = getKeyIndex _cWeightController linkTime --obtiene el indice de clave
+				if auxIndex != 0 then deleteKey _cWeightController auxIndex
+				
+				--almacena los controladores
+				--posZeroController = sourceObj.position.controller[#Zero_Pos_XYZ].controller --controlador Zero de posicion
+				--rotZeroController = sourceObj.rotation.controller[#Zero_Euler_XYZ].controller --controlador Zero de rotacion
+				--scaleZeroController = sourceObj.scale.controller[#Zero_Scale_XYZ].controller --controlador Zero de rotacion
+				
+				nTargets = this.pointData.pcController.getNumTargets() --obtiene el numero de targets que quedan
+					
+				for i=1 to nTargets do
+				(
+					wController = this.pointData.pcController.weight[i].controller
+					stop = false
+					for j=1 to (numKeys wController) where not stop and (getKeyTime wController j) == linkTime do
+					(
+						deleteKey wController j
+						stop = true
+					)--for
+				)--for
+				
+				--si al eliminar el lincaje, se queda sin lincajes, hay que eliminar las claves de los constraints y dejar su peso a cero.
+				if (this.pointData.pointLinks.count - 1) == 0 and this.pointData.pcController.getNumTargets() == 0 then
+				(
+					deleteKeys _cWeightController #allKeys --elimina todos las claves de los contraints.
+					_cWeightController.value = 0.0 --pone el peso de los constraints a cero.
+				)--if
+			)
+
+			_success			
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | add | Añade el pointConstraint al objeto pasado por parámetro. Devuelve true o false dependiendo si ha conseguido crearlo
+		--@gets: node | obj | nodo al que hay que iniciarle el pointConstraint
+		------------------------------------------------
+		mapped fn addAttribute obj =
+		(
+			_added = false
+			
+			-- Eliminamos primero el customAttribute de la pieza si ya lo tenía y creamos uno nuevo
+			this.removeAttribute obj
+			custAttributes.add obj (this.getCA()) #unique baseobject:false
+				
+			_added = true
+			
+			_added
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | removeAttribute | Elimina el pointConstraint al fichero pasado por parámetro
+		--@gets: node | obj | nodo al que hay que iniciarle el objectSets
+		------------------------------------------------
+		mapped fn removeAttribute obj =
+		(
+			_removed = false
+			
+			if this.hasPCAttribute obj then 
+			(
+				custAttributes.delete obj (custAttributes.getdef obj.pointConstraint) baseobject:false
+				_removed = true
+			)
+			
+			_removed
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | add | Añade el pointConstraint al objeto pasado por parámetro. Devuelve true o false dependiendo si ha conseguido crearlo
+		--@gets: node | obj | nodo al que hay que iniciarle el pointConstraint
+		------------------------------------------------
+		mapped fn add obj =
+		(		
+			-- Añade el modificador si no existe y lo renombra, si existe, comprueba que no tenga CA, y lo añade.
+			if obj.modifiers[1] != undefined then
+			(
+				lb.controller.freezeTransform obj #all
+				
+				if not (this.hasPCAttribute obj.modifiers[1]) then 
+					custAttributes.add obj.modifiers[1] (this.getCA()) #unique
+						
+				lb.links.pointConstraint.addPCconstrollers obj
+			)
+			else
+			(
+				lb.controller.freezeTransform obj #all
+				
+				addModifier obj (EmptyModifier ()) ui:on 
+				obj.modifiers[#Attribute_Holder].name = "PointConstraint" 
+					
+				custAttributes.add obj.modifiers[#PointConstraint] (this.getCA()) #unique
+					
+				lb.links.pointConstraint.addPCconstrollers obj	
+			)
+			
+			-- Actualiza
+			_PCNode = lb.links.getLinkNode obj:obj
+			getPointData _PCNode
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | add | Añade el pointConstraint al objeto pasado por parámetro. Devuelve true o false dependiendo si ha conseguido crearlo
+		--@gets: node | obj | nodo al que hay que iniciarle el pointConstraint
+		------------------------------------------------
+		mapped fn remove obj =
+		(		
+			-- Ponemos el controlador link constraint al objeto
+			if (this.hasPCAttribute obj.modifiers[1]) then
+			(	
+				this.removeAttribute obj.modifiers[1]
+				if obj.modifiers[#PointConstraint] != undefined then deleteModifier obj obj.modifiers[#PointConstraint]
+				lb.controller.freezeTransform obj #all
+			)
+		),
+		
+		----------------------------------------------------------------------------------------
+		--	Busca los controladores position constraint y orientation constraint de sourceObj
+		--	Si no tiene le crea unos
+		--	No funciona si la pieza no esta freezeada
+		----------------------------------------------------------------------------------------
+		fn addPCconstrollers sourceObj =
+		(
+			_PCNode = lb.links.getLinkNode obj:sourceObj
+			this.getPointData _PCNode
+			
+			_pointData = this.pointData
+			
+			--obtiene los controladores de posicion y rotacion del sourceObj
+			posController = _PCNode.position.controller
+			rotController = _PCNode.rotation.controller
+			
+			--si los controladores son de tipo list, puede buscar los constraints
+			if classof posController == position_list and classof rotController == rotation_list then
+			(
+				--busca el constraint de posicion
+				--for i=1 to posController.count where posController[i].name == "PC_pointConstraint" do
+				if posController[#PC_pointConstraint] != undefined then
+					_pointData.PCcontroller = posController[#PC_pointConstraint].controller
+				
+				--busca el constraint de orientacion
+				--for i=1 to rotController.count where rotController[i].name == "OC_pointConstraint" do
+				if rotController[#OC_pointConstraint] != undefined then
+					_pointData.OCcontroller = rotController[#OC_pointConstraint].controller
+				
+				--si no los encuentra, es porque aun no están creados.
+				--se los creamos entonces
+										
+				if _pointData.pcController == undefined then
+				(
+					_pcConstraint = position_Constraint()
+					posController.available.controller = _pcConstraint --lo crea
+					_pointData.pcController = _pcConstraint
+					posController.setName posController.count "PC_pointConstraint" --lo renombra
+					--posController.setActive posController.count --lo deja activo
+				)
+				
+				if	_pointData.ocController == undefined then
+				(	
+					_ocConstraint = orientation_Constraint()
+					rotController.available.controller = _ocConstraint --lo crea
+					_pointData.ocController = _ocConstraint
+					rotController.setName rotController.count "OC_pointConstraint" --lo renombra
+					--rotController.setActive rotController.count --lo deja activo
+				)
+				
+				--busca el peso del constraint de posicion y lo instancia con el de orientacion
+				if posController.weights[#Weight__PC_pointConstraint].controller != undefined then
+				( 
+					_pointData.CWeightController = posController.weights[#Weight__PC_pointConstraint].controller
+					_pointData.CWeightController.keyable = true
+				)
+				
+				--busca el controlador zero de posicion y lo almacena
+				if posController.weights[#Weight__Zero_Pos_XYZ].controller != undefined then
+					_pointData.ZWeightController = posController.weights[#Weight__Zero_Pos_XYZ].controller
+				
+				--si no encuentra los controladores de peso del Zero y de los Constraint los crea
+				if _pointData.cWeightController == undefined or _pointData.zWeightController == undefined then
+				(
+					auxBooleanController = Boolean_Float()
+					_PCNode.position.controller.weights[#Weight__PC_pointConstraint].controller = auxBooleanController
+					_PCNode.rotation.controller.weights[#Weight__OC_pointConstraint].controller = auxBooleanController
+					_pointData.cWeightController = auxBooleanController
+					_pointData.cWeightController.value = 0.0 --lo deja inactivo inicialmente
+					
+					auxBooleanController = Boolean_Float()
+					_PCNode.position.controller.weights[#Weight__Zero_Pos_XYZ].controller = auxBooleanController
+					_PCNode.rotation.controller.weights[#Weight__Zero_Euler_XYZ].controller = auxBooleanController
+					_pointData.zWeightController = auxBooleanController
+				)--if
+				
+			)--if posController and rotController			
+		),
+
+		----------------------------------------------------------------------------------------
+		--	Busca los controladores PointConstraint de los objetos
+		--	Devuelve una array la informacion de todos aquellos que no esten configurados como World, virtual World o undefined
+		--  estructura de la array (Contenido de los point constraints)
+		--  elemento que tiene el pc, array con información point targets, array con información de point links
+		----------------------------------------------------------------------------------------
+		fn getScenePointConstraintInfoNodes =
+		(
+			_sceneAssets = (lb.asset.getSceneAssets())
+			_pcNodes = #() --array para los objetos
+			_pcDatas = #()
+			for _asset in _sceneAssets do
+			(	
+				_hasPC = false
+				--Recorremos todas las bases de los objetos 			
+				for _element in _asset.animNodesAll do
+				(
+					for m in _element.modifiers where not _hasPC and lb.links.pointConstraint.hasPCAttribute m do _hasPC = true
+					
+					if _hasPC then
+					(
+						--Los objetos solo deben tener 1 solo link, distinto al world y virtual world, en el fotograma 0
+						_pcData = lb.links.pointConstraint.getPointData _element
+						
+						if (_pcData.pointTargets.count == 1) then
+						(
+							_target = _pcData.pointTargets[1]
+							_targetNode = getNodeByName _target[2]
+							if _targetNode != undefined then 
+							(
+								--Comprobamos que se encuentre en el fotograma 0
+								if ((_target[1] as string) == "0f") then
+								(
+									_refName = filterstring _target[2] ">>"
+									_elementInfo = #()
+									append _elementInfo _refName[2] --From pointConstraint
+									append _elementInfo _refName[3] --To pointConstraint
+									append _pcNodes _elementInfo
+								)
+							)								
+						)--if
+					)--if
+				)
+			)
+			
+			_pcNodes
+		),
+		------------------------------------------------
+		--@fn: boolean | hasAttribute | Indica si el objeto especificado tiene pointConstraint
+		--@gets: node | obj | al que preguntar si tiene pointConstraint
+		------------------------------------------------
+		fn hasPCAttribute obj = 
+		(
+			_hasPC = false
+			
+			_hasPC = lb.customAttributes.hasAttribute obj #pointConstraint
+
+			if not _hasPC and isProperty obj #modifiers and superclassof obj != modifier then
+				for m in obj.modifiers where not _hasPC and lb.customAttributes.hasAttribute m #pointConstraint do _hasPC = true
+
+			_hasPC
+		),
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+			
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addLibrary this --añade la libreria a la principal
+		)
+		
+	)--lib_templateLib
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: links | Contiene la libreria de links.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct lib_links
+	(
+		------------------------------------------------------------------------------------------------
+		-- COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,					--@var: category | Categoria de la libreria.
+		className = lb.getFileLibName (getThisScriptFilename() as string),	--@var: className | Nombre de la libreria.
+		description = "Libreria de links",	--@var: description | Descripcion de la libreria.
+		
+		------------------------------------------------------------------------------------------------
+		-- VARIABLES
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------------------------------------------------------
+		-- LIBRARIES
+		------------------------------------------------------------------------------------------------
+		pointConstraint = lib_pointConstraint(),
+		linkConstraint = lib_linkConstraint(),
+		
+		------------------------------------------------------------------------------------------------
+		-- FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		------------------------------------------------
+		-- GETS
+		------------------------------------------------
+		------------------------------------------------
+		--@fn: undefined | getLinkNode | Obtenemos el objeto que tenga linkConstraint o pointConstraint
+		------------------------------------------------	
+		fn getLinkNode obj:undefined =
+		(
+			_linkNode = undefined
+			_selection = if obj == undefined then (getCurrentSelection())[1] else obj
+			
+			-- Revisamos los attributos para ver si tiene point o link COnstraint
+			if _selection != undefined then
+			(
+				if (lb.links.pointConstraint.hasPCAttribute  _selection.modifiers[1]) then _linkNode = _selection
+				if (lb.links.linkConstraint.hasLCattribute _selection.modifiers[1]) then _linkNode = _selection
+			)
+			
+			_linkNode
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | getLinkType | Obtenemos el tipo de link, linkconstraint o PointConstraint
+		------------------------------------------------
+		fn getLinkType obj =
+		(
+			_linkType = undefined
+			
+			if (this.pointConstraint.hasPCAttribute obj) then
+				_linkType = #pointConstraint
+			
+			if (this.linkConstraint.hasLCAttribute obj) then
+				_linkType = #linkConstraint
+			
+			_linkType
+		),
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		------------------------------------------------
+		--@fn: undefined | addTarget | Obtenemos el tipo de link, linkconstraint o PointConstraint
+		------------------------------------------------
+		mapped fn addTarget sourceObj targetObj frameNo:currentTime =
+		(
+			_linkType = this.getLinkType sourceObj.modifiers[1]
+			_success = false
+			
+			if _linkType == #pointConstraint then
+			(
+				lb.links.pointConstraint.addTarget sourceObj targetObj frameNo:frameNo
+				_success = true
+			)
+			else if _linkType == #linkConstraint then
+			(
+				lb.links.linkConstraint.addTarget sourceObj targetObj frameNo:frameNo
+				_success = true
+			)
+			
+			_success
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | deleteTarget | Obtenemos el tipo de link, linkconstraint o PointConstraint
+		------------------------------------------------
+		mapped fn deleteTarget sourceObj index =
+		(
+			_linkType = this.getLinkType sourceObj.modifiers[1]
+			
+			if _linkType == #pointConstraint then
+				lb.links.pointConstraint.deleteTarget sourceObj index
+			else if _linkType == #linkConstraint then
+				lb.links.linkConstraint.deleteTarget sourceObj index
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | deleteTarget | Obtenemos el tipo de link, linkconstraint o PointConstraint
+		------------------------------------------------
+		mapped fn setFrameNo sourceObj index newFrame =
+		(
+			_linkType = this.getLinkType sourceObj.modifiers[1]
+			
+			if _linkType == #pointConstraint then
+				lb.links.pointConstraint.setFrameNo sourceObj index newFrame
+			else if _linkType == #linkConstraint then
+				lb.links.linkConstraint.setFrameNo sourceObj index newFrame
+		),
+		
+		------------------------------------------------
+		-- COMMON
+		------------------------------------------------		
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #(this.pointConstraint, this.linkConstraint)
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addLibrary this --añade la libreria a la principal
+		)
+		
+	)--lib_templateLib
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	
+	lib_links() --crea la libreria
+)

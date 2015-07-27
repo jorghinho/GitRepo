@@ -1,0 +1,3051 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--Descripcion: Herramienta Plantilla.
+------------------------------------------------------------------------------------------------------------------------------------------------
+(
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollAuthorize | Contiene la herramienta plantilla.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollAuthorize "Authorize"
+	(
+		local authCode = "caeaaae10"
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) --@var : parent | Herramienta o rolllout del que depende y/o contiene el rollout actual		
+		
+		--------------------------------------------------------------------------------------------------
+		------------------------------------------ CONTROLES ------------------------------------------ 
+		--------------------------------------------------------------------------------------------------
+		
+		groupBox grpId "Enter password" pos:[5,5] width:160 height:67
+		dotNetControl edtPassword "System.Windows.Forms.textbox" pos:[15,32] width:140 height:16
+		
+		button btnOk "Ok" pos:[55,72] width:55 height:25
+		button btnCancel "Cancel" pos:[110,72] width:55 height:25
+		
+		----------------------------------------------------------------------------------------
+		--  comprueba si el password es correcto y permite cerrar o no el rollout de autorización
+		----------------------------------------------------------------------------------------
+		fn checkPassword =
+		(
+			lb.cameraManager.rollMain.cameraChangesAllowed = (edtPassword.text == authCode )
+			if not lb.cameraManager.rollMain.cameraChangesAllowed then
+			(
+				messageBox "Password incorrect."
+				edtPassword.text = ""
+				setFocus edtPassword
+			)
+			else
+				destroyDialog rollAuthorize
+		)
+		
+		---------------------------------------------
+		on rollAuthorize open do
+		(
+			edtPassword.passwordChar = "•"
+			edtPassword.acceptsReturn = true
+			setFocus edtPassword
+		)
+		
+		---------------------------------------------
+		on btnOk pressed do
+			checkPassword()
+		
+		---------------------------------------------
+		on edtPassword keyUp events do
+		(
+			key = events.keydata.tostring()
+			case key of
+			(
+				--"ShiftKey" : (ckbRelAbs.checked = false; ckbRelAbs.caption = "rel")
+				"Return":
+					checkPassword()
+				"Escape":
+					destroyDialog rollAuthorize
+			)
+		)
+		
+		---------------------------------------------
+		on btnCancel pressed do
+		(
+			cameraChangesAllowed = false
+			destroyDialog rollAuthorize
+		)
+	)
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollCameraPlaneDef | Contiene la herramienta plantilla.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollCameraPlaneDef "Camera Plane"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) --@var : parent | Herramienta o rolllout del que depende y/o contiene el rollout actual		
+		
+		local minRollWidth = 350	--@var: minRollWidth | Minimun tool width.
+		local minRollHeight = 300	--@var: minRollHeight | Minimun tool height.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+
+		button btnAddCameraPlane "Add Camera Plane" pos:[5,5] width:205 height:20 
+		button btnDeleteCameraPlane "Delete Camera Plane" pos:[5,35] width:205 height:20 
+
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+
+		fn createCameraPlane = 
+		(
+			_cam = getCurrentSelection()
+			if _cam.count != 0 then
+			(
+				if (classof _cam[1] == Freecamera) or (classof _cam[1] == Targetcamera) then
+				(
+					CameraPlaneCustomAttribute = attributes CameraPlaneAttribute
+					(
+						parameters main rollout:params
+						(
+							Enabled type:#boolean default:false ui:chkEnable
+							Node type:#node
+							Material type:#material
+							Renderable type:#boolean default:false ui:chkRenderable
+							DistanceVal type:#worldUnits animatable:false default:100 ui:spnDistance 
+							StartAtVal type:#integer animatable:false default:1 ui:spnStartAt
+							ImagePathVal type:#string ui:edtImagePath
+							UseImgSizeVal type:#boolean default:false ui:chkImgSize
+							Visibility type:#integer ui:sldVisibility
+						)
+							
+						fn changeSize cam node dst = 
+						(
+							vfov = 2.0*atan(tan(cam.fov/2.0)/((renderWidth*renderPixelAspect as float)/renderHeight)) 
+							w = dst*tan(cam.fov/2)
+							l = dst*tan(vfov/2)
+							node.width = 2*w
+							node.length = 2*l
+
+							in coordsys $ ( node.pos = [0, 0, -dst] )
+						)
+							
+						rollout params "Camera Plane"
+						(
+							checkbox chkEnable "Enable Camera Plane" align:#left
+							spinner spnDistance "Distance" range:[0,1e32,100] fieldWidth:84 type:#worldUnits align:#left enabled:Enabled
+							spinner spnStartAt "Start at" type:#integer fieldWidth:88 range:[-9999,9999,1] align:#left enabled:Enabled
+							editText edtImagePath align:#left fieldWidth:80 enabled:Enabled;
+							button BrowseBtn "Browse" align:#right offset:[0,-24] enabled:Enabled
+							checkbox chkRenderable "Renderable" aligh:#left enabled:Enabled
+							checkbox chkImgSize "Use Image Size" align:#left enabled:Enabled
+							slider sldVisibility "Visibility" align:#left range:[0,100,100] enabled:Enabled type:#integer
+
+						
+							on chkEnable changed state do
+							(
+								if Material == undefined do Material = Standardmaterial name:($.name+"_ImagePlaneMat") selfIllumMapAmount:100 diffuse:(color 128 128 128) showInViewport:true
+								if state == true then
+								(
+									Node = Plane name:($.name+"_ImagePlane") transform:$.transform parent:$ ignoreExtents:true isFrozen:true showFrozenInGray:false wirecolor:(color 0 0 0) material:Material
+									changeSize $ Node DistanceVal
+								)
+								else delete Node
+
+								spnDistance.enabled = state
+								spnStartAt.enabled = state
+								edtImagePath.enabled = state
+								BrowseBtn.enabled = state
+								chkRenderable.enabled = state
+								sldVisibility.enabled = state
+							)
+								
+							on spnDistance changed val do
+							(
+								changeSize $ Node DistanceVal
+							)
+								
+							on BrowseBtn pressed do
+							(
+								selBitmap = selectbitmap()
+
+								if selBitmap != undefined do 
+								(
+									Material.diffuseMap = Bitmaptexture()
+									Material.diffuseMap.bitmap = selBitmap
+									ImagePathVal = Material.diffuseMap.fileName
+									edtImagePath.text = ImagePathVal
+									chkImgSize.enabled = true
+
+
+									if UseImgSizeVal == true do
+										(
+											renderHeight = Material.diffuseMap.bitmap.height
+											renderWidth = Material.diffuseMap.bitmap.width
+											changeSize $ Node DistanceVal
+										)
+								)
+							)
+								
+							on edtImagePath entered val do
+							(
+								Material.diffuseMap = Bitmaptexture()
+								Material.diffuseMap.fileName = edtImagePath.text
+								chkImgSize.enabled = true
+
+								if UseImgSizeVal == true do
+									(
+										renderHeight = Material.diffuseMap.bitmap.height
+										renderWidth = Material.diffuseMap.bitmap.width
+										changeSize $ Node DistanceVal
+									)
+							)
+								
+							on spnStartAt changed val do
+							(
+								Material.diffuseMap.startTime = StartAtVal
+							)
+								
+							on chkImgSize changed state do
+							(
+								renderHeight = Material.diffuseMap.bitmap.height
+								renderWidth = Material.diffuseMap.bitmap.width
+								
+								changeSize $ Node DistanceVal
+							)
+								
+							on chkRenderable changed state do
+							(
+								Node.renderable = Renderable
+							)
+
+							on sldVisibility changed val do
+							(
+								material.opacity = val
+							)
+						)
+					)
+					custAttributes.add _cam[1] CameraPlaneCustomAttribute
+					
+					-- Set visibility of the plane to 1 by default.
+					atr = custAttributes.get _cam[1] CameraPlaneCustomAttribute
+					atr.Visibility = 100 
+				)
+			)
+			else
+			(
+				lb.message.show "You must select a camera."
+			)			
+		)
+
+		fn deleteCameraPlane = 
+		(
+			_cam = getCurrentSelection()
+			if _cam.count != 0 then
+			(
+				_cam = _cam[1]
+				if (classof _cam == Freecamera) or (classof _cam == Targetcamera) then
+				(
+					if isProperty _cam #CameraPlaneAttribute then
+					(
+						custAttributes.delete _cam (custattributes.getdef _cam.CameraPlaneAttribute)
+						for i=objects.count to 1 by -1 where (matchPattern objects[i].name pattern: (_cam.name + "_ImagePlane")) do delete objects[i] 
+					)
+				)
+			)
+			else
+			(
+				lb.message.show "You must select a camera."
+			)
+		)	
+
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------	
+
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollCameraPlaneDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollCameraPlaneDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--lb.xml.setAttribute parent.cfgFile ("rollInfo/cateagory") "paramName" "paramValue"
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			--_param = (lb.xml.getAttribute parent.cfgFile ("rollInfo/category") "paramName") as <value type>
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+
+		on btnAddCameraPlane pressed do
+		(
+			createCameraPlane()
+		)
+		on btnDeleteCameraPlane pressed do
+		(
+			deleteCameraPlane()
+		)
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollMain | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		--@gets: point2 | size | tamaño al que se ha redimensionado el rollout
+		------------------------------------------------
+		on rollCameraPlaneDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollMain | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollCameraPlaneDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+			lb.cameraManager.rollMain.showCamData()
+			if lb.cameraManager.rollMain != undefined then resize [lb.cameraManager.rollMain.width, lb.cameraManager.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollMain | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollCameraPlaneDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+		)
+	)--rollCameraPlaneDef
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollInfoDef | Contiene la herramienta plantilla.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollInfoDef "Info"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) --@var : parent | Herramienta o rolllout del que depende y/o contiene el rollout actual		
+		
+		local minRollWidth = 350	--@var: minRollWidth | Minimun tool width.
+		local minRollHeight = 100	--@var: minRollHeight | Minimun tool height.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		
+		groupBox grpInfo pos:[5,0] width:205 height:70
+		label lblCam "Cam:" pos:[35,15] width:25 height:15
+		label lblCamData "<no cameras>" pos:[90,15] height:15
+		label lblTotal "All Cams:" pos:[16,30] width:60 height:15
+		label lblTotalData "<no cameras>" pos:[90,30] height:15
+		label lblNumCams "Num Cams:" pos:[16,45] width:60 height:15
+		label lblNumCamsData "<no cameras>" pos:[75,45] height:15 align:#left
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		------------------------------------------------
+		--@fn: undefined | refresh | Actualiza la información mostrada en el rollout sobre el metraje de la cámara seleccionada y del resto de cámaras.
+		------------------------------------------------
+		fn refresh =
+		(
+			selCamFrames = 0
+			allCamFrames = 0
+
+			if lb.cameraManager.rollMain.sceneCameras != undefined then 
+			(
+				for c in lb.cameraManager.rollMain.sceneCameras do
+				(
+					range = lb.cameraFunctions.getCameraRange c
+					camFrames = (range.end - range.start + 1)
+					if c == lb.cameraManager.rollMain.sceneCameras[lb.cameraManager.rollMain.selCamIndex] then selCamFrames = camFrames
+					
+					allCamFrames += camFrames
+				)
+			)
+			
+			if lb.cameraManager.rollMain.lvCams.selectedRows.count > 0 then
+			(
+				camFrames = formattedprint selCamFrames format:" 4d frames"
+				fullRangeFrames = formattedprint allCamFrames format:" 4d frames"
+				camSeconds = formattedprint (selCamFrames/framerate as float) format:" 3.02f sec"
+				fullRangeSeconds = formattedprint (allCamFrames/framerate as float) format:" 3.02f sec"
+				
+				lblCamData.text = camFrames + " = " + camSeconds
+				lblTotalData.text = fullRangeFrames + " = " + fullRangeSeconds
+				lblNumCamsData.text = lb.cameraManager.rollMain.sceneCameras.count as string
+			)
+			else
+			(
+				lblCamData.text = lblTotalData.text = "No cam selected"
+			)
+		)
+
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollInfoDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollInfoDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--lb.xml.setAttribute parent.cfgFile ("rollInfo/cateagory") "paramName" "paramValue"
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			--_param = (lb.xml.getAttribute parent.cfgFile ("rollInfo/category") "paramName") as <value type>
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollMain | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		--@gets: point2 | size | tamaño al que se ha redimensionado el rollout
+		------------------------------------------------
+		on rollInfoDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollMain | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollInfoDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+			lb.cameraManager.rollMain.showCamData()
+			if lb.cameraManager.rollMain != undefined then resize [lb.cameraManager.rollMain.width, lb.cameraManager.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollMain | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollInfoDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+		)
+	)--rollInfoDef	
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollZoomDef | Contiene la herramienta plantilla.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollZoomDef "Zoom"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+
+		local minRollWidth = 350	--@var: minRollWidth | Minimun tool width.
+		local minRollHeight = 100	--@var: minRollHeight | Minimun tool height.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+
+		local cursor = dotNetClass "Windows.Forms.Cursor" -- almacena el cursor para poder moverlo libremente
+		local cursorLastPos = dotNetobject "System.Drawing.Point" 0 0
+		local dragging = false --flag para saber si es esta arrastrando el boton de zoom
+		
+		--tamaño original del boton de zoom
+		local btnZoomWidth = 205
+		local btnZoomHeight = 100
+		
+		--posicion inicial del boton de zoom
+		local minBtnZoomPosX = 5
+		local minBtnZoomPosY = 30
+		
+		local originalFov = 45.0 --fov de la camara original
+		local zoomFov = 45.0 --fov de la camara de zoom
+		local imageAspect = getRendImageAspect() --obtiene la relacion de aspecto
+		local originalWidth = undefined --ancho del fov de la camara original
+		local originalHeight = undefined --alto del fov de la camara original
+
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		
+		button btnCreateCameraZoom "Zoom in camera" pos:[5,5] width:130 height:20 tooltip:"creates zoom in selected camera"
+		button btnDeleteCameraZoom "Delete" pos:[140,5] width:70 height:20 tooltip:"deletes zoom in selected camera"
+		
+		groupbox grpZoom pos:[minBtnZoomPosX,(minBtnZoomPosY-5)] width:btnZoomWidth height:(btnZoomHeight + 5)
+		dotNetControl btnZoom "System.Windows.Forms.Button" pos:[minBtnZoomPosX,minBtnZoomPosY] width:btnZoomWidth height:btnZoomHeight
+			
+		spinner spnZoomFOV "Zoom value (FOV):" pos:[5,140] range:[0.01,175,45] width:160 fieldwidth:50
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		------------------------------------------------
+		--@fn: undefined | updateBtnZoom | Actualiza el boton Zoom 
+		------------------------------------------------
+		fn updateBtnZoom =
+		(
+			selCam = lb.cameraManager.rollMain.sceneCameras[lb.cameraManager.rollMain.selCamIndex] --obtiene la camara actual
+			
+			if selCam.parent != undefined and superclassof selCam.parent == camera then --si la camara actual tiene padre
+			(
+				--obtiene los fov
+				originalFov = selCam.parent.fov
+				zoomFov = selCam.fov
+				imageAspect = (getRendImageAspect())*1.00000 --obtiene la relacion de aspecto
+				
+				fovDifference = originalFov/zoomFov --calcula la diferencia de fov
+				
+				--ajusta el tamaño del boton
+				btnZoom.height = btnZoomHeight/fovDifference*1.00000
+				btnZoom.width = btnZoomWidth/fovDifference*1.00000
+				
+				---------------------------------------------------------------------------------------------------
+				--utilizamos el teorema del seno pasa poder decidir donde colocar el boton de zoom---------
+				--formulas:
+				--Sen alfa = catOp / hip
+				--Cos alfa = catAdy / hip
+				--Tg alfa = catOp / catAdy
+				
+				--targetDis = selCam.baseObject.targetDistance --obtiene el targetDistance (Cateto Adyacente)
+				targetDis = selCam.parent.baseObject.targetDistance --obtiene el targetDistance (Cateto Adyacente)
+				
+				--catOp = tg alfa * catAdy
+				
+				--obtiene los anchos y altos originales y del boton de zoom
+				originalWidth = (tan (originalFov/2.00000))*targetDis*2
+				originalHeight = originalWidth/imageAspect
+				zoomWidth = (tan (zoomFov/2.00000))*targetDis*2
+				zoomHeight = zoomWidth/imageAspect
+				
+				relativePosition = in coordsys selCam.parent selCam.pos --obtiene la posicion de la camara de zoom respecto de la camara original de la que se ha generado
+				--relativePosition = in coordsys parent selCam.pos --obtiene la posicion de la camara de zoom respecto de la camara original de la que se ha generado
+				
+				--calcula la posicion del boton
+				relPosX = btnZoomWidth/2.00000 + minBtnZoomPosX + ((relativePosition.x)*btnZoomWidth/originalWidth) - btnZoom.width/2.00000
+				relPosY = btnZoomHeight/2.00000 + minBtnZoomPosY + ((-relativePosition.y)*btnZoomHeight/originalHeight) - btnZoom.height/2.00000
+				btnZoom.pos = [relPosX,relPosY]
+				
+				----------------------------------------------------------------------------------------------------
+			)
+			else --si no es una camara de zoom
+			(
+				try
+				(
+					btnZoom.height = btnZoomHeight
+					btnZoom.width = btnZoomWidth
+					
+					btnZoom.pos = [minBtnZoomPosX,minBtnZoomPosY]
+				)
+				catch()
+			) --if selCam.parent
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | updateUI | habilita deshabilita controles del interface
+		------------------------------------------------
+		fn updateUI =
+		(
+			if lb.cameraManager.rollMain.sceneCameras != undefined and lb.cameraManager.rollMain.sceneCameras.count != 0 then --si hay camaras
+			(	
+				if findString (lb.cameraManager.rollMain.sceneCameras[lb.cameraManager.rollMain.selCamIndex].name) "_zoom" != undefined then --si es una camara de zoom
+				(
+					btnCreateCameraZoom.enabled = false
+					btnDeleteCameraZoom.enabled = true
+					spnZoomFOV.value = lb.cameraManager.rollMain.sceneCameras[lb.cameraManager.rollMain.selCamIndex].fov
+					spnZoomFOV.enabled = true
+					btnZoom.enabled = true
+					--btnZoom.text = "|\n- O -\n|"
+					updateBtnZoom()
+				)
+				else --si no es una camara de zoom
+				(
+					btnCreateCameraZoom.enabled = true
+					btnDeleteCameraZoom.enabled = false
+					
+					spnZoomFOV.enabled = false
+					
+					updateBtnZoom()
+					btnZoom.enabled = false
+					--btnZoom.text = ""
+				)
+			)
+			else --si no hay camaras
+			(
+				btnCreateCameraZoom.enabled = false
+				btnDeleteCameraZoom.enabled = false
+				spnZoomFOV.enabled = false
+				btnZoom.enabled = false
+			)--if sceneCameras
+		)
+
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollZoomDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollZoomDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--lb.xml.setAttribute parent.cfgFile ("rollInfo/cateagory") "paramName" "paramValue"
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			--_param = (lb.xml.getAttribute parent.cfgFile ("rollInfo/category") "paramName") as <value type>
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+
+		------------------------------------------------
+		--@event: MouseDown | Evento que se lanza al clickar.
+		------------------------------------------------
+		on btnZoom MouseDown e do
+		(
+			cursorLastPos = cursor.position
+			dragging = true --activa el modo drag
+			selCam = lb.cameraManager.rollMain.sceneCameras[lb.cameraManager.rollMain.selCamIndex] --obtiene la camara actual
+			cursorClickOffset = [(cursor.position).x, (cursor.position).y] - btnZoom.pos
+		)
+
+		------------------------------------------------
+		--@event: MouseMove | Evento que se lanza al mover el raton.
+		------------------------------------------------
+		on btnZoom MouseMove e do
+		(
+			if dragging then
+			(
+				--obtiene la nueva posicion del boton en funcion de lo que hemos movido haciendo drag
+				cursorOffset = [(cursor.position).x, (cursor.position).y] - [cursorLastPos.x, cursorLastPos.y] --desplazamiento en pixels del drag
+				
+				newBtnZoomPos = btnZoom.pos + cursorOffset
+				mousePos = dotNetobject "System.Drawing.Point" (cursor.position).x (cursor.position).y
+				
+				if newBtnZoomPos.x < minBtnZoomPosX + 1 then
+				(
+					newBtnZoomPos.x = minBtnZoomPosX + 1
+					mousePos.x = cursorLastPos.x
+				)
+				
+				if newBtnZoomPos.y < minBtnZoomPosY + 2 then
+				(
+					newBtnZoomPos.y = minBtnZoomPosY + 2
+					mousePos.y = cursorLastPos.y
+				)
+				
+				if (newBtnZoomPos.x + btnZoom.width) > (minBtnZoomPosX + btnZoomWidth - 0.005) then
+				(
+					newBtnZoomPos.x = (minBtnZoomPosX + btnZoomWidth - btnZoom.width - 1)
+					mousePos.x = cursorLastPos.x
+				)
+				
+				if (newBtnZoomPos.y + btnZoom.height) > (minBtnZoomPosY + btnZoomHeight - 0.005) then
+				(
+					newBtnZoomPos.y = (minBtnZoomPosY + btnZoomHeight - btnZoom.height - 1)
+					mousePos.y = cursorLastPos.y
+				)
+				
+				
+				--	Por si se ha recortado la nueva posición del cursor
+				--	asignamos la nueva posición y recalculamos su offset
+				cursor.position = mousePos
+				cursorOffset = newBtnZoomPos - btnZoom.pos -- aquí lo recalculamos en función del movimiento del botón, que es el offset real. Con el cursor hay offsets que no se llegan a detectar bien.
+				
+				--aplica la nueva posicion al boton y a la camara de zoom
+				selCam = lb.cameraManager.rollMain.sceneCameras[lb.cameraManager.rollMain.selCamIndex] --obtiene la camara actual
+				
+				btnZoom.pos = [newBtnZoomPos.x,newBtnZoomPos.y]
+				btnZoom.refresh()
+				camOffset = [(originalWidth*cursorOffset.x/(btnZoomWidth*1.00000)),(originalHeight*-cursorOffset.y/(btnZoomHeight*1.00000)),0]
+				
+				with animate off
+						in coordsys selCam.parent (selCam.pos += camOffset)
+				
+				cursorLastPos = cursor.position --almacena la ultima posicion del cursor
+			)
+		)
+
+		------------------------------------------------
+		--@event: MouseUp | Evento que se lanza soltar el boton.
+		------------------------------------------------
+		on btnZoom MouseUp e do
+		(
+			btn = e.button.toString() --almacena que boton se ha pulsado
+			
+			dragging = false --desactiva el modo de drag
+			
+			--si se ha pulsado el boton derecho resetea la camara de zoom al estado inicial
+			if btn == "Right" then
+			(
+				selCam = lb.cameraManager.rollMain.sceneCameras[lb.cameraManager.rollMain.selCamIndex]
+				with animate off
+				(
+					spnZoomFOV.value = selCam.fov = selCam.parent.fov/2.0
+					selCam.pos = selCam.parent.pos
+					updateBtnZoom() --actualiza el boton de zoom
+				)
+			)	
+		)
+
+		------------------------------------------------
+		--@event: changed | Actualiza el valor del zoom.
+		------------------------------------------------
+		on spnZoomFOV changed val do
+		(
+			selCam = lb.cameraManager.rollMain.sceneCameras[lb.cameraManager.rollMain.selCamIndex] --obtiene la camara actual
+			
+			--si el boton de zoom choca con alguno de los limites, se impide seguir aumentando el fov
+			if selCam.parent != undefined then --si la camara actual tiene padre
+			(
+				targetDis = selCam.parent.baseObject.targetDistance --obtiene el targetDistance (Cateto Adyacente)
+				
+				--obtiene los anchos y altos originales y del boton de zoom
+				originalWidth = (tan (selCam.parent.fov/2.00000))*targetDis*2
+				zoomWidth = (tan (val/2.00000))*targetDis*2
+				
+				relativePosition = in coordsys selCam.parent selCam.pos --obtiene la posicion de la camara de zoom respecto de la camara original de la que se ha generado
+				
+				--if ((abs (relativePosition.x)) + (zoomWidth/2.00000)) >=  (originalWidth/2.00000) then
+				if ((abs (relativePosition.x)) + (zoomWidth/2.00000)) >=  (originalWidth/2.00000) then
+				(	
+					val = selCam.fov
+					spnZoomFOV.value = val
+				)
+				----------------------------------------------------------------------------------------------------
+			)
+			
+			--aplica el nuevo zoom y actualiza el boton de zoom
+			with animate off lb.cameraManager.rollMain.sceneCameras[lb.cameraManager.rollMain.selCamIndex].fov = val
+			
+			updateBtnZoom()
+		)
+
+		------------------------------------------------
+		--@event: pressed | Crea una camara zoom en la camara seleccionada.
+		------------------------------------------------
+		on btnCreateCameraZoom pressed do
+		(
+			if lb.cameraManager.rollMain.ckbLockView.checked then --pone el viewpor activo si estaba con lock
+				viewport.activeViewport = lb.cameraManager.rollMain.activeViewport
+				
+			--crea la camara de zoom-----------------------
+			selCam = lb.cameraManager.rollMain.sceneCameras[lb.cameraManager.rollMain.selCamIndex]
+				
+			if findString selCam.name "_zoom" == undefined then --si no es una camara de zoom
+			(
+				zoomCam = copy selCam --crea la camara
+				if isValidNode zoomCam then --si la camara es valida
+					with animate off 
+					(					
+						zoomCam.name = selCam.name + "_zoom" --añae el sufijo zoom
+						zoomCam.wirecolor = selCam.wirecolor --le pone el color original
+						zoomCam.type = #free --hace que sea de tipo free
+						zoomCam.fov = zoomCam.fov/2.0
+						
+						deleteKeys zoomCam.transform.controller #allKeys --borra su animacion
+						zoomCam.parent = selCam --la emparenta a la camara original
+						
+						lb.cameraFunctions.setCameraRange zoomCam (lb.cameraFunctions.getCameraRange selCam).start (lb.cameraFunctions.getCameraRange selCam).end --coloca el rango
+						
+						lb.cameraManager.rollMain.selCamIndex += 1 --incrementa el indice de camara seleccionada
+						lb.cameraManager.rollMain.resetLvCams() --actualiza el listado
+						viewport.setCamera lb.cameraManager.rollMain.sceneCameras[lb.cameraManager.rollMain.selCamIndex] --pone como activa la camara zoom
+						
+						updateUI() --acutaliza el interface
+					)
+			)
+			else --si es una camara de zoom
+				messageBox "Selected camera is already a camera zoom"
+		)
+
+		------------------------------------------------
+		--@event: pressed | Elimina una camara zoom de la escena.
+		------------------------------------------------
+		on btnDeleteCameraZoom pressed do
+		(
+			selCam = lb.cameraManager.rollMain.sceneCameras[lb.cameraManager.rollMain.selCamIndex]
+			if findString selCam.name "_zoom" != undefined then
+			(
+				if lb.cameraManager.rollMain.ckbLockView.checked then --pone el viewpor activo si estaba con lock
+					viewport.activeViewport = rollMain.activeViewport
+					
+				delete selCam
+				updateUI()
+				
+				viewport.setCamera lb.cameraManager.rollMain.sceneCameras[lb.cameraManager.rollMain.selCamIndex] --pone como activa la camara zoom
+			)
+			else
+				messageBox "Cannot delete camera. Selected camera is not a zoom camera"
+		)
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollMain | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		--@gets: point2 | size | tamaño al que se ha redimensionado el rollout
+		------------------------------------------------
+		on rollZoomDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollMain | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollZoomDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+			updateUI()
+			if lb.cameraManager.rollMain != undefined then resize [lb.cameraManager.rollMain.width, lb.cameraManager.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollMain | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollZoomDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+		)
+	)--rollZoomDef
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollZoomDef | Contiene la herramienta plantilla.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollGridDef "Grid"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local minRollWidth = 350	--@var: minRollWidth | Minimun tool width.
+		local minRollHeight = 100	--@var: minRollHeight | Minimun tool height.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+
+		local cameraGrids = #() --array de structs de tipo grid	
+		local standardGridWidth = 1 --ancho estandar del grid
+		local standardGridDistanceFromCam = 1.5
+		--colores de las lineas por defecto
+		local colorGridLine = color 0 0 0
+		local colorGridDiagonal = color 50 50 50
+		local colorGridCross = color 10 10 10
+		local colorSafeFrame = color 0 0 0
+		local lastHrztlCount = 1
+		local lastVrtclCount = 2
+			
+		struct cameraGrid --strunct con el grid
+		(
+			completeGrid = undefined,		--grupo en el que estan almacenados los elementos del grid
+			cameraParent = undefined,	--camara a la que esta asociada el grid
+			hGridLines = #(),					--lineas del grid horizontales
+			vGridLines = #(),					--lineas del grid horizontales
+			diagonals = undefined,			--diagonales
+			centerCross = undefined,		--cross central
+			safeFrame = undefined,		--safe frame propio de cada camara
+			allSplines = #()					--todas las partes del grid en un array
+		)
+
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+
+		checkbox chkShowGrids "Show camera grids" pos:[5,5] width:150 height:15
+
+		GroupBox grpGridLines "Grid Lines" pos:[5,25] width:205 height:55 
+		spinner spnHorizontalLines "Horizontal" pos:[20,40] width:100 height:16 fieldWidth:30 range:[1,100,1] type:#integer scale:1
+		spinner spnVerticalLines "Vertical" pos:[35,60] width:85 height:16 fieldWidth:30 range:[1,100,2] type:#integer scale:1
+		button btnUpdate "Update" pos:[135,40] width:70 height:32 toolTip:"Updates cameraGrids"
+				
+		GroupBox grpGridOptions "Grid options" pos:[5,85] width:205 height:80
+		checkbox chkGrid "grid lines" pos:[10,100] width:60 height:15 checked:true
+		colorPicker clrGrid "" pos:[80,100] width:20 height:15 color:(color 0 0 0) fieldWidth:15 title:""
+			
+		checkbox chkDiagonals "diagonal" pos:[10,120] width:60 height:15 checked:false
+		colorPicker clrDiagonals "" pos:[80,120] width:20 height:15 color:(color 50 50 50) fieldWidth:15 title:""
+			
+		checkbox chkCross "cross" pos:[115,100] width:60 height:15 checked:false
+		colorPicker clrCross "" pos:[185,100] width:20 height:15 color:(color 10 10 10) fieldWidth:15 title:""
+			
+		checkbox chkSafeFrame "safe frame" pos:[115,120] width:73 height:15 checked:true
+		colorPicker clrSafeFrame "" pos:[185,120] width:20 height:15 color:(color 0 0 0) fieldWidth:15 title:""
+			
+			
+		spinner spnLinesWidth "Line width" pos:[20,140] width:80 height:16 fieldWidth:30 range:[0,10,0] type:#integer scale:1
+
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+
+		------------------------------------------------
+		--@fn: undefined | getCameraGrids | rellena un array de structs de grids y lo devuelve
+		------------------------------------------------
+		fn getCameraGrids =
+		(
+			grids = #()
+			
+			--recorre las camaras buscando si tienen grids asociado a ellas o no
+			for c in cameras where superclassof c == camera do
+				for ch in c.children where (classof ch == Dummy) and (ch.name == (c.name + "_grid")) do
+				(
+					hLines = #()
+					vLines = #()
+					dLine = undefined
+					crossLine = undefined
+					sfLine = undefined
+					
+					--rellena los arrays anteriores
+					for obj in ch do
+						if findString obj.name "horizontalSpline" != undefined then
+							append hLines obj
+						else if findString obj.name "verticalSpline" != undefined then
+							append vLines obj
+						else if findString obj.name "diagonalSpline" != undefined then
+							dLine = obj
+						else if findString obj.name "crossSpline" != undefined then
+							crossLine = obj
+						else if findString obj.name "safeFrameSpline" != undefined then
+							sfLine = obj
+						
+					newGrid = (cameraGrid cameraParent:c completeGrid:ch hGridLines:hLines vGridLines:vLines diagonals:dLine centerCross:crossLine allSplines:(hLines + vLines + #(dLine)) safeFrame:sfLine)
+					append grids newGrid
+				)
+			
+			grids
+		)
+
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		------------------------------------------------
+		--@fn: undefined | createStandardCameraGrid | crate camera grid standar
+		------------------------------------------------
+		fn createStandardCameraGrid numHorizontalLines:1 numVerticalLines:2 =
+		(
+			standardGrid = undefined
+			nodesToGroup = #()
+			
+			imageAspect = getRendImageAspect() --obtiene la relacion de aspecto del render para poder ajustar el tamaño del grid
+			gridHeight = (standardGridWidth*1.0)/imageAspect
+			
+			--crea el shape horizontal---------------------------------
+			hSplines = #()
+			dist = gridHeight/(numHorizontalLines + 1)
+			for i=1 to numHorizontalLines do
+			(
+				hSpline = SplineShape pos:[0,0,0]
+				addNewSpline hSpline
+				addKnot hSpline 1 #corner #line [-(standardGridWidth/2.0),((-gridHeight/2.0) + dist*i),0.001]
+				addKnot hSpline 1 #corner #line [(standardGridWidth/2.0),((-gridHeight/2.0) + dist*i),0.001]
+				updateShape hSpline
+				hSpline.name = "horizontalSpline#" + (i-1) as string
+				hSpline.wirecolor = colorGridLine
+				append hSplines hSpline
+			)
+			
+			nodesToGroup += hSplines
+			--------------------------------------------------------------
+			
+			--crea los dos shapes verticales -------------------------
+			vSplines = #()
+			dist = (standardGridWidth*1.0)/(numVerticalLines + 1)
+			
+			for i=1 to numVerticalLines do
+			(
+				vSpline = SplineShape pos:[0,0,0]
+				addNewSpline vSpline
+				addKnot vSpline 1 #corner #line [((-standardGridWidth/2.0) + dist*i),(standardGridWidth/(imageAspect*2.0)),0.001]
+				addKnot vSpline 1 #corner #line [((-standardGridWidth/2.0) + dist*i),-(standardGridWidth/(imageAspect*2.0)),0.001]
+				updateShape vSpline
+				vSpline.name = "verticalSpline#" + (i-1) as string
+				vSpline.wirecolor = colorGridLine
+				append vSplines vSpline
+			)
+			
+			nodesToGroup += vSplines
+			--------------------------------------------------------------
+				
+			--crea las diagonales---------------------------------------
+			diagSpline = SplineShape pos:[0,0,0]
+			addNewSpline diagSpline
+			addKnot diagSpline 1 #corner #line [-(standardGridWidth/2.0),(standardGridWidth/(imageAspect*2.0)),0]
+			addKnot diagSpline 1 #corner #line [(standardGridWidth/2.0),-(standardGridWidth/(imageAspect*2.0)),0]
+			addNewSpline diagSpline
+			addKnot diagSpline 2 #corner #line [(standardGridWidth/2.0),(standardGridWidth/(imageAspect*2.0)),0]
+			addKnot diagSpline 2 #corner #line [-(standardGridWidth/2.0),-(standardGridWidth/(imageAspect*2.0)),0]
+			updateShape diagSpline
+			diagSpline.name = "diagonalSpline#01"
+			diagSpline.wirecolor = colorGridDiagonal
+			append nodesToGroup diagSpline
+			--------------------------------------------------------------
+				
+			--crea la cruz central--------------------------------------
+			crossSpline = SplineShape pos:[0,0,0]
+			addNewSpline crossSpline
+			addKnot crossSpline 1 #corner #line [0,(standardGridWidth/(imageAspect*10.0)),0.02]
+			addKnot crossSpline 1 #corner #line [0,-(standardGridWidth/(imageAspect*10.0)),0.02]
+			addNewSpline crossSpline
+			addKnot crossSpline 2 #corner #line [(standardGridWidth/20.0),0,0.002]
+			addKnot crossSpline 2 #corner #line [-(standardGridWidth/20.0),0,0.002]
+			updateShape crossSpline
+			crossSpline.name = "crossSpline#01"
+			crossSpline.wirecolor = colorGridCross
+			append nodesToGroup crossSpline
+			--------------------------------------------------------------
+			
+			--crea el safe frame personalizado------------------------
+			safeFrameSpline = WalledRectangle transform:(matrix3 1) wrect_width:(standardGridWidth) wrect_length:(standardGridWidth/imageAspect*1.0) wrect_thickness:(-standardGridWidth/2.0) wrect_syncCornerFillets:off
+			safeFrameSpline.pos.z = 0.003
+			safeFrameSpline.name = "safeFrameSpline#01"
+			safeFrameSpline.wirecolor = colorSafeFrame
+			addmodifier safeFrameSpline (Extrude())
+			safeFrameSpline.modifiers[#Extrude].amount = 0
+			append nodesToGroup safeFrameSpline	
+			--------------------------------------------------------------
+				
+			--agrupa los nodos------------------------------------------
+			group nodesToGroup name:"standardGrid"
+			gridGroup = $'standardGrid'
+			--------------------------------------------------------------
+			
+			--crea el struct del grid-----------------------------------
+			standardGrid = (cameraGrid completeGrid:gridGroup hGridLines:hSplines vGridLines:vSplines diagonals:diagSpline centerCross:crossSpline allSplines:(hSplines + vSplines + #(diagSpline,crossSpline)) safeFrame:safeFrameSpline)
+			--------------------------------------------------------------
+			
+			--bloquea los objetos y les desactiva el frozen in gray
+			gridGroup.isfrozen = true
+			gridGroup.showFrozenInGray = off
+			(LayerManager.getLayer 0).addNode gridGroup
+				
+			nodesToGroup.renderable = false
+			nodesToGroup.isfrozen = true
+			nodesToGroup.showFrozenInGray = off
+			nodesToGroup.render_displayRenderMesh = false
+			nodesToGroup.optimize = false
+			nodesToGroup.adaptive = false
+			nodesToGroup.steps = 0
+			
+			--mete los grids en la capa 0
+			for o in nodesToGroup do (LayerManager.getLayer 0).addNode o
+			
+			standardGrid
+		)
+
+		------------------------------------------------
+		--@fn: undefined | createCameraGrids | crea los cameragrids en las camaras
+		------------------------------------------------
+		fn createCameraGrids numHorizontalLines:1 numVerticalLines:2 =
+		( --start = timeStamp()
+			newGrids = #() --nuevos grids creados
+			referenceGrid = createStandardCameraGrid numHorizontalLines:numHorizontalLines numVerticalLines:numVerticalLines --crea el grid de referencia
+			
+			--crea instancias del grid de referencia y las coloca en las camaras de la escena
+			for cam in lb.cameraManager.rollMain.sceneCameras do
+			(				
+				--crea las instancias
+				newLines = #()
+				for sp in referenceGrid.allSplines do
+				(
+					spI = copy sp
+					spI.wirecolor = sp.wirecolor
+					spI.parent = undefined					
+					append newLines spI
+				)
+				
+				newSafeFrame = copy (referenceGrid.safeFrame)
+				newSafeFrame.wirecolor =  referenceGrid.safeFrame.wirecolor
+				newSafeFrame.parent = undefined
+				append newLines newSafeFrame
+				
+				--agrupa los nodos------------------------------------------
+				group newLines name:"auxGrid"
+				gridGroup = $'auxGrid'
+				--------------------------------------------------------------
+				
+				--arrays para almacenar los objetos del grupo
+				--gridGroup = auxGrid[1]
+				hLines = #()
+				vLines = #()
+				dLine = undefined
+				crossLine = undefined
+				
+				--rellena los arrays anteriores
+				for obj in newLines do
+					if findString obj.name "horizontalSpline" != undefined then
+						append hLines obj
+					else if findString obj.name "verticalSpline" != undefined then
+						append vLines obj
+					else if findString obj.name "diagonalSpline" != undefined then
+						dLine = obj
+					else if findString obj.name "crossSpline" != undefined then
+						crossLine = obj
+				
+				--crea el struct
+				newGrid = (cameraGrid completeGrid:gridGroup cameraParent:cam hGridLines:hLines vGridLines:vLines diagonals:dLine centerCross:crossLine allSplines:(hLines + vLines + #(dLine) + crossLine) safeFrame:newSafeFrame)
+				
+				--coloca el grid en su sitio respecto a la camara y personaliza el nombre y propiedades------	
+				newGrid.completeGrid.transform = cam.transform
+					
+				--utilizamos el teorema del seno para calcular la distancia a la camara a la que colocar el grid
+					
+				catAdy = 0 --cateto adyacente, es el resultado que queremos obtener
+				catOp = standardGridDistanceFromCam --catOp = standardGridWidth/2.0 --cateto opuesto, es el ancho del grid/2, es un dato que conocemos
+				
+				alfa = 90 - cam.fov/2.0 --alfa = cam.fov/2 --alfa es la mitad del fov de la camara
+					
+				--formulas:
+				--Sen alfa = catOp / hip
+				--Cos alfa = catAdy / hip
+				--Tg alfa = catOp / catAdy
+				
+				catAdy = (cos alfa)*(catOp/(sin alfa)) --halla la distancia
+				scaleFactor = catAdy/(standardGridWidth/2.0 )
+					
+				in coordsys local move newGrid.completeGrid [0,0,(-standardGridDistanceFromCam)]--[0,0,-catAdy] --coloca el grid en su sitio				
+				newGrid.completeGrid.scale = [scaleFactor,scaleFactor,scaleFactor]
+				--------------------------------------------------------------------------------------------------------
+					
+				newGrid.completeGrid.parent = cam
+				newGrid.completeGrid.name = cam.name  + "_grid"
+				newGrid.completeGrid.isfrozen = true
+				newGrid.completeGrid.showFrozenInGray = off
+				
+				newGrid.allSplines.renderable = false
+				newGrid.allSplines.isfrozen = true
+				newGrid.allSplines.showFrozenInGray = off
+				newGrid.allSplines.render_displayRenderMesh = false
+				newGrid.allSplines.optimize = false
+				newGrid.allSplines.adaptive = false
+				newGrid.allSplines.steps = 0
+				
+				newGrid.safeFrame.renderable = false
+				newGrid.safeFrame.isfrozen = true
+				newGrid.safeFrame.showFrozenInGray = off
+				newGrid.safeFrame.renderable = false
+				newGrid.safeFrame.optimize = false
+				newGrid.safeFrame.adaptive = false
+				newGrid.safeFrame.steps = 0
+				
+				(LayerManager.getLayer 0).addNode newGrid.completeGrid
+				(LayerManager.getLayer 0).addNode newGrid.safeFrame
+				for o in newGrid.allSplines do (LayerManager.getLayer 0).addNode o
+				
+				-----------------------------------------------------------------------------------------------------	
+					
+				append newGrids newGrid --añade el grid al array de grids
+			)--for
+			
+			delete referenceGrid.completeGrid --elimina el grid de referencia
+			newGrids
+		)
+
+
+		------------------------------------------------
+		--@fn: undefined | deleteCameraGrids | elimina los cameragrids en las camaras
+		------------------------------------------------
+		fn deleteCameraGrids =
+		(
+			for g in cameraGrids do delete g.completeGrid
+			cameraGrids = #()
+			
+			(LayerManager.getLayer 0).nodes &auxGrids
+			for o in auxGrids where findString o.name "_grid" != undefined do delete o
+		)
+
+		------------------------------------------------
+		--@fn: undefined | updateCameraGrids | actualiza los grids cuando hay un cambio en el interface
+		------------------------------------------------
+		fn updateCameraGrids = 
+		(
+			for camGrid in cameraGrids do --recorre los grids aplicando los cambios
+			(
+				--cambios en el color de las lineas-----------------------------------------------------
+				for sp in camGrid.hGridLines do --recorre las lineas horizontales
+					sp.wirecolor = clrGrid.color --aplica el color
+					
+				for sp in camGrid.vGridLines do --recorre las lineas verticales
+					sp.wirecolor = clrGrid.color --aplica el color
+				
+				camGrid.diagonals.wirecolor = clrDiagonals.color --cambia el color de las lineas diagonales
+				camGrid.centerCross.wirecolor = clrCross.color --cambia el color de la cruz central
+				camGrid.safeFrame.wirecolor = clrSafeFrame.color --cambia el color del safe frame
+				------------------------------------------------------------------------------------------
+				
+				--cambios en la visualizacion de las lineas--------------------------------------------
+				camGrid.hGridLines.ishidden = not chkGrid.checked
+				camGrid.vGridLines.ishidden = not chkGrid.checked
+				camGrid.diagonals.ishidden = not chkDiagonals.checked
+				camGrid.centerCross.ishidden = not chkCross.checked
+				camGrid.safeFrame.ishidden = not chkSafeFrame.checked
+				------------------------------------------------------------------------------------------
+				
+				--cambios en el grosor de las lineas---------------------------------------------------
+				if spnLinesWidth.value != 0 then
+				(
+					camGrid.hGridLines.render_displayRenderMesh = true
+					camGrid.vGridLines.render_displayRenderMesh = true
+					camGrid.diagonals.render_displayRenderMesh = true
+					camGrid.centerCross.render_displayRenderMesh = true
+					
+					camGrid.hGridLines.render_rectangular = true
+					camGrid.vGridLines.render_rectangular = true
+					camGrid.diagonals.render_rectangular = true
+					camGrid.centerCross.render_rectangular = true
+					
+					camGrid.hGridLines.render_length = 0.0001
+					camGrid.vGridLines.render_length = 0.0001
+					camGrid.diagonals.render_length = 0.0001
+					camGrid.centerCross.render_length = 0.0001
+					
+					camGrid.hGridLines.render_width = spnLinesWidth.value/1000.0
+					camGrid.vGridLines.render_width = spnLinesWidth.value/1000.0
+					camGrid.diagonals.render_width = spnLinesWidth.value/1000.0
+					camGrid.centerCross.render_width = spnLinesWidth.value/1000.0
+				)
+				else
+				(
+					camGrid.hGridLines.render_width = 0
+					camGrid.vGridLines.render_width = 0
+					camGrid.diagonals.render_width = 0
+					camGrid.centerCross.render_width = 0
+					
+					camGrid.hGridLines.render_displayRenderMesh = false
+					camGrid.vGridLines.render_displayRenderMesh = false
+					camGrid.diagonals.render_displayRenderMesh = false
+					camGrid.centerCross.render_displayRenderMesh = false
+				)
+				------------------------------------------------------------------------------------------
+			)
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | updateUI | actualiza el interface con los valores de los grids
+		------------------------------------------------
+		fn updateUI =
+		(
+			if cameraGrids.count != 0 then --si hay grids creados
+			(
+				--habilita los controles
+				for c in rollGridDef.controls do c.enabled = true
+				
+				chkShowGrids.checked = true --porque ya hay grids en la escena
+				
+				auxGrid = cameraGrids[1] --grid del que coger la informacion
+				
+				--obtiene el numero de lineas de los grids----
+				spnHorizontalLines.value = auxGrid.hGridLines.count
+				spnVerticalLines.value = auxGrid.vGridLines.count
+				--------------------------------------------------
+					
+				--obtiene los colores de los grids-------------
+				clrGrid.color = auxGrid.hGridLines[1].wirecolor
+				clrDiagonals.color = auxGrid.diagonals.wirecolor
+				clrCross.color = auxGrid.centerCross.wirecolor
+				clrSafeFrame.color = auxGrid.safeFrame.wirecolor
+				--------------------------------------------------
+				
+				--obtiene la visibilidad de los grid-------------
+				chkGrid.checked = not auxGrid.hGridLines[1].ishidden
+				chkDiagonals.checked = not auxGrid.diagonals.ishidden
+				chkCross.checked = not auxGrid.centerCross.ishidden
+				chkSafeFrame.checked = not auxGrid.safeFrame.ishidden
+				--------------------------------------------------
+				
+				--obtiene el grosor de las lineas de los grids-
+				spnLinesWidth.value = ((auxGrid.hGridLines[1].render_width)*1000.0) as integer
+				--------------------------------------------------
+				
+			)
+			else --si no hay grid creados
+			(
+				for c in rollGridDef.controls do c.enabled = false
+				chkShowGrids.enabled = true
+				chkShowGrids.checked = false --porque no hay grids
+			)
+		)
+
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollGridDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollGridDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--lb.xml.setAttribute parent.cfgFile ("rollInfo/cateagory") "paramName" "paramValue"
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			--_param = (lb.xml.getAttribute parent.cfgFile ("rollInfo/category") "paramName") as <value type>
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+
+		------------------------------------------------
+		--cambios de color en las lineas de los grids
+		--cambios de grosor en las lineas de los grids
+		--cambios en la visualizacion de partes del grid
+		------------------------------------------------
+		on clrGrid changed clr do updateCameraGrids()
+		on clrDiagonals changed clr do updateCameraGrids()
+		on clrCross changed clr do updateCameraGrids()
+		on clrSafeFrame changed clr do updateCameraGrids()
+		
+		on chkGrid changed state do updateCameraGrids()
+		on chkDiagonals changed state do updateCameraGrids()
+		on chkCross changed state do updateCameraGrids()
+		on chkSafeFrame changed state do updateCameraGrids()
+		
+		on spnLinesWidth buttonUp do updateCameraGrids()
+		on spnLinesWidth entered do updateCameraGrids()
+
+
+		------------------------------------------------
+		--@event: pressed | Elimina los grids y los vuelve a crear para que actualice el numero de lineas
+		------------------------------------------------
+		on btnUpdate pressed do
+		(
+			setWaitCursor()
+			suspendEditing()
+			
+			deleteCameraGrids()
+			cameraGrids = createCameraGrids numHorizontalLines:spnHorizontalLines.value numVerticalLines:spnVerticalLines.value
+			updateCameraGrids()
+			
+			resumeEditing()
+			completeRedraw()
+			setArrowCursor()
+		)
+
+		------------------------------------------------
+		--@event: changed | crea o elimina los grids
+		------------------------------------------------
+		on chkShowGrids changed state do
+		(
+			if lb.cameraManager.rollMain.sceneCameras.count != undefined then
+			(
+				setWaitCursor()
+				suspendEditing()
+				
+				if state then --muestra los grids
+				(
+					cameraGrids = createCameraGrids numHorizontalLines:spnHorizontalLines.value numVerticalLines:spnVerticalLines.value
+					updateCameraGrids()
+				)
+				else -- elimina los grids
+					deleteCameraGrids()
+				
+				resumeEditing()
+				completeRedraw()
+				setArrowCursor()
+				
+				updateUI() --actualiza el interface
+			)
+			else
+				messageBox "There are no cameras in scene"
+		)
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollMain | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		--@gets: point2 | size | tamaño al que se ha redimensionado el rollout
+		------------------------------------------------
+		on rollGridDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollMain | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollGridDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+			cameraGrids = getCameraGrids() --busca los grids de las camaras
+			updateUI() --actualiza el interface
+			if lb.cameraManager.rollMain != undefined then resize [lb.cameraManager.rollMain.width, lb.cameraManager.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollMain | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollGridDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+		)
+	)--rollGridDef
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollMainDef | Contiene el listado de overrides permitidos.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollMainDef "Camera Manager"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) --@var : parent | Herramienta o rolllout del que depende y/o contiene el rollout actual
+		
+		local minRollWidth = 227	--@var: minRollWidth | Minimun tool width.
+		local minRollHeight = 640	--@var: minRollHeight | Minimun tool height.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+
+		local lastCamNum = 0 	--	ultimo numero de camaras registrado en la escena
+		local lastFov = 0			-- 	FOV que tenía la cámara antes de empezar a manipularla
+		
+		local activeViewport
+			
+		local specialPlayEventCamIndex = 0 --indica la camara actual que se esta reproduciendo
+		
+		local playbackLoopState = false		-- indica el estado de la escena de la propiedad loop del playback
+
+		local sceneCameras
+		local cameraChangesAllowed	--	Indica si se pueden realizar cambios en los rangos de cámara
+
+		local selCamIndex = 0
+		
+		local selBackColor = (dotNetClass "System.Drawing.Color").fromargb 0 0 100
+		local selForeColor = (dotNetClass "System.Drawing.Color").white
+		local nonSelBackColor = (dotNetClass "System.Drawing.Color").fromargb 180 180 180
+		local nonSelForeColor = (dotNetClass "System.Drawing.Color").black
+		local opening = false --@var: opening | Flag para que no salte el evento de cambio de tab y no pise el valor cargado del archivo .cfg
+		local iconpath = if (maxVersion())[1] >= 15000 then (getDir #maxRoot) + "UI_ln\\Icons\\" else (getDir #ui) + "/icons/" --ruta de los iconos de Max.
+
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+
+		checkbutton ckbAutoRewindToStart "" pos:[6,5] width:20 height:20 border:false images:#(iconpath+"VCRControls_16i.bmp",undefined,28,1,1,1,1,true) tooltip:"Autorewind"
+		checkbutton ckbSetCameraRange "" pos:[26,5] width:20 height:20 border:false images:#(iconpath+"MainToolbar_16i.bmp",undefined,102,85,85,86,86,true) tooltip:"Set camera range" checked:true
+		checkbutton ckbInteractive "" pos:[46,5] width:20 height:20 toolTip:"Enable/Disable scene interactivity." checked:true border:false images:#(iconpath+"crwd_cog_i.bmp",undefined,12,5,5,6,6,true) checked:true
+		button btnMoveCamUp "" pos:[75,5] width:20 height:20 enabled:false toolTip:"Move selected item UP in the list." border:false images:#(iconpath+"crwd_shift_i.bmp",undefined,4,1,1,2,2,true)
+		button btnMoveCamDown "" pos:[95,5] width:20 height:20 enabled:false toolTip:"Move selected item DOWN in the list." border:false images:#(iconpath+"crwd_shift_i.bmp",undefined,4,3,3,4,4,true)
+		checkbutton ckbLockView "" pos:[125,5] width:20 height:20 border:false images:#(iconpath+"StatusPanel_16i.bmp",undefined,35,1,3,2,4,true) tooltip:"Lock interactivity to selected to view." 
+		button btnInteractiveView "" pos:[145,5] width:20 height:20 toolTip:"Choose an active view." border:false
+		checkbutton ckbVisualCameraEditor "" pos:[170,5] width:40 height:20 border:false  images:#(iconpath+"TrackViewStatus_16i.bmp",undefined,25,24,24,24,24,true) toolTip:"Visual Camera Manager"
+		
+		dotNetControl lvCams "System.Windows.Forms.DataGridView" pos:[5,25] width:205 height:165
+		GroupBox grpCamRange "" pos:[5,190] width:205 height:45
+		spinner spnRangeStart "Start" pos:[25,210] width:60 height:16 range:[-999999,999999,0] type:#integer fieldwidth:40
+		spinner spnRangeEnd "End" pos:[125,210] width:60 height:16 range:[-999999,999999,100] type:#integer fieldwidth:40
+		checkbutton chkLinkPreviousCameras "L" pos:[90,210] width:15 height:15 toolTip:"Link Previous Cameras"
+		checkbutton chkLinkNextCameras "L" pos:[190,210] width:15 height:15 toolTip:"Link Next Cameras"
+		
+		groupBox grpCamParameters "" pos:[5,228] width:205 height:62
+		spinner spnLens "Lens" pos:[20,243] width:75 height:16 type:#float range:[0.1, 100000, 35]
+		label lblCamType "Type" pos:[110,243] width:25 height:15
+		dropdownList ddlCamType "" pos:[135,240] width:70 height:21 items:#("Free", "Target")
+		
+		checkbox chkSimilarCam "Similar Cam" pos:[15,268] width:75 height:15
+		dropdownList ddlSimilarCam "" pos:[90,265] width:115 height:21
+		
+		checkbutton ckbSpecialPlay "" pos:[5,295] width:180 height:20 toolTip:"Play cameras" images:#(iconpath+"VCRControls_16i.bmp",undefined,28,7,7,8,8,true)
+		checkbutton ckbSpecialPlayLoop "" pos:[190,295] width:20 height:20 toolTip:"Loop" images:#(iconpath+"MainToolbar_16i.bmp",undefined,102,23,23,24,24,true)
+		
+		Timer clock "" pos:[150,95] width:24 height:24 interval:50 active:false
+
+		dotNetControl tbTabs "DevExpress.XtraTab.XtraTabControl" pos:[0,320] width:350 height:21 --25
+	
+		------------------------------------------------------------------------------------------------
+		--SUBROLLOUTS
+		------------------------------------------------------------------------------------------------
+
+		subrollout subRollContainer "subRollouts" pos:[0,341] width:minRollWidth height:574 --@control | subRollContainer | SubRollouts container.
+
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		------------------------------------------------
+		--@fn: undefined | showCamData | muestra los datos de la duración de la animación
+		------------------------------------------------
+		fn showCamData =
+		(
+			local frames = 0.0
+			local currentCamFrames = 0.0
+
+			btnMoveCamUp.enabled = \
+			btnMoveCamDown.enabled = \
+			spnRangeStart.enabled = \
+			spnRangeEnd.enabled = \
+			chkLinkNextCameras.enabled = \
+			chkLinkPreviousCameras.enabled = \
+			spnLens.enabled = \
+			lblCamType.enabled = \
+			ddlCamType.enabled = \
+			chkSimilarCam.enabled = \ 
+			ddlSimilarCam.enabled = (lvCams.selectedRows.count > 0)
+
+			if selCamIndex != 0 then
+			(
+				c = sceneCameras[selCamIndex]
+				start	= (lb.cameraFunctions.getCameraRange c).start
+				end 	= (lb.cameraFunctions.getCameraRange c).end 
+				
+				--	mostramos los datos de la cámara seleccionada
+				spnRangeStart.value = start
+				spnRangeEnd.value = end
+				spnLens.value = cameraFov.fovToMM c.fov
+				ddlCamType.selection = if c.type == #free then 1 else 2
+				chkSimilarCam.checked = (c.camInfo.similarCam != "")
+				ddlSimilarCam.enabled =chkSimilarCam.checked and chkSimilarCam.enabled
+				
+				if c.camInfo.similarCam != "" then
+				(
+					lb.cameraManager.rollMain.fillSimilarCamList()
+					for i = 1 to ddlSimilarCam.items.count where ddlSimilarCam.items[i] == c.camInfo.similarCam do
+						ddlSimilarCam.selection = i
+				)
+				else
+					ddlSimilarCam.items = #()
+			)
+
+			try parent.rollInfo.refresh() catch()
+
+		)
+		----------------------------------------------------------------------------------------
+		-- Indica si la cámara actual se puede mover en el listado hacia arriba
+		----------------------------------------------------------------------------------------
+
+		fn newCamPostProcess =
+		(	
+			rollMainDef.resetLvCams()
+			rollMainDef.removeSceneEvents()
+			rollMainDef.createSceneEvents()
+			
+			try lb.cameraManager.rollZoom.updateUI() catch()
+		)
+
+		------------------------------------------------
+		--@fn: undefined | canMoveUp | Indica si la cámara actual se puede mover en el listado hacia arriba
+		------------------------------------------------
+		fn canMoveUp = (selCamIndex != 1)
+
+		------------------------------------------------
+		--@fn: undefined | canMoveDown | Indica si la cámara actual se puede mover en el listado hacia abajo
+		------------------------------------------------	
+		fn canMoveDown = (selCamIndex < sceneCameras.count)  and (sceneCameras.count > 0)
+
+		------------------------------------------------
+		--@fn: undefined | camera_filt | Indica si la cámara obj está listada
+		------------------------------------------------	
+		fn camera_filt obj =
+		(
+			if (finditem sceneCameras obj) != 0 then false else true
+		)
+
+		------------------------------------------------
+		--@fn: undefined | refreshArrows | actualiza el estado de las flechas del interface
+		------------------------------------------------	
+		fn refreshArrows =
+		(	
+			if sceneCameras.count > 0 do
+			(
+				btnMoveCamUp.enabled = canMoveUp()
+				btnMoveCamDown.enabled = canMoveDown()
+			)
+		)
+
+		------------------------------------------------
+		--@fn: undefined | initListView | inicia el listado del interface.
+		------------------------------------------------	
+		fn initListView =
+		(
+			lvCams.rows.clear()
+			lvCams.columns.clear()
+			lvCams.allowUsertoaddRows = false
+			lvCams.allowUsertoDeleteRows = false
+			lvCams.allowUserToResizeRows = false
+			lvCams.allowUserToResizeColumns = true
+			lvCams.AdvancedColumnHeadersBorderStyle.all = (dotnetclass "System.Windows.Forms.DataGridViewAdvancedCellBorderStyle").outset
+			lvCams.columnHeadersDefaultCellStyle.alignment = (dotnetclass "System.Windows.Forms.DataGridViewContentAlignment").middleCenter
+			lvCams.columnHeadersDefaultCellStyle.font = dotnetobject "system.drawing.font" (dotnetobject "System.Drawing.FontFamily" "Arial") 8 --(dotnetclass "System.Drawing.FontStyle").bold
+			lvCams.columnHeadersHeightSizeMode = (dotnetclass "System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode").disableResizing
+			lvCams.columnHeadersHeight = 18
+			
+			lvCams.gridcolor = (dotnetclass "System.Drawing.Color").lightgray
+			lvCams.rowsdefaultcellstyle.backcolor =  (dotnetclass "System.Drawing.Color").fromargb 200 200 200
+			
+			lvCams.cellborderstyle = (dotnetclass "System.Windows.Forms.DataGridViewCellBorderStyle").single	-- tipo de borde de las celdas
+			lvCams.rowheadersvisible = false
+			--lvCams.columnheadersvisible = false
+			lvCams.multiSelect = false
+			lvCams.readonly = true
+			lvCams.showCellTooltips = true					
+			--lvCams.editMode = (dotNetClass "System.Windows.Forms.DataGridViewEditMode").EditOnEnter  
+			
+			lvCams.columns.add "Col1" "Camera"
+			lvCams.columns.add "Col2" "Start"
+			lvCams.columns.add "Col3"  "End"
+			lvCams.columns.add "Col4"  "Similar To"
+			
+			colWidths = #(60,36,36,60)
+			
+			for i = 1 to lvCams.columns.count do
+			(
+				lvCams.columns.item[i-1].sortmode = (dotnetclass "System.Windows.Forms.DataGridViewColumnSortMode").notSortable
+				lvCams.Columns.item[i-1].width = colWidths[i]
+			)
+		)
+
+		------------------------------------------------
+		--@fn: undefined | fillListView | Reinicia los elementos del listado.
+		------------------------------------------------
+		fn fillListView =
+		(	
+			lastRowSelected = if lvCams.selectedRows.count > 0 then lvCams.selectedRows.item[0].index else undefined
+			lvCams.rows.clear()
+			
+			for i = 1 to sceneCameras.count where not isdeleted sceneCameras[i] do
+			(
+				-- El nombre de la cámara que escribimos en el listado no
+				-- tiene que incluir los rangos, así que se los quitamos
+				cam = sceneCameras[i]
+				n = cam.name
+				rangePos = findstring n "("
+				if rangePos != undefined then n = substring n 1 (rangePos-2)
+				
+				camRange = lb.cameraFunctions.getCameraRange cam
+				camStartString = (formattedprint camRange.start format:"04d") 
+				camEndString = (formattedprint camRange.end format:"04d")
+				
+				lvCams.rows.add()
+				row = lvCams.rows.item[i-1]
+				row.height = 16
+				row.cells.item[0].value = cam.name
+				row.cells.item[1].value = camStartString
+				row.cells.item[2].value = camEndString
+				
+				similarCamString = if hasProperty cam.camInfo #similarCam then cam.similarCam else ""
+				row.cells.item[3].value = similarCamString
+			)
+			
+			if lastRowSelected != undefined then
+			(
+				if lastRowSelected < lvCams.rowCount then
+					lvCams.rows.item[lastRowSelected].selected = true
+				else if lvCams.rows.count > 0 then
+					lvCams.rows.item[lvCams.rowCount-1].selected = true
+			)
+			
+			refreshArrows()		-- actualiza el estado de las flechas
+		)
+
+		------------------------------------------------
+		--@fn: undefined | resetLvCams | reinicia el listado de cámaras.
+		------------------------------------------------
+		fn resetLvCams =
+		(
+			sceneCameras = lb.misc.sortNodesByName (lb.cameraFunctions.getSceneCameras()) ignoreCase:true
+			fillListView()
+			
+			camIndex = finditem sceneCameras (getActiveCamera())
+			
+			if camIndex != 0 then 
+			(
+				lvCams.rows.item[camIndex-1].selected = true
+				--lvCams.ensureVisible (camIndex-1)
+				selCamIndex = camIndex
+				lastFov = sceneCameras[selCamIndex].fov
+				
+				showCamData()
+				
+				refreshArrows()
+				
+			)
+				else if sceneCameras.count == 0 then selCamIndex = 0 else selCamIndex = 1
+			
+			try lb.cameraManager.rollZoom.updateUI() catch()
+		)
+
+		----------------------------------------------------------------------------------------
+		-- reinicia el listado de cámaras
+		----------------------------------------------------------------------------------------
+		fn fillSimilarCamList =
+		(
+			items = #()
+			
+			if chkSimilarCam.checked then
+			(
+				selCam = sceneCameras[selCamIndex]
+				
+				for c in sceneCameras where c.name != selCam.name do
+				(
+					append items c.name
+					if c.camInfo.similarCam != "" then appendIfUnique items c.camInfo.similarCam
+				)
+				
+				sort items
+			)
+			
+			ddlSimilarCam.items = items
+		)
+
+		------------------------------------------------
+		--@fn: undefined | getViewType | Devuelve un alias del nombre de la vista.
+		------------------------------------------------
+		fn getViewType index =
+		(
+			activeViewport = viewport.activeViewport
+			viewport.activeViewport = index
+			vtype = viewport.getType()
+			txt = ""
+			
+			case vtype of
+			(
+				#view_top:				(txt = "Top")
+				#view_bottom:		(txt = "Bottom")
+				#view_right:			(txt = "Right")
+				#view_left:				(txt = "Left")
+				#view_front:			(txt = "Front")
+				#view_back:			(txt = "Back")
+				#view_persp_user:	(txt = "Perspective")
+				#view_iso_user:		(txt = "User")
+				#view_camera:		(txt = "Camera")
+				#view_spot:			(txt = "Light")
+				#view_shape:			(txt = "Shape")
+				#view_grid:				(txt = "Grid")
+			)
+			
+			if txt == "Camera" do
+				txt = (viewport.getCamera()).name
+			
+			viewport.activeViewport = activeViewport
+			
+			txt
+		)
+
+		------------------------------------------------
+		--@fn: undefined | registerViews | Escribe en un fichero el código necesario para generar un rc_menu en función del número de viewports
+		------------------------------------------------
+		fn registerViews =
+		(
+			disableSceneRedraw()
+			count = viewport.numviews
+			activeViewport = viewport.activeViewport
+			
+			def_views = #(#view_top, #view_bottom, #view_right, \
+			#view_left, #view_front, #view_back, #view_persp_user, \
+			#view_iso_user, #view_camera, #view_spot, #view_shape, #view_grid)
+			
+			views = #()
+			
+			for i in 1 to count do
+				append views (getViewType i)
+				
+			vcount = views.count
+			f = createfile (getdir #maxroot+"rcmenu.txt")
+			format "rcmenu rcMenu_views\n(\n" to:f
+			
+			for i in 1 to vcount do
+				format "menuitem item% \"% - %\"\n" i i views[i] to:f
+				
+			format "\non rcMenu_views open do " i to:f
+			
+			for i in 1 to vcount where i == activeViewport do
+				format "item%.checked = true\n" i to:f
+			
+			for i in 1 to vcount do
+			(
+				format "on item% picked do\n\t(\n" i to:f
+				format "\tlb.cameraManager.rollMain.activeViewport = %\n" i to:f
+				format "\tlb.cameraManager.rollMain.btnInteractiveView.caption = lb.cameraManager.rollMain.activeViewport as string\n" to:f
+				format "\t)\n" to:f
+			)
+			
+			format ")\npopupmenu rcMenu_views" to:f
+			close f
+			enableSceneRedraw()	
+		)
+
+		-----------------------------------------------
+		--@fn: undefined | moveItem | cambia la posición del item seleccionado en listado por la indicada en val
+		------------------------------------------------
+		fn moveItem val =
+		(
+			copycam = sceneCameras[selCamIndex]
+			deleteitem sceneCameras selCamIndex
+			int = selCamIndex+val
+			insertitem copycam sceneCameras int
+			selCamIndex = int
+			lvCams.rows.item[lb.cameraManager.rollMain.selCamIndex-1].selected = true
+			fillListView()
+		)
+
+		-----------------------------------------------
+		--@fn: undefined | addNewCams | añade las cámaras de la escena que no están listadas
+		------------------------------------------------
+		fn addNewCams =
+		(
+			pre_newcams = #()
+			for i in cameras where (camera_filt i and superclassof i == camera) do append sceneCameras i
+			sceneCameras = lb.misc.sortNodesByName sceneCameras ignoreCase:true
+			
+			newCamPostProcess()
+		)
+
+		-----------------------------------------------
+		--@fn: undefined | setActiveCamera | Activa la cámara CAM
+		------------------------------------------------
+		fn setActiveCamera cam =
+		(
+			if cam != #none then
+			(
+				stopAnimation()
+				lb.cameraManager.rollMain.selCamIndex = finditem lb.cameraManager.rollMain.sceneCameras cam
+				lastFov = lb.cameraManager.rollMain.sceneCameras[lb.cameraManager.rollMain.selCamIndex].fov
+				
+				lvCams.rows.item[lb.cameraManager.rollMain.selCamIndex-1].selected = true
+				--lvCams.ensureVisible (selCamIndex-1)
+				showCamData()
+				refreshArrows()
+				
+				if ckbInteractive.checked do
+				(
+					viewNum = if ckbLockView.checked then activeViewport else viewport.activeViewport
+					lb.cameraFunctions.setViewportCamera viewNum lb.cameraManager.rollMain.sceneCameras[lb.cameraManager.rollMain.selCamIndex]
+				)
+				
+				--actualiza el rango de la linea de tiempo y coloca el slider al principio segun el estado los checkbuttons especificos para ello
+				if ckbSetCameraRange.checked then
+					lb.cameraFunctions.setAnimRangeFromCamera cam goToStart:ckbAutoRewindToStart.checked
+				else if ckbAutoRewindToStart.checked then
+					slidertime = (lb.cameraFunctions.getCameraRange cam).start
+				
+				-- si estaba el modo specialPlay activado lo desactivamos
+				if ckbSpecialPlay.checked then 
+				(
+					stopAnimation()
+					unregisterTimeCallback specialPlayEvent
+					timeConfiguration.playbackLoop = playbackLoopState
+					ckbSpecialPlay.checked = false
+				)
+				
+				try lb.cameraManager.rollZoom.updateUI() catch()
+			)
+			else
+				showCamData()
+		)
+
+		------------------------------------------------
+		--@fn: undefined | specialPlayEvent | Activa el modo play con saltos de cámara
+		------------------------------------------------
+		fn specialPlayEvent =
+		(
+			if (currentTime >= (animationRange.end)) and (not playbackLoopState) then --si ha terminado el rango y no hayq eu hacer loop
+			(
+				ckbSpecialPlay.checked = false
+				unregisterTimeCallback specialPlayEvent
+				stopAnimation()
+				timeConfiguration.playbackLoop = playbackLoopState
+			)
+			else if isAnimPlaying() then --si esta en play
+			(	
+				frameFinal = (lb.cameraFunctions.getCameraRange sceneCameras[specialPlayEventCamIndex]).end
+				
+				--if frameFinal == animationRange.end do frameFinal += -1
+					
+				if (sliderTime >= frameFinal) then	
+				(	
+					if specialPlayEventCamIndex < sceneCameras.count then
+						specialPlayEventCamIndex += 1
+					else
+						specialPlayEventCamIndex = 1
+					
+					unregisterTimeCallback specialPlayEvent
+					stopAnimation() --paramos momentaneamente el play
+					
+					disableSceneRedraw()
+					viewport.setCamera sceneCameras[specialPlayEventCamIndex]
+					slidertime = (lb.cameraFunctions.getCameraRange sceneCameras[specialPlayEventCamIndex]).start
+					enableSceneRedraw()
+					
+					-- cambiamos la cámara seleccionada
+					lvCams.rows.item[specialPlayEventCamIndex-1].selected = true
+					--lvCams.ensureVisible (specialPlayEventCamIndex - 1)
+					selCamIndex = specialPlayEventCamIndex
+					showCamData()
+					
+					registerTimeCallback specialPlayEvent
+					playAnimation() --reactivamos el play. Por causas que escapan al sentido común en max 2013 hay que activarlo dos veces por código
+					playAnimation()
+					
+				)--if slidertime				
+			)
+			
+			if not isAnimPlaying() then
+			(
+				ckbSpecialPlay.checked = false
+				unregisterTimeCallback specialPlayEvent
+				timeConfiguration.playbackLoop = playbackLoopState
+			)	
+		)
+
+		------------------------------------------------
+		--@fn: undefined | initUI | Inicializa los controles del UI.
+		------------------------------------------------
+		fn initUI =
+		(	
+			tbTabs.paintstylename = "PropertyView"
+			tbTabs.borderStyle = (dotnetclass "DevExpress.XtraEditors.Controls.BorderStyles").noBorder
+			tbTabs.TabPageWidth = 100			
+			
+			tbTabs.Appearance.BackColor = (dotnetclass "system.drawing.color").fromArgb 68 68 68
+			tbTabs.Appearance.BackColor2 = (dotnetclass "system.drawing.color").fromArgb 68 68 68
+			tbTabs.Appearance.BorderColor = (dotnetclass "system.drawing.color").fromArgb 100 100 100
+		)
+
+
+		------------------------------------------------
+		--@fn: undefined | checkCameraChangesAllowed | indica si se puede o no manipular la información de las cámaras (rangos)
+		------------------------------------------------
+		fn checkCameraChangesAllowed =
+		(
+			cameraChangesAllowed = false
+			
+			n = (filterstring (getfilenamefile maxFileName) "_")
+			if n[1] == lb.nc.NC_seqPrefix and not (n[3] == lb.nc.NC_layoutFileName or n[4] == lb.nc.NC_layoutFileName) then
+				createDialog rollAuthorize modal:true
+			else
+				cameraChangesAllowed = true
+			
+			cameraChangesAllowed
+		)
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			_width = (lb.xml.getAttribute parent.cfgFile ("rollMain/size") "width") as integer
+			_height = (lb.xml.getAttribute parent.cfgFile ("rollMain/size") "height") as integer
+				
+			--posicion
+			_posX = (lb.xml.getAttribute parent.cfgFile ("rollMain/pos") "x") as integer
+			_posY = (lb.xml.getAttribute parent.cfgFile ("rollMain/pos") "y") as integer
+				
+			--establece minimos
+			if _width < minRollWidth then _width = minRollWidth
+			if _height < minRollHeight then _height = minRollHeight
+			if _posX < 0 then _posX = 0
+			if _posY < 0 then _posY = 0
+				
+			--aplica los valores
+			rollMainDef.width = _width
+			rollMainDef.height = _height
+			setDialogPos rollMainDef [_posX,_posY]
+
+			--aplica el tab seleccionado
+			parent.selectedTabIndex = (lb.xml.getAttribute parent.cfgFile "rollMain/options" "selectedTabIndex") as integer
+			if parent.selectedTabIndex == 0 then parent.selectedTabIndex = 1
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--almacena posicion
+			lb.xml.setAttribute parent.cfgFile ("rollMain/pos") "x" (((getDialogPos rollMainDef).x) as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/pos") "y" (((getDialogPos rollMainDef).y) as string)
+			
+			--almacena tamaño
+			lb.xml.setAttribute parent.cfgFile ("rollMain/size") "width" (rollMainDef.width as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/size") "height" (rollMainDef.height as string)
+
+			--almacena las opciones de UI
+			lb.xml.setAttribute parent.cfgFile ("rollMain/options") "selectedTabIndex" (parent.selectedTabIndex as string)
+		)
+
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks de este rollout.
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+			_id = ((parent.className + "_" + (substituteString lb.cameraManager.rollMain.name "Def" "")) as name)
+
+			-----------------------  Callbacks  -----------------------
+			callbacks.addscript #filePostOpenProcess "lb.cameraManager.rollMain.resetLvCams()" id:_id
+			callbacks.addscript #filePostMerge "lb.cameraManager.rollMain.resetLvCams()" id:_id
+			callbacks.addscript #systemPostReset "lb.cameraManager.rollMain.resetLvCams()" id:_id
+			
+			callbacks.addscript #scenenodeadded "if (superclassof (callbacks.notificationParam())) == camera then lb.cameraManager.rollMain.newCamPostProcess()" id:_id
+			
+			-----------------------  Change Handlers -----------------------
+			
+			--	change handler para los nombres de cámara
+			when names cameras changes id:#cameraManagerWhen obj do 
+			(
+				lb.cameraManager.rollMain.fillListView()
+				parent.rollInfo.refresh()
+			)
+			
+			--	change handler para detectar cuándo se ha borrado una cámara
+			when cameras deleted id:#cameraManagerWhen obj do 
+			(
+				index = (finditem sceneCameras obj)
+				if index != 0 then
+				(
+					deleteitem sceneCameras index
+				--if selCamIndex > sceneCameras.count then selCamIndex = 1
+					if selCamIndex > sceneCameras.count then selCamIndex = sceneCameras.count
+					
+					lb.cameraManager.rollMain.fillListView()
+					parent.rollInfo.refresh()
+				)
+			)
+			
+				--change handlers que detectan si se ha cambiado el rango de alguna cámara
+			for c in cameras do
+				if lb.cameraFunctions.hasCamInfo c then
+				(
+					when parameters c.camInfo 		changes id:#cameraManagerWhen cam do (lb.cameraManager.rollMain.fillListView();showCamData())
+					when parameters c.baseobject 	changes id:#cameraManagerWhen cam do (lb.cameraManager.rollMain.fillListView();showCamData())
+				)
+		)
+
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Elimina los callbacks de este rollout.
+		------------------------------------------------
+		fn removeSceneEvents =
+		(	
+			_id = ((parent.className + "_" + (substituteString lb.cameraManager.rollMain.name "Def" "")) as name)
+			callbacks.removescripts id:_id
+			deleteAllChangeHandlers id:#cameraManagerWhen
+		)
+
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si el tamaño es menor que el minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollMainDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollMainDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento de tamaño
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+
+			------------------------------------------------------------------------------
+			--redimension en horizonal
+			if _increment.x != 0 then --si hay incremento
+			(				
+				tbTabs.width = 350 + _increment.x
+				if tbTabs.tabPages.count != 0 then tbTabs.TabPageWidth = (minRollWidth + _increment.x)/(tbTabs.tabPages.count) - 17
+				subRollContainer.width = size.x
+			)--if
+			------------------------------------------------------------------------------
+
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				--zona de subRollouts
+				subRollContainer.height = 574 + _increment.y				
+			)--if
+			------------------------------------------------------------------------------
+
+			parent.addTabRollouts()
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+
+		------------------------------------------------
+		--@event: selectedPageChanged | Evento que se lanza al cambiar de tab.
+		--@control: DevExpress.XtraTab.XtraTabControl | tbTabs | Tabs.
+		--@gets: event | events | Objeto devuelto por el evento.
+		------------------------------------------------
+		on tbTabs selectedPageChanged events do
+		(
+			if not opening then
+			(
+				parent.selectedTabIndex = tbTabs.selectedTabPageIndex + 1
+				parent.addTabRollouts()
+			)--if
+		)
+
+		on btnMoveCamUp pressed do (moveItem -1; refreshArrows())
+
+		on btnMoveCamDown pressed do (moveItem  1; refreshArrows())
+
+		on ckbLockView changed state do
+		(
+			activeViewport = btnInteractiveView.caption as integer
+			btnInteractiveView.enabled = not state
+		)
+		
+		on btnInteractiveView pressed do
+		(
+			registerViews()
+			thefile = openfile (getdir #maxroot+"rcmenu.txt")
+			execute thefile
+			close thefile
+			deletefile (getdir #maxroot+"rcmenu.txt")
+		)
+		
+		on ckbVisualCameraEditor changed val do
+		(
+			if val then 
+				macros.run "lbToolsLay" "VisualCameraEditor"
+			else
+				try
+				(
+					cui.UnRegisterDialogBar rollVisualCameraEditor
+					destroydialog rollVisualCameraEditor
+					updateToolbarButtons()
+				)
+				catch()
+		)
+
+		on lvCams selectionChanged events do
+		(
+			selRows = #()
+			for i = 1 to lvCams.selectedCells.count do 
+				appendIfUnique selRows lvCams.selectedCells.item[i-1].rowIndex
+			
+			for index in selRows do
+				lvCams.rows.item[index].selected = true	
+		)
+		
+		on lvCams mouseUp events do
+		(
+			index = if lvCams.selectedRows.count > 0 then (lvCams.selectedRows.item[0].index + 1) else 0
+			
+			c = if index != 0 then sceneCameras[index] else #none 
+			
+			setActiveCamera c
+		)
+		
+		on lvCams cellEndEdit events do
+		(
+			if checkCameraChangesAllowed() then
+			(
+				newVal = lvCams.rows.item[events.rowIndex].cells.item[events.columnIndex].value
+				
+				removeSceneEvents()
+				
+				case events.columnIndex of
+				(
+					0:
+					(
+						undo "Change Cam Name" on
+							sceneCameras[selCamIndex].name = newVal
+					)
+					
+					1:
+					(
+						if newVal as integer != undefined then
+							undo "Change Range Start" on
+							(
+								sceneCameras[selCamIndex].camInfo.recStart = (newVal as integer)
+								lvCams.rows.item[events.rowIndex].cells.item[events.columnIndex].value = formattedprint (newVal as integer) format:"04d" 
+								
+								if sceneCameras[selCamIndex].camInfo.recStart >= sceneCameras[selCamIndex].camInfo.recEnd then
+								(
+									sceneCameras[selCamIndex].camInfo.recEnd = sceneCameras[selCamIndex].camInfo.recStart + 1
+									lvCams.rows.item[events.rowIndex].cells.item[2].value = formattedprint sceneCameras[selCamIndex].camInfo.recEnd format:"04d" 
+								)
+							)
+					)
+					
+					2:
+					(
+						if newVal as integer != undefined then
+							undo "Change Range End" on
+							(
+								sceneCameras[selCamIndex].camInfo.recEnd = (newVal as integer)
+								lvCams.rows.item[events.rowIndex].cells.item[events.columnIndex].value = formattedprint (newVal as integer) format:"04d" 
+								
+								if sceneCameras[selCamIndex].camInfo.recEnd <= sceneCameras[selCamIndex].camInfo.recStart then 
+								(
+									sceneCameras[selCamIndex].camInfo.recStart = sceneCameras[selCamIndex].camInfo.recEnd - 1
+									lvCams.rows.item[events.rowIndex].cells.item[1].value = formattedprint sceneCameras[selCamIndex].camInfo.recStart format:"04d" 
+								)
+							)
+					)
+					
+					3:
+					(
+						undo "Change Similar Cam" on
+							sceneCameras[selCamIndex].camInfo.similarCam = newVal
+					)
+				
+				)
+				
+				lvCams.readOnly = true
+				
+				createSceneEvents()
+			)
+			else 
+				refresh()
+		)
+
+		on lvCams doubleClick events do
+		(
+			--	seleccionamos la cámara y actualizamos el rango de animación de la escena si es necesario.
+			if (lvCams.selectedRows.count >0) then
+			(
+				c = sceneCameras[lvCams.selectedRows.item[0].index + 1]
+				select c
+				
+				if ckbSetCameraRange.checked then
+					lb.cameraFunctions.setAnimRangeFromCamera c goToStart:ckbAutoRewindToStart.checked
+			)
+		)
+
+		on lvCams keyUp events do
+		(
+			key = (events.keyData.tostring())
+			
+			case key of
+			(
+				"F2": 
+				(
+					lvCams.readOnly = false
+					lvCams.beginEdit true
+				)
+				
+				"E": 
+				(
+					lvCams.readOnly = false
+					lvCams.beginEdit true
+				)
+			)
+		)
+		
+		on spnRangeStart entered inSpin cancelVal do
+		(
+			--	Solo permitimos hacer el cambio si estamos en una escena de layout o sin clasificar.
+			if checkCameraChangesAllowed() then
+				undo "Change Camera Range" on
+				(
+					if not cancelVal then
+					(
+						val = spnRangeStart.value
+						if val >= spnRangeEnd.value then spnRangeEnd.value = (val + 1)
+						
+						--	capturamos el antiguo rango de la cámara para modificar después el resto si es necesario
+						oldStartVal = (lb.cameraFunctions.getCameraRange sceneCameras[selCamIndex]).start
+						
+						-- actualizamos el rango de la cámara
+						lb.cameraFunctions.setCameraRange sceneCameras[selCamIndex] spnRangeStart.value spnRangeEnd.value
+						
+						--	modificamos el rango de las cámaras anteriores si así está indicado
+						if chkLinkPreviousCameras.checked then
+						(
+							for i = 1 to (selCamIndex - 1) do
+							(
+								camRange = lb.cameraFunctions.getCameraRange sceneCameras[i]
+								frameDif = spnRangeStart.value - oldStartVal
+								moveKeys sceneCameras[i] frameDif
+								lb.cameraFunctions.setCameraRange sceneCameras[i] (camRange.start + frameDif) (camRange.end + frameDif)
+							)
+						)
+						
+						fillListView()
+						
+						-- si está activado el botón de rango actualizamos el rango de animación
+						if ckbSetCameraRange.checked then
+							lb.cameraFunctions.setAnimRangeFromCamera sceneCameras[selCamIndex] goToStart:ckbAutoRewindToStart.checked
+					)
+				)
+			
+			--	actualizamos el valor del spinner por si no se ha podido cambiar el rango
+			spnRangeStart.value = (lb.cameraFunctions.getCameraRange sceneCameras[selCamIndex]).start
+		)
+
+		on spnRangeEnd entered inSpin cancelVal do
+		(
+			if checkCameraChangesAllowed() then
+				undo "Change Camera Range" on
+				(
+					if not cancelVal then
+					(
+						val = spnRangeEnd.value
+						if val <= spnRangeStart.value then spnRangeStart.value = (val - 1)
+						
+						--	capturamos el antiguo rango de la cámara para modificar después el resto si es necesario
+						oldEndVal = (lb.cameraFunctions.getCameraRange sceneCameras[selCamIndex]).end
+						lb.cameraFunctions.setCameraRange sceneCameras[selCamIndex] spnRangeStart.value spnRangeEnd.value
+						
+						--	modificamos el rango de las cámaras anteriores si así está indicado
+						if chkLinkNextCameras.checked then
+						(
+							for i = (selCamIndex + 1) to sceneCameras.count do
+							(
+								camRange = lb.cameraFunctions.getCameraRange sceneCameras[i]
+								frameDif = spnRangeEnd.value - oldEndVal 
+								moveKeys sceneCameras[i] frameDif
+								lb.cameraFunctions.setCameraRange sceneCameras[i] (camRange.start + frameDif) (camRange.end + frameDif)
+							)
+						)
+						
+						fillListView()
+						
+						-- si está activado el botón de rango actualizamos el rango de animación
+						if ckbSetCameraRange.checked then
+							lb.cameraFunctions.setAnimRangeFromCamera sceneCameras[selCamIndex] goToStart:ckbAutoRewindToStart.checked
+					)
+				)
+			
+			--	actualizamos el valor del spinner por si no se ha podido cambiar el rango
+			spnRangeEnd.value = (lb.cameraFunctions.getCameraRange sceneCameras[selCamIndex]).end
+		)
+
+		on spnLens buttonDown do
+		(
+			removeSceneEvents()		--	Tenemos que dejar de detectar cambios para que no se actualice constantemente el panel
+		)
+
+		on spnLens changed val do
+		(
+			sceneCameras[selCamIndex].fov = cameraFOV.MMtoFOV val
+		)
+		
+		on spnLens entered inSpin cancelArg do
+		(
+			if checkCameraChangesAllowed() then
+			(
+				removeSceneEvents()
+				
+				--	restauramos el fov que tenía la cámara antes de manipularla para poder hacer UNDO
+				sceneCameras[selCamIndex].fov = lastFov
+				
+				undo "Change Cam Lens" on
+					sceneCameras[selCamIndex].fov = cameraFOV.MMtoFOV spnLens.value
+				
+				--	si se estaban manipulando las flechas del spinner reactivamos los callbacks, pues los habíamos desactivado
+				createSceneEvents()	
+			)
+			else
+				sceneCameras[selCamIndex].fov = lastFov
+		)
+			
+		on ddlCamType selected val do
+		(
+			if checkCameraChangesAllowed() then
+				undo "Change Cam Type" on
+					sceneCameras[selCamIndex].type = ddlCamType.selected as name
+		)
+
+		on chkSimilarCam changed val do
+		(
+			if checkCameraChangesAllowed() then
+			(
+				ddlSimilarCam.enabled = val
+				
+				fillSimilarCamList()
+				
+				undo "Change Similar Cam" on
+				(
+					if ddlSimilarCam.items.count > 0 then 
+						sceneCameras[selCamIndex].camInfo.similarCam = ddlSimilarCam.selected
+					else
+						sceneCameras[selCamIndex].camInfo.similarCam = ""
+				)
+				
+				showCamData()
+			)
+		)
+		
+		on ddlSimilarCam selected selNum do
+		(
+			if checkCameraChangesAllowed() then
+			(
+				undo "Change Similar Cam" on
+					sceneCameras[selCamIndex].camInfo.similarCam = ddlSimilarCam.selected
+				
+				showCamData()
+			)
+		)
+		
+		on ckbSpecialPlay changed state do
+		(
+			if sceneCameras.count > 0 then
+			(
+				--	Nos aseguramos de que hay una cámara seleccionada.
+				if lvCams.selectedRows.count == 0 then lvCams.items.item[0].selected = true
+				
+				if state then --si esta pulsado
+				(
+					stopAnimation()
+					timeConfiguration.playbackLoop = ckbSpecialPlayLoop.checked
+					playbackLoopState = timeConfiguration.playbackLoop
+					timeConfiguration.playbackLoop = false
+					disableSceneRedraw()
+					
+					lb.cameraFunctions.setAnimRangeFromCameras sceneCameras
+					specialPlayEventCamIndex = lvCams.selectedRows.item[0].index + 1
+					
+					if ckbLockView.checked then
+						viewport.activeViewport = activeViewport
+					viewport.setCamera sceneCameras[specialPlayEventCamIndex]
+					
+					inicio = (lb.cameraFunctions.getCameraRange sceneCameras[specialPlayEventCamIndex]).start
+					fin = (lb.cameraFunctions.getCameraRange sceneCameras[specialPlayEventCamIndex]).end
+					
+					if (slidertime <= inicio) or ckbAutoRewindToStart.checked then sliderTime = inicio 
+					if (slidertime > fin) then slidertime = fin
+					
+					enableSceneRedraw()
+					
+					registerTimeCallback specialPlayEvent
+					playAnimation()		-- A saber por qué coño pero en max 2013 hay que darle al play 2 veces por código para arrancar el viewport()
+					playAnimation()
+				)
+				else --si no esta pulsado
+				(
+					unregisterTimeCallback specialPlayEvent
+					stopAnimation()
+					timeConfiguration.playbackLoop = playbackLoopState
+					try lb.cameraManager.rollZoom.updateUI() catch()
+				)--if state
+			)--if scenecameras
+		)
+
+		on ckbSpecialPlayLoop changed state do
+		(
+			if isAnimPlaying() then
+			(
+				stopAnimation()
+				slidertimeBckp = slidertime
+				
+				timeConfiguration.playbackLoop = state
+				playbackLoopState = state
+				slidertime = slidertimeBckp
+				playAnimation() 
+			)
+			else
+			(
+				timeConfiguration.playbackLoop = state
+				playbackLoopState = state
+			)
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollMainDef | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		--@gets: point2 | size | tamaño al que se ha redimensionado el rollout
+		------------------------------------------------
+		on rollMainDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollMainDef | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollMainDef open do
+		(
+			opening = true --flag para que no salte el evento de cambio de tab y no pise el valor cargado del archivo .cfg
+
+			initUI() --inicializa el UI
+			loadSettings()
+			
+			initListView()
+			
+			resetLvCams()
+			
+			playbackLoopState = timeConfiguration.playbackLoop
+			activeViewport = viewport.activeViewport
+			btnInteractiveView.caption = activeViewport as string
+			
+			parent.fillTabsRolloutsDefs()
+			parent.addTabs()
+			
+			createSceneEvents()		
+			if lb.cameraManager.rollMain != undefined then resize [lb.cameraManager.rollMain.width, lb.cameraManager.rollMain.height]
+
+			opening = false --flag para que no salte el evento de cambio de tab y no pise el valor cargado del archivo .cfg
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollMainDef | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollMainDef close do
+		(				
+			removeSceneEvents()
+			saveSettings()
+
+			parent.opened = false
+			updateToolbarButtons()		
+		)	
+	)--rollMainDef
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: templateTabTool | Contiene la herramienta plantilla.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct tl_cameraManager
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,					--@var: category | Categoria de la tool.
+		className = lb.getFileToolName (getThisScriptFilename() as string),	--@var: className | Nombre de la tool.
+		description = "Camera Manager",		--@var: description | Descripcion de la tool.
+		
+		cfgFile = (lb.config.getToolsIniPath()) + (lb.getFileToolName (getThisScriptFilename() as string)) + ".cfg",	--@var: cfgFile | Archivo de configuracion de la tool.
+			
+		opened = false,			--@var: opened | Indica si la herramienta está abierta.
+		
+		minWidth = 400,		--@var: minWidth | Ancho mínimo de la herramienta.
+		minHeight = 600,		--@var: minHeight | Alto mínimo de la herramienta.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		tabForeColor = (dotnetclass "system.drawing.color").fromArgb 189 189 189,
+		tabBorderColor = (dotnetclass "system.drawing.color").fromArgb 30 30 30,
+		tabBackColor = (dotnetclass "system.drawing.color").fromArgb 60 60 60,
+		tabBackColorActive = (dotnetclass "system.drawing.color").fromArgb 90 90 90,
+		tabBackColor2 = (dotnetclass "system.drawing.color").fromArgb 55 55 55,
+		tabBackColorActive2 = (dotnetclass "system.drawing.color").fromArgb 60 60 60,		
+
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--ROLLOUTS
+		------------------------------------------------------------------------------------------------
+
+		rollInfo = rollInfoDef,
+		rollCameraPlane = rollCameraPlaneDef,
+		rollZoom = rollZoomDef,
+		rollGrid = rollGridDef,
+		
+		rollMain = rollMainDef,	--@var: rollMain | Main tool rollout.
+		
+		subRolloutsContainer = this.rollMain.subRollContainer, --@var: subRolloutsContainer | contenedor de subrollouts.
+
+		--estos arrays se rellenan en la funcion fillTabsRolloutsDefs, que se llama al abrir la herramienta.
+		--esto es solo la defincion de las variables y una ejemplo de estructura que luego se sobrescribe.
+		tabNames = #("", "", ""), --@var: tambNames | Nombres de los tabs.
+		tabRollouts = #(#(undefined), #(undefined), #(undefined)), --@var: mentalrayTabNames | Rollots de cada tab.
+		tabRolloutsRolledUp = #(#(true), #(true), #(true)), --@var: tabRolloutsRolledUp | Estado de desplegado/plegado de cada rollout de cada tab.
+
+		selectedTabIndex = 1, --@var: selectedTabIndex | Tab seleccionado. Para usar al abrir y cerrar la herramienta
+
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | updateTabsColor | Actualiza el color de los tabs.
+		------------------------------------------------
+		fn updateTabsColor =
+		(
+			--actualiza los tabs
+			for i=1 to this.tabNames.count do
+			(
+				--configura los colores de los tabs
+				this.rollMain.tbTabs.tabPages.item[i-1].Appearance.Header.Font = dotnetobject "system.drawing.font" (dotnetobject "System.Drawing.FontFamily" "Arial") 7
+				this.rollMain.tbTabs.tabPages.item[i-1].Appearance.Header.ForeColor = this.tabForeColor
+				this.rollMain.tbTabs.tabPages.item[i-1].Appearance.Header.BackColor = this.tabBackColor
+				this.rollMain.tbTabs.tabPages.item[i-1].Appearance.Header.BackColor2 = this.tabBackColor2
+				this.rollMain.tbTabs.tabPages.item[i-1].Appearance.Header.BorderColor = this.tabBorderColor
+				
+				this.rollMain.tbTabs.tabPages.item[i-1].Appearance.HeaderActive.Font = dotnetobject "system.drawing.font" (dotnetobject "System.Drawing.FontFamily" "Arial") 8
+				this.rollMain.tbTabs.tabPages.item[i-1].Appearance.HeaderActive.ForeColor = this.tabForeColor
+				this.rollMain.tbTabs.tabPages.item[i-1].Appearance.HeaderActive.BackColor = this.tabBackColorActive
+				this.rollMain.tbTabs.tabPages.item[i-1].Appearance.HeaderActive.BackColor2 = this.tabBackColorActive2
+				this.rollMain.tbTabs.tabPages.item[i-1].Appearance.HeaderActive.BorderColor = this.tabBorderColor
+			)--for
+		),
+
+		------------------------------------------------
+		--@fn: undefined | fillTabsRolloutsDefs | Añade los tabs y las definiciones de los rollouts a los arrays correspondientes para que la herremienta sepa donde están.
+		------------------------------------------------
+		fn fillTabsRolloutsDefs =
+		(
+			this.tabNames = #("Info", "Zoom", "Grid")
+			this.tabRollouts = #(#(lb.cameraManager.rollInfo, lb.cameraManager.rollCameraPlane), #(lb.cameraManager.rollZoom), #(lb.cameraManager.rollGrid))
+			this.tabRolloutsRolledUp = #(#(false, false), #(false), #(false))
+		),
+
+		------------------------------------------------
+		--@fn: undefined | addTabs | Añade los tabs.
+		------------------------------------------------
+		fn addTabs =
+		(
+			--elimina los tabs actuales
+			this.rollMain.tbTabs.tabPages.clear()
+
+			--añade los tabs
+			for i=1 to this.tabNames.count do
+				this.rollMain.tbTabs.tabPages.add this.tabNames[i] --añade el tab
+			
+			if this.rollMain.tbTabs.tabPages.count != 0 then this.rollMain.tbTabs.TabPageWidth = (this.rollMain.width)/(this.rollMain.tbTabs.tabPages.count) - 17
+
+			--selecciona el tab que estaba seleccionado la ultima vez que se abrio el override
+			if this.rollMain.tbTabs.tabPages.count >= this.selectedTabIndex then
+				this.rollMain.tbTabs.SelectedTabPage = this.rollMain.tbTabs.tabPages.item[this.selectedTabIndex - 1]
+			
+			this.updateTabsColor() --actualiza los colores de los tabs
+			
+			this.addTabRollouts()			
+		),
+
+		------------------------------------------------
+		--@fn: undefined | removeAllTabRollouts | Elimina todos los subrollouts actuales
+		------------------------------------------------
+		fn removeAllTabRollouts =
+		(
+			--elimina los subRollouts actuales
+			while this.subRolloutsContainer.rollouts.count != 0 do RemoveSubRollout this.subRolloutsContainer this.subRolloutsContainer.rollouts[1]
+		),
+
+		------------------------------------------------
+		--@fn: undefined | addTabRollouts | Añade los rollouts del tab actual.
+		------------------------------------------------
+		fn addTabRollouts =
+		(
+			--elimina los subRollouts actuales
+			this.removeAllTabRollouts()
+
+			--añade los subRollouts
+			for i=1 to this.tabRollouts[this.selectedTabIndex].count where this.tabRollouts[this.selectedTabIndex][i] != undefined do
+			(
+				AddSubRollout this.subRolloutsContainer this.tabRollouts[this.selectedTabIndex][i] rolledUp:this.tabRolloutsRolledUp[this.selectedTabIndex][i]
+				this.tabRollouts[this.selectedTabIndex][i].resize [this.rollMain.width, this.rollMain.height]
+			)
+		),
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: boolean | isOpen | Devuelve información true o false, si la herramienta está abierta o cerrada.
+		------------------------------------------------
+		fn isOpen =
+		(
+			this.opened
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | refreshInterface | Refresca el interface inicial de la herramienta
+		------------------------------------------------
+		fn refreshInterface =
+		(
+			--refresca el interface de la herramienta
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | createInterface | Crea el interface inicial de la herramienta
+		------------------------------------------------
+		fn createInterface =
+		(
+			--crea el interface, lo redimensiona y lo reposiciona
+			createDialog this.rollMain lockwidth:false lockheight:false pos:[-10000,0] style:#(#style_toolwindow, #style_titlebar, #style_sysmenu, #style_resizing)
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | destroyInterface | Destruye el interface de la herramienta.
+		------------------------------------------------
+		fn destroyInterface =
+		(
+			destroyDialog this.rollMain --cierra la herramienta.			
+		),--destroyInterface
+		
+		------------------------------------------------
+		--@fn: undefined | run | Lanza la herramienta.
+		------------------------------------------------
+		fn run =
+		(
+			this.createInterface() --crea el interface.
+			this.opened = true --indica que la herramienta está abierta
+		),--execute
+		
+		------------------------------------------------
+		--@fn: undefined | close | Cierra la herramienta.
+		------------------------------------------------
+		fn close =
+		(
+			this.destroyInterface() --destruye el interface.
+			this.opened = false --indica que la herramienta está cerrada.
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addTool this --añade la tool a la libreria principal	
+		)				
+	)--tl_cameraManager
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------	
+	
+	tl_cameraManager() --crea la herramienta
+)

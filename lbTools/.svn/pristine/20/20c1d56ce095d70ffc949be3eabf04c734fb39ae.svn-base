@@ -1,0 +1,167 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--Descripcion: Script Plantilla.
+------------------------------------------------------------------------------------------------------------------------------------------------
+(
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: createDiffuseLight | Contiene el struct del script plantilla.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct sc_createDiffuseLight
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,					--@var: category | Categoria de la libreria.
+		className = lb.getFileScriptName (getThisScriptFilename() as string),	--@var: className | Nombre del script.
+		description = "Script plantilla",	--@var: description | Descripcion del script.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		fn createDiffuseLight=
+		(
+			-- coge el nombre de camara del nombre del fichero
+			
+			litName="lit_all_diffuse"   --  <--- cambiarlo por una constante predefinida de LB 
+  
+
+ 			if matchpattern maxfilename pattern: "seq_????-*_cam???_render_(*-*)*.max" then   --lb.nc.NC_seqRenderNameNewPattern quitandole el .max
+			(
+			
+				-- buscamos la cámara de la escena
+				_cams = lb.cameraFunctions.getSceneCameras()
+				if _cams.count != 0 then
+				(
+					_cam = _cams[1]   ---   <- Suponemos que la primera cámara es la correcta, porque suele haber sólo una
+
+					-- buscamos la luz por si estuviera ya creada de antes.
+					_miOmnis = for o in lights where ((classof o == miAreaLightomni) and (o.name == litName)) collect o
+
+-- 					_existsMiOnmi = (_miOmnis.count != 0)
+					-- Si no lo está, la creamos
+					if _miOmnis.count == 0 then
+					(
+						--modo creacion, creamos la luz en la capa _light_ 
+						-- y volvemos a la capa donde estuvieramos trabajando
+
+						_curLayer = layerManager.current
+						
+						_lightLayer = LayerManager.getLayerFromName lb.nc.NC_layerLight
+						if _lightLayer == undefined then _lightLayer=LayerManager.newLayerFromName lb.nc.NC_layerLight
+						_lightLayer.current = true
+						
+						_myLight = miAreaLightomni name:litName 
+						_myLight.ambientOnly = on
+							
+						_curLayer.current=true
+
+					) -- end if
+					-- si existe la luz, la cogemos y la ponemos en la misma variable _myLight
+					else 
+					(
+						_luces = for i in lights where i.name == litName collect i
+						if _luces.count>1 then lb.message.show "tienes la luz repetida"
+						else 
+						(
+							_myLight=_luces[1]
+						)
+					)
+					
+					-- ajusta la luz a la posicion de camara y la emparenta
+					
+					_lPos = _myLight.transform
+					_camPos = _cam.transform
+					if _lPos != _camPos then _myLight.transform = _cam.transform
+					if _myLight.parent == undefined or _myLight.parent != _cam then 
+					(
+						_myLight.Parent = _cam
+					) -- if _myLight.
+					
+
+					lb.message.show ("'lit_all_diffuse' light linked to " + _cam.name)
+
+				) -- end if _cams.count
+				
+
+			)-- if matchpattern maxfilename pattern: lb.nc.NC_seqRenderNameNewPattern
+			else
+			(
+				lb.message.show "This file is not a Render Scene."
+			)
+
+		),  -- end fn
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | run | Ejecuta el script.
+		------------------------------------------------
+		fn run =
+		(
+			--ejecución del script
+			this.createDiffuseLight ()
+			--messageBox "Template script running"
+		),	
+		
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addScript this --añade el script a la libreria principal
+		)
+		
+	)--sc_createDiffuseLight
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------	
+	
+	sc_createDiffuseLight() --crea el script
+)

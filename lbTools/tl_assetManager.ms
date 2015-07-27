@@ -1,0 +1,12770 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--@Desc: Manager que gestiona funcionalidades relacionadas con los asset.
+------------------------------------------------------------------------------------------------------------------------------------------------
+(
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollAdvancedDef | Contiene el rollout Advanced, con los controles de visibilidad de las capas de asset.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollAdvancedDef "Advanced"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) 	--@var: string | parent | Herramienta o rolllout del que depende y/o contiene el rollout actual		
+		
+		local minRollWidth = 225															--@var: integer | minRollWidth | Minimun tool width.
+		local minRollHeight = 200															--@var: integer | minRollHeight | Minimun tool height.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+
+		local iconpath = if (maxVersion())[1] >= 15000 then (getDir #maxRoot) + "UI_ln\\Icons\\" else (getDir #ui) + "/icons/"		--@var: string | iconpath | Ruta de los iconos de Max.
+
+		local colWidths = #(92,25,25,25,25)													--@var: array{integer} | colWidths | Ancho de las columnas del listview
+		local rowHeight = 15																--@var: integer | rowHeight | Alto de cada fila del listView
+
+		local lvSelItems																	--@var: array{listView item} | lvSelItems | objetos seleccionados en el listview
+		local lvSelectedItems = #()															--@var: array{listView item} | lvSelectedItems | copia auxiliar que guarda temporalmente los objetos seleccionados en el listview
+		local restoreSelection = false														--@var: boolean | restoreSelection | indica si hay que restaurar la selección del listview
+
+		local checkSymbol = "X"																--@var: string | checkSymbol | Simbolo para el listview, para elementos marcados. Flags Hid,Frz,H,F
+		local uncheckSymbol = "•" 															--@var: string | uncheckSymbol | Simbolo para el listview, para elementos desmarcados. Flags Hid,Frz,H,F
+
+		------------------------------------------------------------------------------------------------
+		--CONTROLS-
+		------------------------------------------------------------------------------------------------		
+
+		button btnSel "Sel." pos:[5,3] width:20 height:20 images:#(iconpath + "mainToolbar_16i.bmp", undefined, 98, 11, 11, 12, 12,true) toolTip:"Select all objects in selected layers"
+		button btnSelAll "Sel." pos:[25,3] width:20 height:20 images:#(iconpath + "mainToolbar_16i.bmp", undefined, 98, 19, 19, 20, 20,true) toolTip:"Select all asset objects"
+		button btnSelFlag "Flg" pos:[45,3] width:20 height:20 toolTip:"Select asset objects by flag"
+		button btnRefresh "Refresh" pos:[150,3] width:50 height:20 toolTip:"refresh the list obtaining scene assets again"
+		
+		dotNetControl lvLayers "System.Windows.Forms.DataGridView" pos:[5,25] width:195 height:115
+
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		----------------------------------------------------------------------------------
+		--@fn: undefined | setLvColumnsWidth | Configura la anchura de las columnas del listview.
+		----------------------------------------------------------------------------------
+		fn setLvColumnsWidth =
+		(
+			if lvLayers.rows.count * rowHeight >= lvLayers.height then
+			(
+				lvLayers.columns.item[0].width = colWidths[1] - 18
+				--lblHidden.pos.x = 103
+				--lblFrozen.pos.x = 130
+			)
+			else
+			(
+				lvLayers.columns.item[0].width = colWidths[1]
+				--lblHidden.pos.x = 120
+				--lblFrozen.pos.x = 148
+			)
+		)
+
+		----------------------------------------------------------------------------------
+		--@fn: undefined | initListView | Inicializa y configura la listview
+		----------------------------------------------------------------------------------
+		fn initListView =
+		(
+			lvLayers.rows.clear()
+			lvLayers.columns.clear()
+			lvLayers.allowUsertoaddRows = false
+			lvLayers.allowUserToResizeRows = false
+			lvLayers.allowUserToResizeColumns = false
+			lvLayers.backgroundcolor = lb.assetManager.rollMain.backColor						-- color del fondo
+			lvLayers.rowsdefaultcellstyle.backcolor = lb.assetManager.rollMain.backColor	-- color por defecto de las celdas
+			lvlayers.AdvancedColumnHeadersBorderStyle.all = (dotnetclass "System.Windows.Forms.DataGridViewAdvancedCellBorderStyle").outset
+			--lvlayers.AdvancedColumnHeadersBorderStyle.bottom = (dotnetclass "System.Windows.Forms.DataGridViewAdvancedCellBorderStyle").outset
+			lvlayers.columnHeadersDefaultCellStyle.alignment = (dotnetclass "System.Windows.Forms.DataGridViewContentAlignment").middleCenter
+			lvlayers.columnHeadersDefaultCellStyle.font = dotnetobject "system.drawing.font" (dotnetobject "System.Drawing.FontFamily" "Arial") 8 --(dotnetclass "System.Drawing.FontStyle").bold
+			lvlayers.columnHeadersHeight = 18
+			
+			lvLayers.cellborderstyle = (dotnetclass "System.Windows.Forms.DataGridViewCellBorderStyle").single	-- tipo de borde de las celdas
+			lvLayers.gridcolor = (dotnetclass "System.Drawing.Color").lightgray
+			lvLayers.rowheadersvisible = false
+			--lvLayers.columnheadersvisible = false
+			lvLayers.readonly = true
+			lvLayers.showCellTooltips = false			
+			
+			lvlayers.columns.add "Col1" "Layer"
+			lvlayers.columns.add "Col2" "Hid"
+			lvlayers.columns.add "Col3"  "Frz"
+			lvlayers.columns.add "Col4"  "H"
+			lvlayers.columns.add "Col5"  "F"
+			
+			lvlayers.columns.item[0].headerCell.style.alignment = (dotnetclass "System.Windows.Forms.DataGridViewContentAlignment").middleLeft
+			
+			for i = 1 to lvLayers.columns.count do
+			(
+				lvlayers.columns.item[i-1].sortmode = (dotnetclass "System.Windows.Forms.DataGridViewColumnSortMode").notSortable
+				lvLayers.Columns.item[i-1].width = colWidths[i]
+			)
+			
+			lvLayers.columns.item[1].defaultCellStyle.alignment = (dotnetclass "System.Windows.Forms.DataGridViewContentAlignment").middleCenter
+			lvLayers.columns.item[2].defaultCellStyle.alignment = (dotnetclass "System.Windows.Forms.DataGridViewContentAlignment").middleCenter
+			lvLayers.columns.item[3].defaultCellStyle.alignment = (dotnetclass "System.Windows.Forms.DataGridViewContentAlignment").middleCenter
+			lvLayers.columns.item[4].defaultCellStyle.alignment = (dotnetclass "System.Windows.Forms.DataGridViewContentAlignment").middleCenter
+			lvLayers.font = dotnetobject "system.drawing.font" (dotnetobject "System.Drawing.FontFamily" "Arial") 7.5
+		)
+		----------------------------------------------------------------------------------
+		--@fn: undefined | fillLayerControls | Actualiza los controles según el Asset seleccionado
+		----------------------------------------------------------------------------------
+		fn fillLayerControls =
+		(
+			lvLayers.rows.clear()
+			--chr = asset name:""
+			lb.asset.listedLayersObjs = #()
+			
+			if lb.asset.selAssets.count != 0 then
+			( 
+				isThereXrefSceneAssets = false --para saber si hay algun asset de tipo xrefScene
+				isThereNonXrefSceneAssets = false --true si hay assets que no son de xref
+				assetsToWork = #()
+				
+				for s in lb.asset.selAssets do
+					append assetsToWork lb.asset.listedAssets[s]
+				
+				for i = 1 to lb.nc.NC_classTypes.count do --recorre los tipos de pieza para saber si porner una fila para ello en el listado
+				(
+					type = lb.nc.NC_classTypes[i] --as name
+					
+					objs = #() --objetos del tipo actual encontrados en los assets seleccionados
+					
+					-------------------------------------------------------------------------------------------
+					--en caso de que sea de tipo mesh se pueden dividir los objetos por nivel de detalle
+					meshObjsByLevel = #() --sera un array de arrays de objetos por nivel
+					meshHiddenObjsByLevel = #() --lo mismo para los que lleven flag de oculto
+					meshFrozenObjsByLevel = #() --lo mismo para los que lleven flag de congelado
+					
+					if type == lb.nc.NC_classMesh then
+						for j=1 to lb.nc.NC_flagsDetailLevels.count do
+						(
+							meshObjsByLevel[j] = #()
+							meshHiddenObjsByLevel[j] = #()
+							meshFrozenObjsByLevel[j] = #()
+						)
+						
+					-------------------------------------------------------------------------------------------
+					
+					hiddenNodes = #() --objetos con flag h del tipo actual en los assets seleccionados
+					frozenNodes = #() --objetos con flag f del tipo actual en los assets seleccionados
+					
+					for a in assetsToWork do
+					(
+ 						/*if type == lb.nc.NC_classMesh then
+						(
+							for j=1 to lb.nc.NC_flagsDetailLevels.count do
+							(
+								f = lb.nc.NC_flagsDetailLevels[j]
+								
+								meshObjsByLevel[j] += (lb.asset.getAssetNodesByType a type flags:#(f))
+								meshHiddenObjsByLevel[j] += (lb.asset.getAssetNodesByType a type flags:#(f,lb.nc.NC_hiddenFlag))
+								meshFrozenObjsByLevel[j] += (lb.asset.getAssetNodesByType a type flags:#(f,lb.nc.NC_frozenFlag))
+							)
+						)
+						else
+						(*/
+							objs += lb.asset.getAssetNodesByType a type
+							hiddenNodes += lb.asset.getAssetNodesByType a type flags:#(lb.nc.NC_hiddenFlag)
+							frozenNodes += lb.asset.getAssetNodesByType a type flags:#(lb.nc.NC_frozenFlag)
+							isThereNonXrefSceneAssets = true
+						--)
+					)
+			-- 						else
+			-- 							isThereXrefSceneAssets = true
+					
+					-- Si se encuentran objetos para el tipo de capa actual, creamos una nueva fila
+					if objs.count != 0 then --or (meshObjsByLevel[1] != undefined) then
+					(
+						--si estamos en tipo mesh, deglosamos la capa por niveles de detalle
+						/*if type == lb.nc.NC_classMesh then
+						(
+							for j=1 to lb.nc.NC_flagsDetailLevels.count where meshObjsByLevel[j].count != 0 do
+							(
+								append lb.asset.listedLayersObjs meshObjsByLevel[j]
+								
+								state = lb.asset.getNodesState meshObjsByLevel[j]
+								
+								hiddenNodesState = lb.asset.getNodesState meshHiddenObjsByLevel[j]
+								frozenNodesState = lb.asset.getNodesState meshFrozenObjsByLevel[j]
+								
+								-- Creamos la nueva fila del Data Grid View y rellenamos sus valores
+								row = (dotnetobject "System.Windows.Forms.DataGridViewRow")
+								row.height = rowHeight
+								
+								lvLayers.rows.add row
+									
+								row.cells.item[0].value = tolower ((type as string) + "-" + lb.nc.NC_flagsDetailLevels[j])
+								row.cells.item[1].value = if (findstring state "h" == undefined) then uncheckSymbol else checkSymbol
+								row.cells.item[2].value = if (findstring state "f" == undefined) then uncheckSymbol else checkSymbol
+								row.cells.item[3].value = if (findstring hiddenNodesState "h" == undefined) then uncheckSymbol else checkSymbol
+								row.cells.item[4].value = if (findstring frozenNodesState "f" == undefined) then uncheckSymbol else checkSymbol
+							)
+						)
+						else
+						(*/
+							append lb.asset.listedLayersObjs objs
+							
+							state = lb.asset.getNodesState objs
+							
+							hiddenNodesState = lb.asset.getNodesState hiddenNodes --(lb.asset.getAssetNodesByType ast type flags:#(lb.nc.NC_hiddenFlag))
+							frozenNodesState = lb.asset.getNodesState frozenNodes --(lb.asset.getAssetNodesByType ast type flags:#(lb.nc.NC_frozenFlag))
+							
+							-- Creamos la nueva fila del Data Grid View y rellenamos sus valores
+							row = (dotnetobject "System.Windows.Forms.DataGridViewRow")
+							row.height = rowHeight
+							
+							lvLayers.rows.add row
+								
+							row.cells.item[0].value = (type as string)
+							row.cells.item[1].value = if (findstring state "h" == undefined) then uncheckSymbol else checkSymbol
+							row.cells.item[2].value = if (findstring state "f" == undefined) then uncheckSymbol else checkSymbol
+							row.cells.item[3].value = if (findstring hiddenNodesState "h" == undefined) then uncheckSymbol else checkSymbol
+							row.cells.item[4].value = if (findstring frozenNodesState "f" == undefined) then uncheckSymbol else checkSymbol
+						--)--if type mesh
+					)--if objs.count
+						
+					--setLvColumnsWidth()
+					
+				)--for lb.nc.NC_classTypes
+				
+			-- 				if isThereXrefSceneAssets and not isThereNonXrefSceneAssets then
+			-- 				(
+			-- 					row = (dotnetobject "System.Windows.Forms.DataGridViewRow")
+			-- 					lvLayers.rows.add row
+			-- 					row.cells.item[0].value = "<xRefAsset>"
+			-- 				)
+				
+				--setLvColumnsWidth()
+			)--if 	
+		)
+
+		----------------------------------------------------------------------------------
+		--@fn: undefined | getLvSelectedItems | Actualiza la variable lvSelectedItems con los elementos seleccionados del listview 
+		----------------------------------------------------------------------------------		
+		fn getLvSelectedItems =
+		(
+			lvSelectedItems = #()
+			for i = 1 to lvSelItems.count do append lvSelectedItems lvSelItems.item[i-1].rowIndex
+		)
+
+		----------------------------------------------------------------------------------
+		--@fn: undefined | getLvSelectedItems | Restaura la selección del listview según el contenido de la variable  lvSelectedItems
+		----------------------------------------------------------------------------------			
+		fn restoreLvSelectedItems =
+		(
+			lb.assetManager.rollAdvanced.lvLayers.clearSelection()
+			for i =1 to lvSelectedItems.count do 
+				lvLayers.rows.item[lvSelectedItems[i]].cells.item[0].selected = true
+		)
+
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+			_id = ((parent.className + "_" + (substituteString parent.rollMain.name "Def" "")) as name)
+			callbacks.addscript #filePostMerge "lb.assetManager.rollMain.resetSceneAssets()" id:_id
+			callbacks.addscript #filePostOpenProcess "lb.assetManager.rollMain.resetSceneAssets()" id:_id
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+			_id = ((parent.className + "_" + (substituteString parent.rollMain.name "Def" "")) as name)
+			callbacks.removescripts id:_id
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollAdvancedDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollAdvancedDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--lb.xml.setAttribute parent.cfgFile ("rollExample1/cateagory") "paramName" "paramValue"
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			--_param = (lb.xml.getAttribute parent.cfgFile ("rollExample1/category") "paramName") as <value type>
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+
+		----------------------------------------------------------------------------------
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton de render por comandos en red.
+		--@control: button | btnSel | Boton de render por cmomandos en red. (Faster)
+		------------------------------------------------
+		on btnSel pressed do
+		(
+			clearSelection()
+			selObjs = #()
+			for i = 1 to lvSelItems.count do
+			(
+				index = lvSelItems.item[i-1].rowindex + 1
+				join selObjs lb.asset.listedLayersObjs[index]
+			)
+			select selObjs
+		)
+			
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton de render por comandos en red.
+		--@control: button | btnSelAll | Boton de render por cmomandos en red. (Faster)
+		------------------------------------------------
+		on btnSelAll pressed do
+		(
+			clearSelection()	-- La siguiente línea no deselecciona si no se encuentran nodos en el asset, por eso deseleccionamos primero
+			
+			for l in lb.asset.listedLayersObjs do
+				selectMore l
+		)
+		
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton de render por comandos en red.
+		--@control: button | btnSelFlag | Boton de render por cmomandos en red. (Faster)
+		------------------------------------------------
+		on btnSelFlag pressed do
+		(
+			clearSelection()	-- La siguiente línea no deselecciona si no se encuentran nodos en el asset, por eso deseleccionamos primero
+			lb.assetManager.rollMain.showAvailableFlags()
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton de render por comandos en red.
+		--@control: button | btnRefresh | Boton de render por cmomandos en red. (Faster)
+		------------------------------------------------
+		on btnRefresh pressed do
+		(
+			selAssetsFullNames = #()
+			for s in lb.asset.selAssets do
+				append selAssetsFullNames lb.asset.sceneAssets[s].fullname
+			
+			lb.assetManager.rollMain.resetSceneAssets()
+
+			lb.asset.selAssets = #()
+			for i=1 to lb.asset.sceneAssets.count do
+				for s in selAssetsFullNames do
+					if lb.asset.sceneAssets[i].fullname == s then
+						append lb.asset.selAssets i
+				
+			lb.assetManager.rollMain.refreshControls()
+		)
+
+		------------------------------------------------
+		--@event: cellMouseDown | Evento que se lanza al presionar el boton del mouse sobre una celda del listview
+		--@control: DotNet Listview | lvLayers | ListView a la que se aplica el listener.
+		------------------------------------------------
+		on lvLayers cellMouseDown events do
+		(
+			local clickXpos = events.X
+			local columns = lvLayers.columns
+			local index = events.rowIndex
+			
+			
+			if (index != -1) and (lb.asset.listedAssets[lb.asset.selAssets[1]] != undefined)/* and (lb.asset.listedAssets[selAssets[1]].isXrefScene == false)*/ then
+			(
+				local clickedRow = lvLayers.rows.item[index]
+				local clickedCell = lvLayers.rows.item[index].cells.item[events.columnIndex]
+				
+				if not clickedRow.cells.item[0].selected then
+				(
+					if not keyboard.controlPressed and not keyboard.shiftPressed then
+						lvLayers.clearSelection()
+					
+					clickedRow.cells.item[0].selected = true
+				)
+				
+				getLvSelectedItems()
+				
+				state = (clickedCell.value == checkSymbol) --lb.asset.getNodesState lb.asset.listedLayersObjs[index+1]
+				n = lvSelItems.count
+				
+				with undo off
+				(
+					for i = 1 to n do
+					(
+						index = lvSelItems.item[i-1].rowIndex + 1
+						row = lvLayers.rows.item[index-1]
+						
+						--if (lvLayers.item (events.columnIndex) (i-1)).value != "" then --si no es una fila de xref
+							case events.columnIndex of
+							(
+								1:-- HIDE
+								(
+									row.cells.item[1].value = if state then uncheckSymbol else checkSymbol
+									lb.asset.setHiddenState lb.asset.listedLayersObjs[index] (not state) includeHiddenFlag:false
+								)
+								
+								2: -- FREEZE
+								(
+									row.cells.item[2].value = if state then uncheckSymbol else checkSymbol
+									lb.asset.setFrozenState lb.asset.listedLayersObjs[index] (not state) includeFrozenFlag:false
+								)
+								
+								3:-- HIDDEN OBJECTS
+								(
+									row.cells.item[3].value = if state then uncheckSymbol else checkSymbol
+									
+									type = row.cells.item[0].value
+									tParts = filterString type "-"
+									type = tParts[1]
+									
+									auxFlags = #(lb.nc.NC_hiddenFlag)
+									if tParts[2] != undefined then auxFlags = #(tParts[2]) + auxFlags
+									
+									nodes = #()
+									for s in lb.asset.selAssets do
+										nodes += (lb.asset.getAssetNodesByType lb.asset.listedAssets[s] #(type) flags:auxFlags)
+									
+									lb.asset.setHiddenState nodes (not state) includeHiddenFlag:true
+								)
+								
+								4:-- FROZEN OBJECTS
+								(
+									row.cells.item[4].value = if state then uncheckSymbol else checkSymbol
+									
+									type = row.cells.item[0].value
+									tParts = filterString type "-"
+									type = tParts[1]
+									auxFlags = #(lb.nc.NC_frozenFlag)
+									if tParts[2] != undefined then auxFlags = #(tParts[2]) + auxFlags
+									
+									nodes = #()
+									for s in lb.asset.selAssets do
+										nodes += (lb.asset.getAssetNodesByType lb.asset.listedAssets[s] #(type) flags:auxFlags)
+									
+									lb.asset.setFrozenState nodes (not state) includeFrozenFlag:true
+								)
+							)--case
+					)
+				)--with undo of
+				
+			)
+		)
+		
+		------------------------------------------------
+		--@event: cellMouseUp | Evento que se lanza al dejar de pulsar el boton del mouse sobre una celda del listview
+		--@control: DotNet Listview | lvLayers | ListView a la que se aplica el listener.
+		------------------------------------------------
+		on lvLayers cellMouseUp events do
+		(
+			if events.columnIndex != 0 then
+				restoreLvSelectedItems()
+			
+			btn = events.button.tostring()
+			
+			if btn == "Right" then 
+			(
+				createRmenu events.x events.y
+			)
+			else --NEW
+			(
+				if keyboard.controlPressed or keyboard.shiftPressed then
+				(
+					local clickXpos = events.X
+					local columns = lvLayers.columns
+					local index = events.rowIndex
+					
+					thereAreXrefSceneAssets = false
+					
+					for s in lb.asset.selAssets where lb.asset.listedAssets[s].isXrefScene do
+						thereAreXrefSceneAssets = true
+					
+					if (index != -1) and  (lb.asset.listedAssets[lb.asset.selAssets[1]] != undefined) and not thereAreXrefSceneAssets then
+					(
+						local clickedRow = lvLayers.rows.item[index]
+						local clickedCell = lvLayers.rows.item[index].cells.item[events.columnIndex]
+					
+						clickedRow.cells.item[0].selected = true
+					)
+				
+					getLvSelectedItems() --guarda la seleccion de filas
+				)
+			)
+			
+			setfocus lb.assetManager.rollMain
+		)
+		
+		------------------------------------------------
+		--@event: selectionChanged | Evento que se lanza al cambiar los elementos seleccionados del listview.
+		--@control: DotNet Listview | lvLayers | ListView a la que se aplica el listener.
+		------------------------------------------------	
+		on lvLayers selectionChanged do
+		(
+			for i = 1 to lvLayers.selectedCells.count do
+				if i <= lvLayers.selectedCells.count then
+					if lvLayers.selectedCells.item[i-1].columnIndex != 0 then
+						lvLayers.selectedCells.item[i-1].selected = false
+						
+			lvSelItems = lvLayers.selectedCells
+		)
+		
+		------------------------------------------------
+		--@event: cellMouseDoubleClick | Evento que se lanza al hacer doble clickl sobre un item del listview.
+		--@control: DotNet Listview | lvLayers | ListView a la que se aplica el listener.
+		------------------------------------------------
+		on lvLayers cellMouseDoubleClick events do
+		(
+			if (events.columnIndex == 0) and (events.rowIndex != -1) then
+			(
+				index = events.rowIndex + 1
+				if not keyboard.controlPressed then clearSelection()
+				
+				select lb.asset.listedLayersObjs[index]
+			)
+		)
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+
+		------------------------------------------------
+		--@event: rolledUp | Evento que se lanza al deslpegar el rollout.
+		--@control: rollout | rollAdvancedDef | Rollout al que se aplica el listener.
+		------------------------------------------------
+		on rollAdvancedDef rolledUp state do 
+		(
+			parent.heightAdjust 0
+		)
+
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollAdvancedDef | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollAdvancedDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollAdvancedDef | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollAdvancedDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+			initListView()
+			if parent.rollMain != undefined then resize [parent.rollMain.width, parent.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollAdvancedDef | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollAdvancedDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+		)
+	)--rollAdvancedDef
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollFXDef | Contiene la herramienta rollFXDef, con herramientas para la carga de FX, subrollout ubicado en la pestaña FX
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollFXDef "FX"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) 	--@var:string | parent | Herramienta o rolllout del que depende y/o contiene el rollout actual		
+
+		local minRollWidth = 180															--@var: integer | minRollWidth | Minimun tool width.
+		local minRollHeight = 30															--@var: integer | minRollHeight | Minimun tool height.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		
+		checkbutton chkLoadFxBySelection "Assets by Selection" pos:[5,2] width:105 height:20 checked:true
+		checkbutton chkLoadFxBySelAsset "Selected Assets" pos:[110,2] width:95 height:20
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollFXDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollFXDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--lb.xml.setAttribute parent.cfgFile ("rollExample1/cateagory") "paramName" "paramValue"
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			--_param = (lb.xml.getAttribute parent.cfgFile ("rollExample1/category") "paramName") as <value type>
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del checkbox
+		--@control: checkbox | chkLoadFxBySelection | Evento de pulsar el boton usar los assets de los objetos seleccionados.
+		------------------------------------------------		
+		on chkLoadFxBySelection changed state do 
+		(
+			if state then
+				chkLoadFxBySelAsset.checked = false
+			else
+				chkLoadFxBySelection.checked = true
+		)
+		
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del checkbox
+		--@control: checkbox | chkLoadFxBySelAsset | Evento de pulsar el boton usar los assets seleccionados en el asset manager.
+		------------------------------------------------			
+		on chkLoadFxBySelAsset changed state do
+		(
+			if state then
+				chkLoadFxBySelection.checked = false
+			else
+				chkLoadFxBySelAsset.checked = true
+		)
+
+		on rollFXDef rolledUp state do 
+		(
+			parent.heightAdjust 6
+		)
+
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollMain | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollFXDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollMain | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollFXDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+			if parent.rollMain != undefined then resize [parent.rollMain.width, parent.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollMain | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollFXDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+		)
+	)--rollFXDef
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollLoadFxDef | Contiene la herramienta rollLoadFxDef, contiene funciones para el mergeado de FX en escena, subrollout ubicado en la pestaña Fx
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollLoadFxDef "Load Specific Fx"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) 	--@var: string | parent | Herramienta o rolllout del que depende y/o contiene el rollout actual		
+		
+		local minRollWidth = 225															--@var: integer | minRollWidth | Minimun tool width.
+		local minRollHeight = 100															--@var: integer | minRollHeight | Minimun tool height.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		
+		button btnMergeFx "Merge Asset Fx" pos:[5,5] width:195 height:20
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollLoadFxDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollLoadFxDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--lb.xml.setAttribute parent.cfgFile ("rollExample1/cateagory") "paramName" "paramValue"
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			--_param = (lb.xml.getAttribute parent.cfgFile ("rollExample1/category") "paramName") as <value type>
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton
+		--@control: button | btnMergeFx | Boton de para cargar los efectos de fx
+		------------------------------------------------
+		on btnMergeFx pressed do
+		(
+			-- Antes de empezar siquiera a cargar pondremos como activa la capa 0 y guardamos la que estaba activa antes.
+			_lastActiveLayer = LayerManager.current
+			(LayerManager.getLayerFromName "0").current = true
+			
+			-- Cogemos los assets a cargar de los seleccionados con el asset checker.
+			if parent.rollFX.chkLoadFxBySelAsset.checked then 
+				_assetsToLoad = lb.assetManager.getSelectedAssets()
+			-- Cogemos los assets a cargar de los seleccionados con el asset manager.
+			else if parent.rollFX.chkLoadFxBySelection.checked then
+				_assetsToLoad = lb.asset.getAssetsFromNodes (getCurrentSelection())
+			
+			--Miramos que la carpeta de rig del asset actual esté actualizada.
+			--Creamos un array para los assets que no cumplen los requisitos para ser cargados.
+			_notValidAssets = #()
+			
+			--Recorreremos todos los assets que pretendemos cargar.
+			for i=1 to _assetsToLoad.count do
+			(
+				--Si la carpeta de rig del asset actual está sin actualizar lo añadiremos a la lista de no aptos.
+				if not (doesFileExist (_assetsToLoad[i].folder + "rig") and lb.svn.svnIsFolderVersioned (_assetsToLoad[i].folder + "rig")) then
+				(
+					append _notValidAssets _assetsToLoad[i]
+				)
+				--O no hay nada dentro de la de fx (o archivos con nombres no válidos)
+				else if (getFiles (_assetsToLoad[i].folder + "rig\\fx\\" + (filterString _assetsToLoad[i].fullname "#")[1] + "_fx_v*")).count == 0 then
+				(
+					append _notValidAssets _assetsToLoad[i]
+				)
+				--Vamos a comprobar que haya al menos un archivo válido en la carpeta sino a la lista de no válidos.
+				else
+				(
+					_files = (getFiles (_assetsToLoad[i].folder + "rig\\fx\\" + (filterString _assetsToLoad[i].fullname "#")[1] + "_fx_v*"))
+					_correctFile = ""
+						
+					for j=1 to _files.count do
+						if lb.math.isNumeric (substring (getFilenameFile _files[j])  ((getFilenameFile _files[j]).count - 1) ((getFilenameFile _files[j]).count)) then
+							_correctFile = _files[j]
+						
+					if _correctFile == "" then
+					(
+						append _notValidAssets _assetsToLoad[i]
+					)
+				)
+			)
+			
+			--Si hay assets erróneos los mostraremos en un popup.
+			if _notValidAssets.count > 0 then
+			(
+				_feedback = _notValidAssets[1].fullname
+				
+				for i=2 to _notValidAssets.count do
+					_feedBack += (", " + _notValidAssets[i].fullname)
+				
+				_feedback += "."
+				
+				lb.message.show ("Some assets are outdated or lack of fx file: " + _feedBack + " They wont be loaded.") type:#message pos:undefined size:[300,75] modal:true
+			)
+			
+			--Vamos a crear un flag para indicar si ya hemos preguntado para sobreescribir los assets de fx existentes 
+			--y otro para saber que hemos decidido
+			_askToOverwrite = undefined --Primero estará a undefined, a true para preguntar por el primero y a false luego para no preguntar por los demás.
+			_overwrite = false
+			
+			--Ahora recorreremos todos los que son válidos mirando para sacar la ultima versión de su archivo y cargarlo.
+			for i=1 to _assetsToLoad.count where finditem _notValidAssets _assetsToLoad[i] == 0 do
+			(
+				
+				--Primero sacaremos la última versión del archivo de fx que corresponda.
+				_files = getFiles (_assetsToLoad[i].folder + "rig\\fx\\" + (filterString _assetsToLoad[i].fullname "#")[1] + "_fx_*")
+				
+				_latestFile = ""
+				
+				--Los recorreremos y cogeremos la última versión del archivo de fx que queremos cargar.
+				for j=1 to _files.count do
+				(
+					if lb.math.isNumeric  (substring (getFilenameFile _files[j])  ((getFilenameFile _files[j]).count - 1) ((getFilenameFile _files[j]).count)) then
+					(
+						if _latestFile == "" then
+							_latestFile = _files[j]
+						else
+						(
+							if (substring (getFilenameFile _files[j])  ((getFilenameFile _files[j]).count - 1) ((getFilenameFile _files[j]).count)) As Number >= \
+							(substring (getFilenameFile _latestFile)  ((getFilenameFile _latestFile).count - 1) ((getFilenameFile _latestFile).count)) As Number then
+							(
+								_latestFile = _files[j]
+							)
+						)
+					)
+				)
+				
+				--Miraremos si el asset que queremos cargar está ya en la escena.
+				_fileAssets = getFileInfoAssets _latestFile
+				_existingAssets = #()
+				
+				--Una vez tengamos los nombres de todos los subassets cogeremos los de fx y buscaremos a ver si están en la escena.
+				for j=1 to _fileAssets.count where (filterString _fileAssets[j] "_")[1] == lb.nc.NC_fxPrefix do
+				(
+					-- Para ello sacaremos los subassets del actual...
+					_currentSubAssets = lb.asset.getDependentAssets _assetsToLoad[i] lb.asset.sceneAssets
+					
+					-- ...y compararemos sus nombres con los que queremos cargar apilando los existentes en un array.
+					for k=1 to _currentSubAssets.count do
+					(
+						if (filterString _currentSubAssets[k].fullname "#")[1] == _fileAssets[j] then
+						(
+							--Si no hemos preguntado todavia == undefined activaremos el flag de preguntar para sobreescribir
+							if _askToOverwrite == undefined then
+								_askToOverwrite = true
+							
+							append _existingAssets _currentSubAssets[k]
+						)
+					)
+				)
+				
+				--Preguntamos si se desea sobreescribir los assets que hay ya en la escena
+				if _askToOverwrite != undefined and _askToOverwrite then
+				(	
+					--Volvemos a poner el flag de preguntar a falso.
+					_askToOverwrite = false
+					
+					if (lb.message.show "Some assets are already loaded in scene, ¿Do you want to overwrite them?" type:#query pos:undefined size:[300,75] modal:true) then
+						_overwrite = true
+					else
+						_overwrite = false
+				)
+				
+				--Ahora sacaremos los objetos de dentro del archivo de fx.
+				_fxAssetNames = getMAXFileObjectNames _latestFile
+				
+				--No todos los assets que hemos cargado son de fx por que hay que quitarlos.
+				for j=_fxAssetNames.count to 1 by -1 do
+					if (filterString _fxAssetNames[j] "_")[1] != lb.nc.NC_fxPrefix then
+						deleteItem _fxAssetNames j
+				
+				--Si hemos decidido sobreescribir los existentes haremos un deleteAsset de ellos.
+				if _overwrite then
+				(
+					for j=_existingAssets.count to 1 by -1 do
+					(
+			-- 						print "overwrite"
+						lb.asset.deleteAsset _existingAssets[j]
+						deleteItem _existingAssets j
+					)
+				)
+				--Si en cambio hemos decidido no sobreescribir, tendremos que eliminar de la lista de objetos a cargar los de esos assets.
+				else
+				(
+					for j=1 to _existingAssets.count do
+						for k=_fxAssetNames.count to 1 by -1 do
+							if matchpattern _fxAssetNames[k] pattern: ((filterString _existingAssets[j].fullname "#")[1] + "*") then
+							(
+								deleteItem _fxAssetNames k
+							)
+				)
+				
+				--Comprobamos que no hayamos eliminado todos.
+				if _fxAssetNames.count !=0 then 
+				(
+			-- 					print "Entro"
+					--Hacemos un backup de los atmosféricos que hay en la escena.
+					_oldAtmospherics = #()
+					for j=1 to numAtmospherics do append _oldAtmospherics (getAtmospheric j)
+					
+					--Cargamos los assets y recogemos los nuevos nodos.
+					_loadedNodes = lb.asset.loadAsset _latestFile #merge objectNames:_fxAssetNames
+					
+					--Ahora renombraremos los objetos nuevos y sus atmosféricos.
+					if (filterString _assetsToLoad[i].fullname "#")[2] == undefined then
+						_assetIndex = ""
+					else
+						_assetIndex = (filterString _assetsToLoad[i].fullname "#")[2]
+					
+					--Miraré si hay capas con los nombres de los objetos nuevos que tengo que cargar,
+					_newLayers = #()
+					
+					--Recorremos todos los nombres de subassets a crear y creamos sus layers si no están creados ya.
+					for j=1 to _fileAssets.count where (filterString _fileAssets[j] "_")[1] == lb.nc.NC_fxPrefix do
+					(
+						if _assetIndex == "" then
+							_nameToCompare = _fileAssets[j]
+						else
+							_nameToCompare = (_fileAssets[j] + "#" + _assetIndex)
+						
+						--Si no hemos encontrado una capa con el nombre del nuevo asset a cargar crearemos una nueva
+						if (LayerManager.getLayerFromName _nameToCompare) == undefined then
+							LayerManager.newLayerFromName _nameToCompare
+					)
+					
+					--Recorreremos los nodos cargados para irlos renombrando y colocando en la capa que les corresponde
+					for j=1 to _loadedNodes.count do
+					(
+						--Si es un objeto que se renombra solo, muy probablemente ya tenga el índice por lo que lo quitaremos de la segunda parte del nombre de su capa
+						--para que no sea agregado dos veces.
+						if matchPattern _loadedNodes[j].name pattern: "*->*" then
+						(
+							if _assetIndex != "" then
+								_newNodeLayerName = (filterString _loadedNodes[j].name "_")[1] + "_" + (filterString (filterString _loadedNodes[j].name "_")[2] "#")[1] + "#" + _assetIndex
+							else
+								_newNodeLayerName = (filterString _loadedNodes[j].name "_")[1] + "_" + (filterString (filterString _loadedNodes[j].name "_")[2] "#")[1]
+						)
+						else
+						(
+							if _assetIndex != "" then
+								_newNodeLayerName = (filterString _loadedNodes[j].name "_")[1] + "_" + (filterString _loadedNodes[j].name "_")[2] + "#" + _assetIndex
+							else
+								_newNodeLayerName = (filterString _loadedNodes[j].name "_")[1] + "_" + (filterString _loadedNodes[j].name "_")[2]
+						)
+						--Lo agregamos a la capa que le corresponde
+						_currentLayer = LayerManager.getLayerFromName _newNodeLayerName
+						_currentLayer.addNode  _loadedNodes[j]
+						
+						--Lo renombramos (sólo si no es uno de los que se renombran solos)
+						if not matchPattern _loadedNodes[j].name pattern: "*->*" then
+							_loadedNodes[j].name = substituteString _loadedNodes[j].name ((filterString _loadedNodes[j].name "_")[1] + "_" + (filterString _loadedNodes[j].name "_")[2]) _newNodeLayerName
+					)
+					
+					--Una vez hemos renombrado los objetos miraremos si ha quedado alguna capa vacía colgando (fruto de haber cargado un #001 sin existir el que no tiene indice)
+					--esto es debido a que al hacer merge los objetos vienen con su capa ya de serie, pero al moverlos todos a su nueva capa la antigua permanece.
+					for j=1 to _fileAssets.count where (filterString _fileAssets[j] "_")[1] == lb.nc.NC_fxPrefix do
+					(
+						--Buscamos la capa del asset sin numerar, si existe y está vacía la eliminaremos
+						if (Layermanager.getLayerFromName _fileAssets[j]) != undefined then
+						(
+							_nodes = #()
+							(Layermanager.getLayerFromName _fileAssets[j]).nodes &_nodes
+							if _nodes.count == 0 then
+								LayerManager.deleteLayerByName _fileAssets[j]
+						)
+					)
+					
+					
+					--Renombraremos los atmosféricos de los objetos.
+					for j=1 to numAtmospherics where lb.nc.ncOK (getAtmospheric j).name type:#atmospheric and (getAtmospheric j).name != "FusionWorks Renderer" do
+					(
+						--Si el atmosférico no estaba antes en la lista es que es nuevo
+						if finditem _oldAtmospherics (getAtmospheric j) == 0 then
+						(
+							--Si pertenece a un asset con numero se lo añadiremos.
+							if _assetIndex != "" then
+							(
+								(getAtmospheric j).name = (filterString (getAtmospheric j).name "_")[1] + "_"+ (filterString (getAtmospheric j).name "_")[2] + "#" + _assetIndex + "_" + (filterString (getAtmospheric j).name "_")[3]
+							)
+						)
+					)
+					
+					--Me creo un booleano por si no encuentra el objeto al que tiene que aplicarse el attach.
+					_objectFound = true
+					
+					--Ahora toca alinear los objetos que tengan attachObjectToFace al objeto.
+					for j=1 to _loadedNodes.count where _objectFound do
+					(
+						--Obtenemos los controladores de attachObjectToFace del objeto 
+						_attachProControllers = lb.attachObjectToFaceFunctions.getAttachProControllers _loadedNodes[j]
+						
+						--Si tiene dicha información lo alinearemos de nuevo.
+						if _attachProControllers[1] != undefined and _attachProControllers[2] != undefined and _attachProControllers[3] != undefined then
+						(
+							--Antes de alinearlo si el objeto al que pertenece tiene un índice se lo añadiremos a su información (para que no se alineen todos al que no lo tiene)
+							if _assetIndex != "" then
+							(
+								_targetObjParts = (filterString _attachProControllers[1].targetObj "_")
+								
+								_attachProControllers[1].targetObj = _targetObjParts[1] + "_" + _targetObjParts[2] + "#" + _assetIndex + "_" + _targetObjParts[3] + "_"  \
+								+ _targetObjParts[4] + "_" + _targetObjParts[5] + "_" + _targetObjParts[6] + "_" + _targetObjParts[7]
+							)
+							
+							--Una vez está todo bien nombrado sacaremos el struct de attachObjectToFace
+							_attachPro = lb.attachObjectToFaceFunctions.getAttachProInfo _loadedNodes[j]
+							
+							--Si no encontramos el objeto al que queremos atachar lanzamos un mensaje de error.
+							if _attachPro.targetObj != undefined then
+							(
+								case _attachPro.AOTFattachMode of 
+								(
+									#animBake:
+										lb.attachObjectToFaceFunctions.createAnimFromVertex _loadedNodes[j] _attachPro.targetObj _attachPro.face barCoords:_attachPro.barCoords initialOffset:_attachPro.initialOffset inheritRotation:_attachPro.inheritRotation keepOffset:_attachPro.keepOffset alignToFace:_attachPro.alignToFace flipAxis:_attachPro.flipAxis xAxis:_attachPro.xAxis
+									
+									#attach:
+										_attachPro.posController.update()
+								)
+							)
+							else
+							(
+								_objectFound = false
+							)
+						)
+					)--for j=1 to _loadedNodes.count where _objectFound do
+					
+					--Si no hemos encontrado el objeto entonces.
+					if not _objectFound then
+					(
+						
+						lb.message.show "Target object to attach not found check fx file for errors. Verify if mesh and anim objects names are the same." type:#message pos:undefined size:[300,75] modal:true
+						_assetsToDelete = lb.asset.getAssetNodes _loadedNodes
+						
+						if _assetsToDelete.count == 1 then
+						(
+							lb.asset.deleteAsset _assetsToDelete[1]
+						)
+					)
+				) -- if _fxAssetNames.count !=0
+			)--for i=1 to _assetsToLoad.count where finditem _notValidAssets _assetsToLoad[i] == 0 do
+			
+			--Al terminar ponemos como activa la que estaba antes.
+			_lastActiveLayer.current = true	
+		)-- on btnMergeFx pressed do
+		
+		------------------------------------------------
+		--@event: rolledUp | Evento que se lanza al desplegar/contraer el rollout
+		--@control: rollout | rollLoadFxDef | Control sobre el que se aplica el evento. El rollout principal.
+		------------------------------------------------
+		on rollLoadFxDef rolledUp state do 
+		(
+			parent.heightAdjust 6
+		)
+
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollMain | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollLoadFxDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollMain | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollLoadFxDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+			if parent.rollMain != undefined then resize [parent.rollMain.width, parent.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollMain | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollLoadFxDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+		)
+	)--rollLoadFxDef
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollFxDetailDef | Contiene la herramienta rollFxDetailDef, subrollout ubicado en la pestaña fx
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollFxDetailDef "Fx Detail Level"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) 		--@var: string | parent | Herramienta o rolllout del que depende y/o contiene el rollout actual		
+		
+		local minRollWidth = 225																--@var: integer | minRollWidth | Minimun tool width.
+		local minRollHeight = 100																--@var: integer | minRollHeight | Minimun tool height.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+
+		local selectedFxAsset = undefined 														--@var: struct | selectedFxAsset | Los asset de efectos seleccionados
+
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		
+		groupBox grpPFDetailLevel "PF Quantity Multipliers and Display" pos:[5,5] width:195 height:70
+		spinner spnVisualizationQuantity "Vis: " pos:[20,23] width:80 height:20 range:[0.0,10000.0,100.0]
+		spinner spnRenderQuantity "Rnd: " pos:[115,23] width:80 height:20 range:[0.0,10000.0,100.0]
+		label lblDisplayType "Display Type: " pos:[13,48] width:70 height:20
+		dropdownList ddlDisplayType pos:[85,46] width:110 height:20 items:#("None","Dots","Ticks","Circles","Lines","Bounding Boxes","Geometry","Diamonds","Boxes","Asterisks","Triangles")
+		
+		groupBox grpABDetailLevel "Afterburn Detail Level" pos:[5,75] width:195 height:45
+		button btnOpenEnvDialog "Open env dialog" pos:[10,92] width:85 height:20
+		label lblAFDisplayType "Display:" pos:[98,95] width:50 height:20
+		dropdownList ddlAFDisplayType pos:[139,92] width:57 height:20 items:#("None","Sphere","Circle")
+		
+		groupBox grpFFXDetailLevel "FumeFx Detail Level" pos:[5,122] width:195 height:230
+		groupBox grpFFXAssetLevels "                                 " pos: [10,138] width:185 height:40
+		checkBox chkFFXAssetLevels "Asset Simulations" pos:[15,136] width:100 height:20 checked:true
+		radiobuttons rdoFFXAssetLevels  pos:[15,156] width:100 labels:#("Low","Medium  ","High") columns:3 default:2
+		
+		checkBox chkFFXSequenceLevels "Use Sequence Simulation" pos:[15,183] width:140 height:20 checked:false
+		
+		groupBox grpFFXCustomLevels "                         " pos: [10,208] width:185 height:45
+		checkBox chkFFXCustomLevels "Select Simulation" pos:[15,206] width:100 height:20 checked:false
+		edittext edtFFXCustomLevels pos:[10,226] height:20 width:160 readOnly:true
+		button btnFFXCustomLevels "..." pos:[170,226] width:20 height:20
+		
+		label lblFFXPlayFrom "Play simulation from:" pos:[15,261] width:130 height:20
+		spinner spnFFXPlayFrom pos:[130,261] width:65 height:20 range:[-1000000,1000000,0] type:#integer
+		label lblFFXPlayTo "Play simulation to:" pos:[15,281] width:100 height:20
+		spinner spnFFXPlayTo pos:[130,281] width:65 height:20 range:[-1000000,1000000,100] type:#integer
+		label lblFFXOffset "Simulation offset:" pos:[15,301] width:100 height:20
+		spinner spnFFXOffset pos:[130,301] width:65 height:20 range:[-1000000,1000000,0] type:#integer
+		button btnFFXRunSimulation "Run Simulation" pos:[10,326] width:185 height:20
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		-----------------------------------------------------------------------------------------
+		--@fn: undefined | unlockControls | Desbloquea los controles del rollout
+		-----------------------------------------------------------------------------------------
+		fn unlockControls = 
+		(
+			--Controles de PFlow
+			spnVisualizationQuantity.enabled = true
+			spnRenderQuantity.enabled = true
+			ddlDisplayType.enabled = true
+			lblDisplayType.enabled = true
+			
+			--Controles de Afterburn
+			lblAFDisplayType.enabled = true
+			ddlAFDisplayType.enabled = true
+		)
+		
+		
+		-----------------------------------------------------------------------------------------
+		--@fn: undefined | lockControls | Bloquea los controles del rollout
+		-----------------------------------------------------------------------------------------
+		fn lockControls = 
+		(
+			--Controles de PFlow
+			spnVisualizationQuantity.enabled = false
+			spnRenderQuantity.enabled = false
+			ddlDisplayType.enabled = false
+			lblDisplayType.enabled = false
+			
+			--Controles de Afterburn
+			lblAFDisplayType.enabled = false
+			ddlAFDisplayType.enabled = false
+			
+			--Ponemos todos los controles de FFX como desactivados
+			--Custom controls
+			chkFFXCustomLevels.enabled = false
+			chkFFXCustomLevels.checked = false
+			edtFFXCustomLevels.enabled = false
+			btnFFXCustomLevels.enabled = false
+			
+			--Sequence controls
+			chkFFXSequenceLevels.checked = false
+			chkFFXSequenceLevels.enabled = false
+			
+			--Asset controls
+			chkFFXAssetLevels.enabled = false
+			chkFFXAssetLevels.checked = false
+			rdoFFXAssetLevels.state = 2
+			rdoFFXAssetLevels.enabled = false
+			
+			--Simulation frame offset controls
+			--Los controles de los rangos de los cachés.
+			spnFFXPlayFrom.enabled = false
+			spnFFXPlayTo.enabled = false
+			spnFFXOffset.enabled = false
+			
+			--El botón de simulación
+			btnFFXRunSimulation.enabled = false
+		)
+		
+		
+		-----------------------------------------------------------------------------------------
+		--@fn: string | getFFXAssetSimulationPath | Consulta la ruta de simulación de un asset
+		--@gets: struct | asset | el asset al que consultar la ruta de simulación.
+		--@gets: (opt)name | asset | Valores de calidad de simulación, puede admitir #low,#medium,#high,#none. Por defecto #medium
+		--@gets: (opt)string | basepath | String que determinba la unidad del path. Se puede usar para configurar paths expeciales . Por defecto \\\\lbdata002\\z\\simulation\\
+		--@returns: string | _path | El path consultado.
+		-----------------------------------------------------------------------------------------		
+		fn getFFXAssetSimulationPath asset quality:#medium basePath:"\\\\lbdata002\\z\\simulation\\" =
+		(
+			_path = basePath
+			
+			--Miraremos si el asset es de fx o es un subasset de fx.
+			--Si es un asset de fx.
+			if matchPattern asset.folder pattern:"*\\rig\\fx\\" then
+			(
+				_folderParts = (filterString asset.folder "\\")
+				--Montaremos en _path la ruta del asset sin z: del principio y sin las carpetas rig y fx del final 
+				for i=2 to (_folderParts.count-2) do
+				(
+					_path += _folderParts[i] + "\\"
+				)
+			)	
+			else
+			(
+				_folderParts = (filterString asset.folder "\\")
+				
+				--Montaremos en _path la ruta del asset sin z: del principio
+				for i=2 to _folderParts.count do
+				(
+					_path += _folderParts[i] + "\\"
+				)
+			)
+			
+			--Montaremos la carpeta del plugin y la versión del asset.
+			_path += "fumeFx\\v" + (formattedPrint asset.version format:"02d") + "\\"
+			
+			--En función de la calidad sacaré una ruta u otra.
+			case quality of
+			(
+				#low: _path += "low\\"
+				#medium: _path += "medium\\"
+				#high: _path += "high\\"
+				#none: _path += ""
+			)
+			
+			_path
+		)
+		
+		-----------------------------------------------------------------------------------------
+		--@fn: string | getFFXSequenceSimulationPath | Consulta la ruta de simulación de la secuencia abierta
+		--@gets: (opt)string | basepath | String que determinba la unidad del path. Se puede usar para configurar paths expeciales . Por defecto \\\\lbdata002\\z\\simulation\\
+		--@returns: string | _path | El path consultado.
+		-----------------------------------------------------------------------------------------			
+		fn getFFXSequenceSimulationPath basePath:"\\\\lbdata002\\z\\simulation\\" =
+		(
+			_path = basePath
+			
+			--Monto el path directamente en la carpeta de secuencia
+			_path += "sequence\\"
+			
+			if lb.nc.ncOK maxfilename type:#seqfile then
+				--Monto el numero de secuencia y el de cámara en la ruta.
+				_path += "seq_" + (filterString (getFilenameFile maxfilename) "_")[2] + "\\cam\\" + (filterString (getFilenameFile maxfilename) "_")[3] + "\\"
+			else
+				_path = "" --no tenemos que dejar poner la ruta
+			
+			_path
+		)
+		
+		-----------------------------------------------------------------------------------------
+		--@fn: undefined | applyFFXSimulationPath | Aplica el path de simulación a la lista de nodos de ffx pasados por array
+		--@gets: array{node}| ffxNodes | Array que contiene los nodos de fx a los que aplicar el path de simulación.
+		--@gets: string | ffxPath | String con el path de fx a aplicar. 
+		-----------------------------------------------------------------------------------------			
+		fn applyFFXSimulationPath ffxNodes ffxPath =
+		(
+			--Recorreremos la lista de nodos e iremos poniendo sus rutas de simulación.
+			for i=1 to ffxNodes.count where classof ffxNodes[i] == FumeFX do
+			(
+				_simulationFileName = lb.nc.NC_fxPrefix + "_" + (filterString (filterString ffxNodes[i].name "_")[2] "#")[1] + "_" + (filterString ffxNodes[i].name "_")[5]
+				
+				if not doesFileExist ffxPath then
+					if not (makeDir ffxPath all:true) then
+						messageBox ("Simulation path <" + ffxPath +"> could not be created. Check your write permissions.")
+				
+				--Aplicamos la ruta
+			-- 				print "Applying default path\n"
+				ffxNodes[i].setPath (ffxPath + _simulationFilename + "_default_.fxd") "default"
+			-- 				print "Applying wavelet path\n"
+				ffxNodes[i].setPath (ffxPath + _simulationFilename + "_wavelet_.fxd") "wavelet"
+			-- 				print "Applying retimer path\n"
+				ffxNodes[i].setPath (ffxPath + _simulationFilename + "_retimer_.fxd") "retimer"
+			)
+		)
+		
+		-----------------------------------------------------------------------------------------
+		--@fn: undefined | activateFFXOption | Activa o desactiva controles de ffx en función de la opción pasada por parametros
+		--@gets: name | ffxOption | Filtros de activación, separados por los posibles inputs: #asset, #sequence, #custom
+		-----------------------------------------------------------------------------------------			
+		fn activateFFXOption ffxOption =
+		(
+			case ffxOption of
+			(
+				#asset:
+				(
+					--Ponemos todos los controles como desactivados
+					--Custom controls
+					chkFFXCustomLevels.enabled = true
+					chkFFXCustomLevels.checked = false
+					edtFFXCustomLevels.enabled = false
+					btnFFXCustomLevels.enabled = false
+					
+					--Sequence controls
+					chkFFXSequenceLevels.enabled = true
+					chkFFXSequenceLevels.checked = false
+					
+					--Activaremos los controles de simulación por asset con calidad media
+					chkFFXAssetLevels.enabled = true
+					chkFFXAssetLevels.checked = true
+					rdoFFXAssetLevels.state = 2
+					rdoFFXAssetLevels.enabled = true
+					
+					--Activo los controles de los frames de inicio y fin de FFX.
+					spnFFXPlayFrom.enabled = true
+					spnFFXPlayTo.enabled = true
+					spnFFXOffset.enabled = true
+					
+					--El botón de simulación
+					btnFFXRunSimulation.enabled = true
+				)
+				
+				#sequence:
+				(
+					--Ponemos todos los controles como desactivados
+					--Custom controls
+					chkFFXCustomLevels.enabled = true 
+					chkFFXCustomLevels.checked = false
+					edtFFXCustomLevels.enabled = false
+					btnFFXCustomLevels.enabled = false
+					
+					--Sequence controls
+					chkFFXSequenceLevels.enabled = true
+					chkFFXSequenceLevels.checked = true
+					
+					--Activaremos los controles de simulación por asset con calidad media
+					chkFFXAssetLevels.enabled = true
+					chkFFXAssetLevels.checked = false
+					rdoFFXAssetLevels.state = 2
+					rdoFFXAssetLevels.enabled = false
+					
+					--Activo los controles de los frames de inicio y fin de FFX.
+					spnFFXPlayFrom.enabled = true
+					spnFFXPlayTo.enabled = true
+					spnFFXOffset.enabled = true
+					
+					--El botón de simulación
+					btnFFXRunSimulation.enabled = true
+				)
+				
+				#custom:
+				(
+					--Ponemos todos los controles como desactivados
+					--Custom controls
+					chkFFXCustomLevels.enabled = true 
+					chkFFXCustomLevels.checked = true
+					edtFFXCustomLevels.enabled = true
+					btnFFXCustomLevels.enabled = true
+					
+					--Sequence controls
+					chkFFXSequenceLevels.enabled = true
+					chkFFXSequenceLevels.checked = false
+					
+					--Activaremos los controles de simulación por asset con calidad media
+					chkFFXAssetLevels.enabled = true
+					chkFFXAssetLevels.checked = false
+					rdoFFXAssetLevels.state = 2
+					rdoFFXAssetLevels.enabled = false
+					
+					--Activo los controles de los frames de inicio y fin de FFX.
+					spnFFXPlayFrom.enabled = true
+					spnFFXPlayTo.enabled = true
+					spnFFXOffset.enabled = true
+					
+					--El botón de simulación
+					btnFFXRunSimulation.enabled = true
+				)
+			)
+		)
+		
+		-----------------------------------------------------------------------------------------
+		--@fn: undefined | forceDefaultFFXState | Configura los controles de los objetos de fx por defecto, a su vez aplicando la ruta correspondiente.
+		-----------------------------------------------------------------------------------------		
+		fn forceDefaultFFXState =
+		(
+			activateFFXOption #asset
+			
+			-- 			print rdoFFXAssetLevels.state
+			rdoFFXAssetLevels.state = 2
+			
+			--Obtengo el path de la simulación de calidad media
+			_path = getFFXAssetSimulationPath selectedFxAsset quality:#medium basepath:(lb.nc.swapUnit "\\\\lbdata002\\z\\simulation\\" projectUnit)
+			
+			--Obtengo todos los fumefx del asset en cuestión
+			_ffxNodes = for i=1 to selectedFxAsset.nodes.count where classof selectedFxAsset.nodes[i] == FumeFX collect selectedFxAsset.nodes[i]
+			
+			--Aplico las rutas
+			applyFFXSimulationPath _ffxNodes _path
+		)
+			
+		-----------------------------------------------------------------------------------------
+		--@fn: undefined | fillFumeFxControls | Actualiza los controles del rollout con cada cambio de selección
+		-----------------------------------------------------------------------------------------					
+		fn fillFumeFxControls =
+		(
+			--Miraremos el tipo de ruta que tenemos en el objeto e intentaremos sacar que opciones tiene seleccionado (Asset,sequence o custom)
+			--Obtengo todos los fumefx del asset en cuestión
+			_ffxNodes = for i=1 to selectedFxAsset.nodes.count where classof selectedFxAsset.nodes[i] == FumeFX collect selectedFxAsset.nodes[i]
+			
+			if _ffxNodes.count > 0 then
+			(
+				--Comprobaremos que entre los distintos elementos de fume fx tienen las rutas iguales
+				_defaultPath = getFilenamePath (_ffxNodes[1].getPath "default")
+				_waveletPath = getFilenamePath (_ffxNodes[1].getPath "wavelet")
+				_retimerPath = getFilenamePath (_ffxNodes[1].getPath "retimer")
+				
+				_differentPaths = false
+				
+				--Si los 3 paths son iguales entonces seguiremos
+				if _defaultPath == _waveletPath and _defaultPath == _retimerPath then
+				(
+					for i=2 to _ffxNodes.count do
+					(
+						--Si alguno de los paths es distinto
+						if _defaultPath != getFilenamePath (_ffxNodes[i].getPath "default") \
+						or _defaultPath != getFilenamePath (_ffxNodes[i].getPath "wavelet") \
+						or _defaultPath != getFilenamePath (_ffxNodes[i].getPath "retimer") then
+							_differentPaths = true
+					)
+				)
+				--Si no lo son entonces mal
+				else
+				(
+					_differentPaths = true
+				)
+				
+				--Si las rutas son distintas forzaré que el asset simule por asset a calidad media
+				if _differentPaths then
+				(
+					messagebox "FFX paths differ, forcing medium quality asset simulation."
+					forceDefaultFFXState()
+				)
+				else
+				(
+					--Llegados a este punto como las rutas de todos los fx del asset son iguales entonces tomaremos la de default del primero para saber que opcion tiene puesta
+					_path = _defaultPath
+					
+					--Vamos a ver si es una ruta de asset
+					if matchpattern (getFilenamePath _path) pattern:((getFFXAssetSimulationPath selectedFxAsset quality:#none basepath:(lb.nc.swapUnit "\\\\lbdata002\\z\\simulation\\" projectUnit)) + "*") then
+					(
+						activateFFXOption #asset
+						
+						--Miramos la ultima parte del nombre de la ruta
+						case tolower (filterString _path "\\")[(filterString _path "\\").count] of
+						(	
+							"low": rdoFFXAssetLevels.state = 1
+							"medium": rdoFFXAssetLevels.state = 2
+							"high": rdoFFXAssetLevels.state = 3
+						)
+					)
+					--Si coincide con una ruta de secuencia y además su número de cámara y secuencia cuadran entonces será de secuencia.
+					else if (matchpattern (getFilenamePath _path) pattern: "\\\\lbdata002\\simulation\\sequence\\seq_???\\cam\\cam???\\" \
+					or matchpattern (getFilenamePath _path) pattern: "\\\\lbdata002\\simulation\\sequence\\seq_????\\cam\\cam???\\") then
+					(
+						--Si estamos en una escena de secuencia entonces miraremos si es la misma secuencia y cámara
+						if lb.nc.ncOK (getFilenameFile maxfilename) type:#seqFile then
+						(
+							--Si coinciden secuencia y cámara entonces.
+							if (filterString (filterString _path "\\")[4] "_")[2] == (filterString (getFilenameFile maxfilename) "_")[2] \
+							and (filterString _path "\\")[6] == (filterString (getFilenameFile maxfilename) "_")[3] then
+							(
+								activateFFXOption #sequence
+							)
+							--Si no coinciden pondremos la opción de custom
+							else
+							(
+								activateFFXOption #custom
+								edtFFXCustomLevels.text = _path
+							)
+						)
+						--Si no estamos en una secuencia 
+						else
+						(
+							forceDefaultFFXState()
+						)
+					)
+					--Pongo la ruta custom
+					else
+					(
+						activateFFXOption #custom
+						edtFFXCustomLevels.text = _path
+					)
+				)
+				
+				--Una vez tengamos los controles de fumeFx cargados procederemos a rellenar los spinners de rangos de frames
+				_playFrom = _ffxNodes[1].PlayFrom
+				_playTo = _ffxNodes[1].PlayTo
+				_offset = _ffxNodes[1].Offset
+				
+				--Iremos comparando los offsets de todos los nodos de FFX quedándonos con los rangos mas amplios
+				for i=2 to _ffxNodes.count do
+				(
+					--Si el frame de inicio es menor nos quedaremos con él
+					if _playFrom > _ffxNodes[i].PlayFrom then
+						_playFrom = _ffxNodes[i].PlayFrom
+					
+					--Si el frame de inicio es menor nos quedaremos con él
+					if _playTo < _ffxNodes[i].PlayTo then
+						_playTo = _ffxNodes[i].PlayTo
+					
+					--Si el frame de inicio es menor nos quedaremos con él
+					if _offset > _ffxNodes[i].Offset then
+						_offset = _ffxNodes[i].Offset
+				)
+				
+				for i=1 to _ffxNodes.count do
+				(
+					_ffxNodes[i].PlayFrom = _playFrom
+					_ffxNodes[i].PlayTo = _playTo
+					_ffxNodes[i].Offset = _offset
+				)
+				
+				spnFFXPlayFrom.value = _playFrom
+				spnFFXPlayTo.value = _playTo
+				spnFFXOffset.value = _offset
+				
+			)-- if ffxNodes.count >0
+			else
+			(
+				--Ponemos todos los controles como desactivados
+				--Custom controls
+				chkFFXCustomLevels.enabled = false
+				chkFFXCustomLevels.checked = false
+				edtFFXCustomLevels.enabled = false
+				btnFFXCustomLevels.enabled = false
+				
+				--Sequence controls
+				chkFFXSequenceLevels.checked = false
+				chkFFXSequenceLevels.enabled = false
+				
+				--Asset controls
+				chkFFXAssetLevels.checked = false
+				rdoFFXAssetLevels.state = 2
+				rdoFFXAssetLevels.enabled = false
+				
+				--Los controles de los rangos de los cachés.
+				spnFFXPlayFrom.value = 0
+				spnFFXPlayTo.value = 100
+				spnFFXOffset.value = 0
+				spnFFXPlayFrom.enabled = false
+				spnFFXPlayTo.enabled = false
+				spnFFXOffset.enabled = false
+				
+				--El botón de simulación
+				btnFFXRunSimulation.enabled = false
+			)
+		)
+			
+		----------------------------------------------------------------------------------------- 
+		--@fn: undefined | fillControls | Rellena los controles del rollout con los valores que tenemos en el asset de fx seleccionado
+		--@comment: La variable que controla los assets seleccionados es selectedFxAsset del mismo rollout. Se actualiza automaticamente gracias a un callback.
+		-----------------------------------------------------------------------------------------			
+		fn fillControls =
+		(
+			------------------CONTROLES DE PFLOW--------------------------
+			--Primero sacaremos los PFSources y los displays.
+			_pfSources = for i=1 to selectedFxAsset.nodes.count where classof selectedFxAsset.nodes[i] == PF_Source collect selectedFxAsset.nodes[i]
+			_pfDisplays = for i=1 to selectedFxAsset.nodes.count where classof selectedFxAsset.nodes[i] == DisplayParticles collect selectedFxAsset.nodes[i]
+			
+			--Luego miraremos si hay distintos valores para los particle flows (para mostrar los spinners como Indeterminados o no (vacios))
+			if _pfSources.count > 0 then
+			(
+				--Miramos primero los valores de visualización en viewport
+				_distinct = false
+				_firstValue = _pfSources[1].Quantity_Viewport
+				
+				for i=2 to _pfSources.count do
+				(
+					--El el momento en el que encontremos algún valor diferente activaremos el flag
+					if _firstValue != _pfSources[i].Quantity_Viewport then
+						_distinct = true
+				)
+				
+				--Si son valores distintos pondremos el spinner como indeterminado (sin valor pero se puede mover)
+				if _distinct then
+					spnVisualizationQuantity.indeterminate = true
+				else
+					spnVisualizationQuantity.value = _firstValue
+				
+				
+				--Luego miraremos los valores de visualización en render
+				_distinct = false
+				_firstValue = _pfSources[1].Quantity_Render
+				
+				for i=2 to _pfSources.count do
+				(
+					--El el momento en el que encontremos algún valor diferente activaremos el flag
+					if _firstValue != _pfSources[i].Quantity_Render then
+						_distinct = true
+				)
+				
+				--Si son valores distintos pondremos el spinner como indeterminado (sin valor pero se puede mover)
+				if _distinct then
+					spnRenderQuantity.indeterminate = true
+				else
+					spnRenderQuantity.value = _firstValue
+			)
+			--Si no hay particle flows desactivamos ambos controles.
+			else
+			(
+				spnVisualizationQuantity.enabled = false
+				spnRenderQuantity.enabled = false
+			)
+			
+			--Luego miraremos si hay distintos valores para los particle flows (para mostrar los spinners como Indeterminados o no (vacios))
+			if _pfDisplays.count > 0 then
+			(
+				--Miramos primero los valores de visualización en viewport
+				_distinct = false
+				_firstValue = _pfDisplays[1].type
+				
+				for i=2 to _pfDisplays.count do
+				(
+					--El el momento en el que encontremos algún valor diferente activaremos el flag
+					if _firstValue != _pfDisplays[i].type then
+						_distinct = true
+				)
+				
+				--Si son valores distintos pondremos el dropdown como indeterminado (índice 0)
+				if _distinct then
+					ddlDisplayType.selection = 0
+				else
+					--Le sumamos uno al valor de nuestro spinner porque en rango de valores de la propiedad empieza en 0.
+					ddlDisplayType.selection = _firstValue + 1
+			)
+			--Si no hay particle flows desactivamos ambos controles.
+			else
+			(
+				ddlDisplayType.enabled = false
+			)
+			
+			------------------CONTROLES DE AFTERBURN--------------------------
+			--Primero obtendremos el atmosférico(o atmosfericos) del asset seleccionado.
+			_atmospherics = #()
+			
+			for i=1 to numAtmospherics where classof (getAtmospheric i) == AfterBurn do
+			(
+				if matchPattern (getAtmospheric i).name pattern: (selectedFxAsset.fullname + "_*") and (getAtmospheric i).VptGeometryType != undefined then
+					append _atmospherics (getAtmospheric i)
+			)
+			
+			if _atmospherics.count > 0 then
+			(
+				--Miramos primero los valores de visualización en viewport
+				_distinct = false
+				_firstValue = _atmospherics[1].VptGeometryType
+				
+				--Recorro todos los atmosfericos para ver si encuentro alguno que tenga valores distintos que los demás
+				for i=2 to _atmospherics.count do
+				(
+					if _atmospherics[2].VptGeometryType != _firstValue then
+						_distinct = true
+				)
+				
+				--Si hay uno distinto pondre el dropdown con índice 0 que es vacío sin seleccionar nada.
+				if _distinct then
+				(
+					ddlAFDisplayType.selection = 0
+				)
+				--Si son todos iguales o hay uno le pondré el valor + 2 (es la correspondencia que hay entre los diferentes valores y el desplegable nuestro)
+				else
+				(
+					ddlAFDisplayType.selection = _firstValue + 2
+				)
+			)
+			--Si no hay atmosféricos de afterburn entonces lo que haremos será
+			else
+			(
+				ddlAFDisplayType.enabled = false
+			)
+			
+			------------------CONTROLES DE FUMEFX--------------------------
+			fillFumeFxControls()
+		)
+					
+		-----------------------------------------------------------------------------------------
+		--@fn: undefined | updateFxUI | Actualiza los controles del rollout con cada cambio de selección
+		-----------------------------------------------------------------------------------------		
+		fn updateFxUI =
+		(
+			_assetsToLoad = #()
+			-- Cogemos los assets a mostrar de los seleccionados de la escena.
+			if parent.rollFX.chkLoadFxBySelAsset.checked then 
+			(
+				_assetsToLoad = lb.assetManager.getSelectedAssets()
+			)
+			-- Cogemos los assets a mostrar de los seleccionados con el asset manager.
+			else
+			(
+				_assetsToLoad = lb.asset.getAssetsFromNodes (getCurrentSelection())
+			)
+			-- 			print ("Numero de assets seleccionados: " + _assetsToLoad.count As String)
+			--Si tenemos seleccionados uno solo 
+			if _assetsToLoad.count == 1 then
+			(
+				--Si además es de fx
+				if _assetsToLoad[1].type == lb.nc.NC_fxPrefix then
+				(
+					selectedFxAsset = _assetsToLoad[1]
+					unlockControls()
+					fillControls()
+				)
+				else
+				(
+			-- 					print "No es un asset de fx bloqueo"
+					selectedFxAsset = undefined
+					lockControls()
+				)
+			)
+			else
+			(
+			-- 				print "No hay assets seleccionados o hay más de uno"
+				selectedFxAsset = undefined
+				lockControls()
+			)
+		)
+			
+		-----------------------------------------------------------------------------------------
+		--@fn: undefined | applySimulationRoutes | Función que aplica las rutas de las simulaciones seleccionadas a los objetos.
+		-----------------------------------------------------------------------------------------			
+		fn applySimulationRoutes =
+		(
+			--Obtengo todos los fumefx del asset en cuestión
+			_ffxNodes = for i=1 to selectedFxAsset.nodes.count where classof selectedFxAsset.nodes[i] == FumeFX collect selectedFxAsset.nodes[i]
+			
+			--Creo un string para almacenar la ruta final que vamos a usar.
+			_path = ""
+			
+			--Me creo un array de errores.
+			_notFoundFiles = #()
+			
+			--Iremos viendo los tipos de archivo de simulación y sacaremos la ruta del que proceda (de asset,de secuencia o elegido por el usuario)
+			if chkFFXAssetLevels.checked then
+			(
+				--Tendremos en cuenta la calidad
+				if rdoFFXAssetLevels.state == 1 then
+					applyFFXSimulationPath _ffxNodes (getFFXAssetSimulationPath selectedFxAsset quality:#low basepath:(lb.nc.swapUnit "\\\\lbdata002\\z\\simulation\\" projectUnit))
+				else if rdoFFXAssetLevels.state == 3 then
+					applyFFXSimulationPath _ffxNodes (getFFXAssetSimulationPath selectedFxAsset quality:#high basepath:(lb.nc.swapUnit "\\\\lbdata002\\z\\simulation\\" projectUnit))
+				--Pongo la de medio al final porque es la que hay por defecto.
+				else
+					applyFFXSimulationPath _ffxNodes (getFFXAssetSimulationPath selectedFxAsset quality:#medium basepath:(lb.nc.swapUnit "\\\\lbdata002\\z\\simulation\\" projectUnit))
+			)
+			--Si se trata de la simulación de una secuencia
+			else if chkFFXSequenceLevels.checked then
+			(
+				_path = getFFXSequenceSimulationPath basepath:(lb.nc.swapUnit "\\\\lbdata002\\z\\simulation\\" projectUnit)
+				
+				--Si no hemos podido hallar la ruta es que el archivo no es de secuencia asi que pondremos el estado de simulación por defecto.
+				if _path == "" then
+				(
+					messageBox "Current scene is not a sequence file, path not applied."
+					forceDefaultFFXState()
+				)
+				--Si es una ruta válida
+				else
+				(
+					--La aplicamos
+					applyFFXSimulationPath _ffxNodes _path
+				)
+			)
+			--Si se trata de una simulación seleccionada por el usuario
+			else
+			(
+				if edtFFXCustomLevels.text != "" and edtFFXCustomLevels.text != undefined then
+					applyFFXSimulationPath _ffxNodes edtFFXCustomLevels.text
+				else
+					messageBox "Path is invalid or empty, not applied."
+			)
+		)		
+
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+			_id = ((parent.className + "_" + (substituteString parent.rollMain.name "Def" "")) as name)
+			callbacks.addScript #selectionSetChanged "lb.assetManager.rollFxDetail.updateFxUI()" id:_id
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+			_id = ((parent.className + "_" + (substituteString parent.rollMain.name "Def" "")) as name)
+			callbacks.removescripts id:_id
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollFxDetailDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollFxDetailDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--lb.xml.setAttribute parent.cfgFile ("rollExample1/cateagory") "paramName" "paramValue"
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			--_param = (lb.xml.getAttribute parent.cfgFile ("rollExample1/category") "paramName") as <value type>
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al realizar un cambio en el control
+		--@control: radioButton | rdoFFXAssetLevels | Cambia las rutas de simulación entre low, medium y high en los controles de simulaciones de asset.
+		------------------------------------------------	
+		on rdoFFXAssetLevels changed arg do
+		(
+			--Obtengo todos los fumefx del asset en cuestión
+			_ffxNodes = for i=1 to selectedFxAsset.nodes.count where classof selectedFxAsset.nodes[i] == FumeFX collect selectedFxAsset.nodes[i]
+			
+			case arg of
+			(
+				1:
+				(
+					applyFFXSimulationPath _ffxNodes (getFFXAssetSimulationPath selectedFxAsset quality:#low basepath:(lb.nc.swapUnit "\\\\lbdata002\\z\\simulation\\" projectUnit))
+				)
+				3:
+				(
+					applyFFXSimulationPath _ffxNodes (getFFXAssetSimulationPath selectedFxAsset quality:#high basepath:(lb.nc.swapUnit "\\\\lbdata002\\z\\simulation\\" projectUnit))
+				)
+				default:
+				(
+					applyFFXSimulationPath _ffxNodes (getFFXAssetSimulationPath selectedFxAsset quality:#medium basepath:(lb.nc.swapUnit "\\\\lbdata002\\z\\simulation\\" projectUnit))
+				)
+			)
+		)
+		
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al presionar el boton.
+		--@control: button | btnFFXRunSimulation | Recalcula las simulaciones en la ruta actual del asset.
+		------------------------------------------------			
+		on btnFFXRunSimulation pressed do
+		(
+			--Obtengo todos los fumefx del asset en cuestión
+			_ffxNodes = for i=1 to selectedFxAsset.nodes.count where classof selectedFxAsset.nodes[i] == FumeFX collect selectedFxAsset.nodes[i]
+			
+			--Sacamos todos los particle flow sources para modificarles los valores.
+			for i=1 to _ffxNodes.count do 
+			(
+				_ffxNodes[i].runSimulation 0
+			)
+		)
+		
+		------------------------------------------------
+		--@event: entered | Evento que se lanza al interactuar con el control.
+		--@control: spinner | spnFFXPlayFrom | Evento que cambia el valor del spinner de inicio de simulacion de FFX para todos los particle flow sources.
+		------------------------------------------------				
+		on spnFFXPlayFrom entered do
+		(
+			--Obtengo todos los fumefx del asset en cuestión
+			_ffxNodes = for i=1 to selectedFxAsset.nodes.count where classof selectedFxAsset.nodes[i] == FumeFX collect selectedFxAsset.nodes[i]
+			--Sacamos todos los particle flow sources para modificarles los valores.
+			for i=1 to _ffxNodes.count do 
+			(
+				_ffxNodes[i].PlayFrom = spnFFXPlayFrom.value
+			)
+		)
+	
+		------------------------------------------------
+		--@event: buttonup | Evento que se lanza al dejar de pulsar el botón del mouse.
+		--@control: spinner | spnFFXPlayFrom |  Evento que cambia el valor del spinner de inicio de simulacion de FFX para todos los particle flow sources.
+		------------------------------------------------			
+		on spnFFXPlayFrom buttonup arg do
+		(
+			if not arg then
+			(
+				--Obtengo todos los fumefx del asset en cuestión
+				_ffxNodes = for i=1 to selectedFxAsset.nodes.count where classof selectedFxAsset.nodes[i] == FumeFX collect selectedFxAsset.nodes[i]
+				--Sacamos todos los particle flow sources para modificarles los valores.
+				for i=1 to _ffxNodes.count do 
+				(
+					_ffxNodes[i].PlayFrom = spnFFXPlayFrom.value
+				)
+			)
+		)
+		
+		
+		------------------------------------------------
+		--@event: entered | Evento que se lanza al interactuar con el control.
+		--@control: spinner | spnFFXPlayFrom |  Evento que cambia el valor del spinner de fin de simulacion de FFX para todos los particle flow sources.
+		------------------------------------------------				
+		on spnFFXPlayTo entered do
+		(
+			--Obtengo todos los fumefx del asset en cuestión
+			_ffxNodes = for i=1 to selectedFxAsset.nodes.count where classof selectedFxAsset.nodes[i] == FumeFX collect selectedFxAsset.nodes[i]
+			--Sacamos todos los particle flow sources para modificarles los valores.
+			for i=1 to _ffxNodes.count do 
+			(
+				_ffxNodes[i].PlayTo = spnFFXPlayTo.value
+			)
+		)
+		
+		
+		------------------------------------------------
+		--@event: buttonup | Evento que se lanza al dejar de pulsar el botón del mouse.
+		--@control: spinner | spnFFXPlayFrom |  Evento que cambia el valor del spinner de fin de simulacion de FFX para todos los particle flow sources.
+		------------------------------------------------
+		on spnFFXPlayTo buttonup arg do
+		(
+			if not arg then
+			(
+				--Obtengo todos los fumefx del asset en cuestión
+				_ffxNodes = for i=1 to selectedFxAsset.nodes.count where classof selectedFxAsset.nodes[i] == FumeFX collect selectedFxAsset.nodes[i]
+				--Sacamos todos los particle flow sources para modificarles los valores.
+				for i=1 to _ffxNodes.count do 
+				(
+					_ffxNodes[i].PlayTo = spnFFXPlayTo.value
+				)
+			)
+		)
+		
+		------------------------------------------------
+		--@event: entered | Evento que se lanza al interactuar con el control.
+		--@control: spinner | spnFFXOffset |  Evento que cambia el valor del spinner de offset de simulacion de FFX para todos los particle flow sources.
+		------------------------------------------------
+
+		on spnFFXOffset entered do
+		(
+			--Obtengo todos los fumefx del asset en cuestión
+			_ffxNodes = for i=1 to selectedFxAsset.nodes.count where classof selectedFxAsset.nodes[i] == FumeFX collect selectedFxAsset.nodes[i]
+			--Sacamos todos los particle flow sources para modificarles los valores.
+			for i=1 to _ffxNodes.count do 
+			(
+				_ffxNodes[i].Offset = spnFFXOffset.value
+			)
+		)
+
+		------------------------------------------------
+		--@event: buttonup | Evento que se lanza al dejar de pulsar el botón del mouse.
+		--@control: spinner | spnFFXOffset |  Evento que cambia el valor del spinner de offset de simulacion de FFX para todos los particle flow sources.
+		------------------------------------------------			
+		on spnFFXOffset buttonup arg do
+		(
+			if not arg then
+			(
+				--Obtengo todos los fumefx del asset en cuestión
+				_ffxNodes = for i=1 to selectedFxAsset.nodes.count where classof selectedFxAsset.nodes[i] == FumeFX collect selectedFxAsset.nodes[i]
+				--Sacamos todos los particle flow sources para modificarles los valores.
+				for i=1 to _ffxNodes.count do 
+				(
+					_ffxNodes[i].Offset = spnFFXOffset.value
+				)
+			)
+		)
+		
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al presionar el boton.
+		--@control: button | btnOpenEnvDialog | Abre la ventana de environment.
+		------------------------------------------------			
+		on btnOpenEnvDialog pressed do
+		(
+			--Si lo hemos marcado, aplicaremos las simulaciones de los assets de fx.
+			if  not envEffectsDialog.isOpen() then
+				actionMan.executeAction 0 "40029"
+		)
+		
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al realizar un cambio en el checkButton
+		--@control: chekbutton | chkFFXAssetLevels | Se aplica la configuración de asset para FFX i se aplican las rutas a los objetos.
+		------------------------------------------------			
+		on chkFFXAssetLevels changed arg do
+		(
+			--Si lo hemos marcado, aplicaremos las simulaciones de los assets de fx.
+			if arg then
+			(
+				--Ponemos la opción #asset
+				activateFFXOption #asset
+				--Aplicaremos las rutas que correspondan
+				applySimulationRoutes()
+			)
+			else
+				chkFFXAssetLevels.checked = true
+		)
+		
+		
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al realizar un cambio en el checkButton
+		--@control: chekbutton | chkFFXSequenceLevels | Se aplica la configuración de secuencia para FFX i se aplican las rutas a los objetos.
+		------------------------------------------------		
+		on chkFFXSequenceLevels changed arg do
+		(
+			--Si lo hemos marcado, aplicaremos las simulaciones de los assets de fx.
+			if arg then
+			(
+				--Ponemos la opción #sequence
+				activateFFXOption #sequence
+				--Aplicaremos las rutas que correspondan
+				applySimulationRoutes()
+			)
+			else
+				chkFFXSequenceLevels.checked = true
+		)
+		
+		
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al realizar un cambio en el checkButton
+		--@control: chekbutton | chkFFXCustomLevels | Se aplica una configuración custom para FFX i se aplican las rutas a los objetos.
+		------------------------------------------------		
+		on chkFFXCustomLevels changed arg do
+		(
+			--Si lo hemos marcado, aplicaremos las simulaciones de los assets de fx.
+			if arg then
+				--Ponemos la opcion de custom en los controles
+				activateFFXOption #custom
+			else
+				chkFFXCustomLevels.checked = true
+		)
+		
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al presionar el boton
+		--@control: button | btnFFXCustomLevels | Se aplica una configuración custom para FFX i se aplican las rutas a los objetos.
+		------------------------------------------------		
+		on btnFFXCustomLevels pressed do
+		(
+			_path = getSavePath "Select Custom Simulation Save Path" initialDir:(lb.nc.swapUnit "\\\\lbdata002\\z\\simulation" projectUnit)
+			
+			if _path == undefined then
+				edtFFXCustomLevels.text = ""
+			else
+			(
+				edtFFXCustomLevels.text = _path + "\\"
+			)
+			
+			--Aplicaremos las rutas que correspondan
+			applySimulationRoutes()
+		)
+		
+		------------------------------------------------
+		--@event: entered | Evento que se lanza al entrar los valores del control por teclado.
+		--@control: spinner | spnVisualizationQuantity | Evento de cambiar el valor del spinner visualization de Particle Flow para los assets seleccionados.
+		------------------------------------------------			
+		on spnVisualizationQuantity entered do
+		(
+			--Sacamos todos los particle flow sources para modificarles los valores.
+			for i=1 to selectedFxAsset.nodes.count where classof selectedFxAsset.nodes[i] == PF_Source do 
+			(
+				selectedFxAsset.nodes[i].Quantity_Viewport = spnVisualizationQuantity.value
+			)
+		)
+		
+		------------------------------------------------
+		--@event: buttonup | Evento que se lanza al dejar de pulsar el boton del mouse.
+		--@control: spinner | spnVisualizationQuantity | Evento que modifica el parámetro Quantity_Viewport de los assets seleccionados.
+		------------------------------------------------			
+		on spnVisualizationQuantity buttonup arg do
+		(
+			if not arg then
+			(
+				--Sacamos todos los particle flow sources para modificarles los valores.
+				for i=1 to selectedFxAsset.nodes.count where classof selectedFxAsset.nodes[i] == PF_Source do 
+				(
+					selectedFxAsset.nodes[i].Quantity_Viewport = spnVisualizationQuantity.value
+				)
+			)
+		)
+		
+		------------------------------------------------
+		--@event: entered | Evento que se lanza al dejar de pulsar el boton del mouse.
+		--@control: spinner | spnRenderQuantity | Evento de cambiar el valor del spinner render de Particle Flow por teclado para los assets seleccionados.
+		------------------------------------------------					
+		on spnRenderQuantity entered do
+		(
+			--Sacamos todos los particle flow sources para modificarles los valores.
+			for i=1 to selectedFxAsset.nodes.count where classof selectedFxAsset.nodes[i] == PF_Source do 
+			(
+				selectedFxAsset.nodes[i].Quantity_Render = spnRenderQuantity.value
+			)
+		)
+		
+		
+		------------------------------------------------
+		--@event: buttonup | Evento que se lanza al dejar de pulsar el boton del mouse.
+		--@control: spinner | spnRenderQuantity | Evento de cambiar el valor del spinner render de Particle Flow para los assets seleccionados.
+		------------------------------------------------	
+		on spnRenderQuantity buttonup arg do
+		(
+			if not arg then
+			(
+				--Sacamos todos los particle flow sources para modificarles los valores.
+				for i=1 to selectedFxAsset.nodes.count where classof selectedFxAsset.nodes[i] == PF_Source do 
+				(
+					selectedFxAsset.nodes[i].Quantity_Render = spnRenderQuantity.value
+				)
+			)
+		)
+		
+		------------------------------------------------
+		--@event: selected | Evento que se lanza al seleccionar un elemento del dropdownList
+		--@control: dropDownList | ddlDisplayType | Cambia el valor del dropdownlist tipo de visualización de Particle Flow para los assets seleccionados.
+		------------------------------------------------		
+		on ddlDisplayType selected arg do
+		(
+			--Sacamos todos los particle flow sources para modificarles los valores.
+			for i=1 to selectedFxAsset.nodes.count where classof selectedFxAsset.nodes[i] == DisplayParticles do 
+			(
+				selectedFxAsset.nodes[i].type = ddlDisplayType.selection - 1
+			)
+		)
+		
+		------------------------------------------------
+		--@event: selected | Evento que se lanza al seleccionar un elemento del dropdownList
+		--@control: dropDownList | ddlAFDisplayType | Cambia el valor del dropdownlist tipo de visualización de Afterburn para los assets seleccionados.
+		------------------------------------------------			
+		on ddlAFDisplayType selected arg do
+		(
+			--Primero obtendremos el atmosférico(o atmosfericos) del asset seleccionado.
+			_atmospherics = #()
+			
+			for i=1 to numAtmospherics where classof (getAtmospheric i) == AfterBurn do
+			(
+				if matchPattern (getAtmospheric i).name pattern: (selectedFxAsset.fullname + "_*") then
+					append _atmospherics (getAtmospheric i)
+			)
+			
+			--Sacamos todos los particle flow sources para modificarles los valores.
+			for i=1 to _atmospherics.count do 
+			(
+				_atmospherics.VptGeometryType = ddlAFDisplayType.selection - 2
+			)
+		)
+
+		------------------------------------------------
+		--@event: rolledUp | Evento que se lanza al desplegar el rollout.
+		--@control: rollout | rollFxDetailDef | Al desplegar el rollout ajusta la altura de la interfaz al contenido.
+		------------------------------------------------			
+		on rollFxDetailDef rolledUp state do 
+		(
+			parent.heightAdjust 6
+		)	
+
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollFxDetailDef | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollFxDetailDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollFxDetailDef | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollFxDetailDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+			updateFxUI()
+			if parent.rollMain != undefined then resize [parent.rollMain.width, parent.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollFxDetailDef | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollFxDetailDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+		)
+	)--rollFxDetailDef
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollHairDef | Contiene la herramienta rollHairDef para los parametros de visualización de pelo en viewport, subrollout encontrado en la pestaña de Hair.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollHairDef "Hair"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) 		--@var: string | parent | Herramienta o rolllout del que depende y/o contiene el rollout actual		
+		
+		local minRollWidth = 180																--@var: integer | minRollWidth | Minimun tool width.
+		local minRollHeight = 30																--@var: integer | minRollHeight | Minimun tool height.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+
+		local iconpath = if (maxVersion())[1] >= 15000 then (getDir #maxRoot) + "UI_ln\\Icons\\" else (getDir #ui) + "/icons/"		--@var: string | iconpath | ruta de los iconos de Max.
+
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		
+		groupBox grpHairVisModes "Hair Visualization Modes" pos:[5,0] width:200 height:103
+		button btnVMhair "Hr" pos:[10,17] width:25 height:20
+		button btnVMskinHair "S+Hr" pos:[35,17] width:35 height:20
+		button btnVMskinHairVideo "S+Hr+Video" pos:[75,17] width:70 height:20
+		dropdownlist ddlVMHairVideoPercent "" pos:[145,17] width:55 height:20 items:#("10%", "20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "100%")
+		
+		button btnhairModifiersEnable "" pos:[150,43] width:25 height:25 images:#(iconpath + "HairAndFur_24i.bmp", undefined, 30, 7, 7, 7, 7, true) tooltip:"Enable asset/s hair modifiers"
+		button btnhairModifiersOffInViewport "" pos:[175,43] width:25 height:25 images:#(iconpath + "HairAndFur_24i.bmp", undefined, 30, 6, 6, 6, 6, true) tooltip:"Off in viewport asset/s hair modifiers"
+
+		button btnVMhairHair "Display Hair" pos:[10,43] width:65 height:25 tooltip:"Display assets hair"
+		button btnVMhairMesh "Display Mesh" pos:[75,43] width:70 height:25 tooltip:"Display assets hair mesh"
+
+		button btnVMhideScalps "Hide Scalps" pos:[10,73] width:65 height:25 tooltip:"Display assets hair"
+		button btnVMshowscalps "Show Scalps" pos:[75,73] width:70 height:25 tooltip:"Display assets hair mesh"
+
+		button btnnVMshowDrv "Show Drv" pos:[150,73] width:50 height:25 tooltip:"Display assets drv"
+
+		--button btnhairModifierPolyStripsDelete "" pos:[10,43] width:25 height:25 images:#(iconpath + "HairAndFur_24i.bmp", undefined, 30, 7, 7, 7, 7, true) tooltip:"Enable asset/s hair modifiers"
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		------------------------------------------------
+
+		-----------------------------------------------------------------------------------
+		--@fn: undefined | initUI | Inicia los valores de la UI
+		-----------------------------------------------------------------------------------
+		fn initUI =
+		(
+			ddlVMHairVideoPercent.selection = 10
+		)
+
+		-----------------------------------------------------------------------------------
+		--@fn: array{struct} | getAssetsToWork | Consulta los assets con los que trabajar segun la opcion seleccionada en la interfaz.
+		--@returns: array{struct} | _assetsToWork | Los assets consultados.
+		-----------------------------------------------------------------------------------		
+		fn getAssetsToWork =
+		(
+			_assetsToWork = #() --array para almacenar los assets que se pondran en el modo de visualizacion
+			_assetsToWork = lb.assetManager.getSelectedAssets()
+			_assetsToWork --devuelve los assets con los que trabajar
+		)
+
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollHairDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollHairDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--lb.xml.setAttribute parent.cfgFile ("rollExample1/cateagory") "paramName" "paramValue"
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			--_param = (lb.xml.getAttribute parent.cfgFile ("rollExample1/category") "paramName") as <value type>
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al apretar el boton
+		--@control: button | btnVMhair | cambia los assets de entre los assets to work a modo hair
+		------------------------------------------------		
+		on btnVMhair pressed do
+		(
+			_assetsToWork = getAssetsToWork() --obtiene los assets con los que trabajar
+			
+			--Activamos la pestaña de crear para que vaya más fluido
+			max create mode
+			
+			setWaitCursor()			
+			disableSceneRedraw()
+			suspendEditing()
+				
+			--pone cada asset en el modo de visualizacion cloth
+			with undo off			
+				for ast in _assetsToWork do lb.asset.setAssetHairMode ast
+				
+			resumeEditing()
+			enableSceneRedraw()
+			completeRedraw()
+			setArrowCursor()
+				
+			lb.assetManager.rollAdvanced.fillLayerControls()
+		)
+		
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al apretar el boton
+		--@control: button | btnVMskinHair | cambia los assets de entre los assets to work a modo skin + hair
+		------------------------------------------------			
+		on btnVMskinHair pressed do
+		(
+			_assetsToWork = getAssetsToWork() --obtiene los assets con los que trabajar
+			
+			--Activamos la pestaña de crear para que vaya más fluido
+			max create mode
+			
+			setWaitCursor()			
+			disableSceneRedraw()
+			suspendEditing()
+				
+			--pone cada asset en el modo de visualizacion skin + cloth
+			with undo off
+				for ast in _assetsToWork do lb.asset.setAssetSkinHairMode ast
+				
+			resumeEditing()
+			enableSceneRedraw()
+			completeRedraw()
+			setArrowCursor()
+				
+			lb.assetManager.rollAdvanced.fillLayerControls()
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al apretar el boton
+		--@control: button | btnVMskinHairVideo | cambia los assets de entre los assets to work a modo skin + hair + video
+		------------------------------------------------		
+		on btnVMskinHairVideo pressed do
+		(
+			_assetsToWork = getAssetsToWork() --obtiene los assets con los que trabajar
+			
+			--Activamos la pestaña de crear para que vaya más fluido
+			max create mode
+			
+			setWaitCursor()			
+			disableSceneRedraw()
+			suspendEditing()
+				
+			--pone cada asset en el modo de visualizacion skin + cloth
+			with undo off
+				for ast in _assetsToWork do lb.asset.setAssetSkinHairVideoMode ast hairGeneratePercent:(ddlVMHairVideoPercent.selection*10)
+				
+			resumeEditing()
+			enableSceneRedraw()
+			completeRedraw()
+			setArrowCursor()
+				
+			lb.assetManager.rollAdvanced.fillLayerControls()
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al apretar el boton
+		--@control: button | btnVMhairHair | cambia los assets de entre los assets to work para que muestre los pelos en modo pelo
+		------------------------------------------------			
+		on btnVMhairHair pressed do
+		(
+			_assetsToWork = getAssetsToWork() --obtiene los assets con los que trabajar
+			
+			--Activamos la pestaña de crear para que vaya más fluido
+			max create mode
+			
+			setWaitCursor()			
+			disableSceneRedraw()
+			suspendEditing()
+				
+			--pone cada asset en el modo de visualizacion skin + cloth
+			with undo off
+			(
+				for ast in _assetsToWork do
+				(
+					for _node in ast.hairNodesAll do
+					(
+						_nodeNamePart5 = lb.nc.getNamePart _node.name 5
+
+						if MatchPattern _nodeNamePart5 pattern:lb.nc.NC_HAIR_scalpPattern then
+						(
+							for m in _node.modifiers do
+							(
+								if classof m == Hair_Display then
+								(
+									m.displayMode = 0
+									m.viewportSteps = 1
+								)
+							)--for
+						)--if
+					)--for
+				)--for
+			)
+				
+			resumeEditing()
+			enableSceneRedraw()
+			completeRedraw()
+			setArrowCursor()
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al apretar el boton
+		--@control: button | btnVMhairMesh | cambia los assets de entre los assets to work para que muestre los pelos en modo geometria
+		------------------------------------------------		
+		on btnVMhairMesh pressed do
+		(
+			_assetsToWork = getAssetsToWork() --obtiene los assets con los que trabajar
+			
+			--Activamos la pestaña de crear para que vaya más fluido
+			max create mode
+			
+			setWaitCursor()			
+			disableSceneRedraw()
+			suspendEditing()
+				
+			--pone cada asset en el modo de visualizacion skin + cloth
+			with undo off
+			(
+				for ast in _assetsToWork do
+				(
+					for _node in ast.hairNodesAll do
+					(
+						_nodeNamePart5 = lb.nc.getNamePart _node.name 5
+
+						if MatchPattern _nodeNamePart5 pattern:lb.nc.NC_HAIR_scalpPattern then
+						(
+							for m in _node.modifiers do
+							(
+								if classof m == Hair_Display then
+								(
+									m.displayMode = 1
+								)
+							)--for
+						)--if
+					)--for
+				)--for
+			)
+				
+			resumeEditing()
+			enableSceneRedraw()
+			completeRedraw()
+			setArrowCursor()
+		)
+		
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al apretar el boton
+		--@control: button | btnVMshowscalps | muestra los root de los scalps
+		------------------------------------------------		
+		on btnVMshowscalps pressed do
+		(
+			_assetsToWork = getAssetsToWork() --obtiene los assets con los que trabajar
+			
+			--Activamos la pestaña de crear para que vaya más fluido
+			max create mode
+			
+			setWaitCursor()			
+			disableSceneRedraw()
+			suspendEditing()
+				
+			--pone cada asset en el modo de visualizacion skin + cloth
+			with undo off
+			(
+				for ast in _assetsToWork do
+				(
+					for _node in ast.hairNodesAll do
+					(
+						_nodeNamePart5 = lb.nc.getNamePart _node.name 5
+
+						if MatchPattern _nodeNamePart5 pattern:lb.nc.NC_HAIR_scalpPattern then
+						(
+							for m in _node.modifiers do
+							(
+								if classof m == Hair_Display then
+								(
+									m.hideRootObjectInViewports = false
+								)
+							)--for
+						)--if
+					)--for
+				)--for
+			)
+				
+			resumeEditing()
+			enableSceneRedraw()
+			completeRedraw()
+			setArrowCursor()
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al apretar el boton
+		--@control: button | btnnVMshowDrv | Oculta el draft de pelo y muestra el Drv
+		------------------------------------------------					
+		on btnnVMshowDrv pressed do 
+		(
+			setWaitCursor()			
+			disableSceneRedraw()
+			suspendEditing()
+
+			_assetsToWork = getAssetsToWork() 
+			for ast in _assetsToWork do
+			(
+				for _node in ast.meshNodesAll do
+				(
+					_nodeNameParts = FilterString _node.name "_"
+					if matchpattern _nodeNameParts[5] pattern: lb.nc.NC_HAIR_draftPattern do 
+					(
+						_node.isHidden = true
+					)
+					if matchpattern _nodeNameParts[5] pattern: lb.nc.NC_HAIR_drvPattern do 
+					(
+						_node.isHidden = false
+						_node.isFrozen = false
+					)
+				)
+			)
+
+			resumeEditing()
+			enableSceneRedraw()
+			completeRedraw()
+			setArrowCursor()
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al apretar el boton
+		--@control: button | btnVMhideScalps | oculta los root de los scalps
+		------------------------------------------------			
+		on btnVMhideScalps pressed do
+		(
+			_assetsToWork = getAssetsToWork() --obtiene los assets con los que trabajar
+			
+			--Activamos la pestaña de crear para que vaya más fluido
+			max create mode
+			
+			setWaitCursor()			
+			disableSceneRedraw()
+			suspendEditing()
+				
+			--pone cada asset en el modo de visualizacion skin + cloth
+			with undo off
+			(
+				for ast in _assetsToWork do
+				(
+					for _node in ast.hairNodesAll do
+					(
+						_nodeNamePart5 = lb.nc.getNamePart _node.name 5
+
+						if MatchPattern _nodeNamePart5 pattern:lb.nc.NC_HAIR_scalpPattern then
+						(
+							for m in _node.modifiers do
+							(
+								if classof m == Hair_Display then
+								(
+									m.hideRootObjectInViewports = true
+								)
+							)--for
+						)--if
+					)--for
+				)--for
+			)
+				
+			resumeEditing()
+			enableSceneRedraw()
+			completeRedraw()
+			setArrowCursor()
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al apretar el boton
+		--@control: button | btnhairModifiersEnable | activa los modificadores de hair
+		------------------------------------------------		
+		on btnhairModifiersEnable pressed do
+		(
+			_hairFarmClasses = #(HairStyle_Uncomb, HairTo_SplinesSpacewarpModifier, HairTo_PolySpacewarpModifier, HairTo_InstancesSpacewarpModifier, HairStyle_PushOutSpacewarpModifier, HairStyle_Forces, Hair_Display, HairTo_Splines, HairTo_Poly, HairTo_Instances, HairStyle_Wisps, HairStyle_Spiral, HairStyle_Scale, HairStyle_PushOut, HairStyle_Length, HairStyle_Kink, HairStyle_Gravity, HairStyle_Frizz, HairStyle_Displace, HairStyle_Curves, HairStyle_Cluster, HairMesh_to_Poly, HairMesh_Smooth, HairMesh_Sim, HairMesh_Mirror, HairMesh_Link, HairMesh_Extrude, HairMesh_Edit, HairMesh_Brush, Hair_Generate, Hair_Direction_on_Poly)
+			
+			_sel = getCurrentSelection()
+			if _sel.count != 0 then
+			(
+				for o in _sel do 
+					for m in o.modifiers where findItem _hairFarmClasses (classof m) != 0 do
+					(
+						m.enabled = true
+						m.enabledInViews = true
+					)
+			)
+			else
+			(
+				_assetsToWork = getAssetsToWork() --obtiene los assets con los que trabajar
+				for ast in _assetsToWork do
+					for o in ast.hairNodesAll do
+						for m in o.modifiers where findItem _hairFarmClasses (classof m) != 0 do
+						(
+							m.enabled = true
+							m.enabledInViews = true
+						)
+			)
+		)
+		
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al apretar el boton
+		--@control: button | btnhairModifiersOffInViewport | pone en off in viewport los modificadores de hair
+		------------------------------------------------			
+		on btnhairModifiersOffInViewport pressed do
+		(
+			_hairFarmClasses = #(HairStyle_Uncomb, HairTo_SplinesSpacewarpModifier, HairTo_PolySpacewarpModifier, HairTo_InstancesSpacewarpModifier, HairStyle_PushOutSpacewarpModifier, HairStyle_Forces, Hair_Display, HairTo_Splines, HairTo_Poly, HairTo_Instances, HairStyle_Wisps, HairStyle_Spiral, HairStyle_Scale, HairStyle_PushOut, HairStyle_Length, HairStyle_Kink, HairStyle_Gravity, HairStyle_Frizz, HairStyle_Displace, HairStyle_Curves, HairStyle_Cluster, HairMesh_to_Poly, HairMesh_Smooth, HairMesh_Sim, HairMesh_Mirror, HairMesh_Link, HairMesh_Extrude, HairMesh_Edit, HairMesh_Brush, Hair_Generate, Hair_Direction_on_Poly)
+			
+			_sel = getCurrentSelection()
+			if _sel.count != 0 then
+			(
+				for o in _sel do 
+					for m in o.modifiers where findItem _hairFarmClasses (classof m) != 0 do
+					(
+						m.enabled = true
+						m.enabledInViews = false
+					)
+			)
+			else
+			(
+				_assetsToWork = getAssetsToWork() --obtiene los assets con los que trabajar
+				for ast in _assetsToWork do
+					for o in ast.hairNodesAll do
+						for m in o.modifiers where findItem _hairFarmClasses (classof m) != 0 do
+						(
+							m.enabled = true
+							m.enabledInViews = false
+						)
+			)
+		)
+
+		------------------------------------------------
+		--@event: rolledUp | Evento que se lanza desplegar el rollout
+		--@control: rollout | rollHairDef | Ajusta la altura del rollout para que englobe su contenido
+		------------------------------------------------
+		on rollHairDef rolledUp state do 
+		(
+			parent.heightAdjust 7
+		)
+
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollHairDef | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollHairDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollHairDef | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollHairDef open do
+		(
+			loadSettings()
+			initUI()
+			createSceneEvents() --crea los callbacks
+			if parent.rollMain != undefined then resize [parent.rollMain.width, parent.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollHairDef | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollHairDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+		)
+	)--rollHairDef
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollHairDef | Contiene la herramienta rollHairImportDef para la importación de pelo en escena, subrollout encontrado en la pesataña de hair.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollHairImportDef "Hair Import Anim"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) 		--@var: string | parent | Herramienta o rolllout del que depende y/o contiene el rollout actual		
+		
+		local minRollWidth = 180																--@var: integer | minRollWidth | Minimun tool width.
+		local minRollHeight = 30																--@var: integer | minRollHeight | Minimun tool height.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+
+		local iconpath = if (maxVersion())[1] >= 15000 then (getDir #maxRoot) + "UI_ln\\Icons\\" else (getDir #ui) + "/icons/"		--@var: string | iconpath | ruta de los iconos de Max.
+
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		
+		checkbutton chkOperateOnSelAssets "Sel Assets" pos:[5,0] width:98 height:20 checked:true
+		checkbutton ckbOperateOnSelection "Sel Objects" pos:[103,0] width:98 height:20
+		button btnImportHair "Import Selected Asset/s Hair" pos:[5,25] width:195 height:20
+		button btnImportDraft "Import Selected Asset/s Draft" pos:[5,50] width:195 height:20
+		checkBox chbPromptLoadHair "Load From File" pos:[60,75] checked:false
+		button btnDeleteHair "Delete Selected Asset/s Hair" pos:[5,100] width:195 height:20
+
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollHairImportDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollHairImportDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--lb.xml.setAttribute parent.cfgFile ("rollExample1/cateagory") "paramName" "paramValue"
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			--_param = (lb.xml.getAttribute parent.cfgFile ("rollExample1/category") "paramName") as <value type>
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del chekbutton
+		--@control: checkbutton | ckbOperateOnSelection | Configura el estado del control y realiza la configuración inversa para ckbOperateOnSelection
+		------------------------------------------------			
+		on chkOperateOnSelAssets changed state do
+		(
+			chkOperateOnSelAssets.checked = state
+			ckbOperateOnSelection.checked = not state
+		)	
+		
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del chekbutton
+		--@control: checkbutton | ckbOperateOnSelection | Configura el estado del control y realiza la configuración inversa para chkOperateOnSelAssets
+		------------------------------------------------		
+		on ckbOperateOnSelection changed state do
+		(
+			ckbOperateOnSelection.checked = state
+			chkOperateOnSelAssets.checked = not state
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton
+		--@control: button | btnImportHair | importa el pelo de los assets seleccionados en el listado
+		------------------------------------------------		
+		on btnImportHair pressed do
+		(
+			if lb.asset.listedAssets.count != 0 then
+			(
+ 				_assetsToUse = #()
+
+				if chkOperateOnSelAssets.checked then --almacena solo los assets seleccionados
+				(
+					_assetsToUse = lb.assetManager.getSelectedAssets()
+				)
+				else if ckbOperateOnSelection.checked then --busca los assets de los objetos seleccionados y almacena un array de arrys de nodos y otro de nodos a renombrar
+				(
+					selNodes = getCurrentSelection()
+					_assetsToUse = lb.asset.getAssetsFromNodes selNodes --mira que assets son los dueños de las piezas seleccionadas					
+				)--if
+
+				_loadedCount = 0
+				_notLoadedCount = 0
+
+				
+				--averiguar si hay pelo ya cargado para alguno de los assets
+				_haveHairLoaded = false
+				for _asset in _assetsToUse where lb.asset.hasHairAsset _asset do _haveHairLoaded = true
+				
+				_proccess = true
+				if _haveHairLoaded then _proccess = lb.message.show "Some selected assets have hair loaded yet. Do you want to delete hair and load it again?\n\nIf you press NO the process will be canceled." type:#query
+
+				if _proccess then
+				(
+					for _asset in _assetsToUse do
+					(
+						if _haveHairLoaded then lb.asset.removeHairAsset _asset
+						if (not chbPromptLoadHair.state) then 
+						(
+							_success = lb.asset.importHairAsset _asset
+						)
+						else 
+						(
+							_success = lb.asset.importHairAsset _asset _specifyRoute:true
+						)
+						if _success then (_loadedCount +=1) else (_notLoadedCount +=1)
+					)--for
+
+					lb.assetManager.rollMain.resetSceneAssets()
+
+					--mensaje de resultados
+					--_pos = getDialogPos lb.assetManager.rollMain
+					--_pos += [(lb.assetManager.rollMain.width/2 - 150), (lb.assetManager.rollMain.height/2)]
+					lb.message.show ((_loadedCount as string) + " hair assets loaded successfully" + (if _notLoadedCount != 0 then ("\n" + (_notLoadedCount as string) + " hair assets not loaded or not exist") else "")) --pos:_pos size:[300,75]
+				)
+			)
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton
+		--@control: button | btnImportDraft | importa el draft de pelo de los assets seleccionados en el listado
+		------------------------------------------------		
+		on btnImportDraft pressed do
+		(
+			if lb.asset.listedAssets.count != 0 then
+			(
+ 				_assetsToUse = #()
+
+				if chkOperateOnSelAssets.checked then --almacena solo los assets seleccionados
+				(
+					_assetsToUse = lb.assetManager.getSelectedAssets()
+				)
+				else if ckbOperateOnSelection.checked then --busca los assets de los objetos seleccionados y almacena un array de arrys de nodos y otro de nodos a renombrar
+				(
+					selNodes = getCurrentSelection()
+					_assetsToUse = lb.asset.getAssetsFromNodes selNodes --mira que assets son los dueños de las piezas seleccionadas					
+				)--if
+
+				_loadedCount = 0
+				_notLoadedCount = 0
+
+				
+				--averiguar si hay pelo ya cargado para alguno de los assets
+				_haveDraftLoaded = false
+				for _asset in _assetsToUse where lb.asset.hasDraftAsset _asset do _haveDraftLoaded = true
+				
+				_proccess = true
+				if _haveDraftLoaded then _proccess = lb.message.show "Some selected assets have the drafg loaded. Do you want to delete it and load it again?\n\nIf you press NO the process will be canceled." type:#query
+
+				if _proccess then
+				(
+					for _asset in _assetsToUse do
+					(
+						_ref = ""
+
+						if _haveDraftLoaded then _ref = lb.asset.removeDraftAsset _asset
+						else _ref = lb.asset.getPartAssetFolder _asset
+
+						if (not chbPromptLoadHair.state) then 
+						(
+							_success = lb.asset.importDraftAsset _asset _ref
+						)
+						else 
+						(
+							_success = lb.asset.importDraftAsset _asset _ref _specifyRoute:true
+						)			
+						if _success then (_loadedCount +=1) else (_notLoadedCount +=1)			
+
+					)--for
+
+					lb.assetManager.rollMain.resetSceneAssets()
+
+					lb.message.show ((_loadedCount as string) + " draft assets loaded successfully" + (if _notLoadedCount != 0 then ("\n" + (_notLoadedCount as string) + " draft assets not loaded or not exist") else ""))
+				)
+			)
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton
+		--@control: button | btnDeleteHair | elimina el pelo de los assets seleccionados en el listado
+		------------------------------------------------		
+		on btnDeleteHair pressed do
+		(
+			if lb.asset.listedAssets.count != 0 then
+			(
+ 				_assetsToUse = #()
+
+				if chkOperateOnSelAssets.checked then --almacena solo los assets seleccionados
+				(
+					_assetsToUse = lb.assetManager.getSelectedAssets()
+				)
+				else if ckbOperateOnSelection.checked then --busca los assets de los objetos seleccionados y almacena un array de arrys de nodos y otro de nodos a renombrar
+				(
+					selNodes = getCurrentSelection()
+					_assetsToUse = lb.asset.getAssetsFromNodes selNodes --mira que assets son los dueños de las piezas seleccionadas					
+				)--if
+
+				_deletedCount = 0
+				
+				for _asset in _assetsToUse where lb.asset.hasHairAsset _asset do
+				(
+					 lb.asset.removeHairAsset _asset
+					_deletedCount +=1
+				)--for
+
+				lb.assetManager.rollMain.resetSceneAssets()
+
+				--mensaje de resultados
+				--_pos = getDialogPos lb.assetManager.rollMain
+				--_pos += [(lb.assetManager.rollMain.width/2 - 150), (lb.assetManager.rollMain.height/2)]
+				lb.message.show ((_deletedCount as string) + " hair assets deleted successfully") --pos:_pos size:[300,75]				
+			)
+		)
+
+		------------------------------------------------
+		--@event: rolledUp | Evento que se lanza al desplegar el rollout
+		--@control: rollout | rollHairImportDef | Ajusta la altura del rollout para ajustarlo al tamaño del contenido que se está desplegando.
+		------------------------------------------------			
+		on rollHairImportDef rolledUp state do 
+		(
+			parent.heightAdjust 7
+		)
+
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollHairImportDef | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollHairImportDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollHairImportDef | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollHairImportDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+			if parent.rollMain != undefined then resize [parent.rollMain.width, parent.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollHairImportDef | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollHairImportDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+		)
+	)--rollHairImportDef
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollHairDef | Contiene la herramienta rollHairCacheImportDef para la importación de pelo para caché, subrollout encontrado en la pestaña de Hair.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollHairCacheImportDef "Hair Import Cache"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) 			--@var: string | parent | Herramienta o rolllout del que depende y/o contiene el rollout actual		
+		
+		local minRollWidth = 180																	--@var: integer | minRollWidth | Minimun tool width.
+		local minRollHeight = 30																	--@var: integer | minRollHeight | Minimun tool height.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+
+		local iconpath = if (maxVersion())[1] >= 15000 then (getDir #maxRoot) + "UI_ln\\Icons\\" else (getDir #ui) + "/icons/"		--@var: string | iconpath | ruta de los iconos de Max.
+
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		
+		checkbutton chkOperateOnSelAssets "Sel Assets" pos:[5,0] width:98 height:20 checked:true
+		checkbutton ckbOperateOnSelection "Sel Objects" pos:[103,0] width:98 height:20
+		button btnImportHairCache "Import Selected Asset/s Hair" pos:[5,25] width:195 height:20
+		checkBox chbPromptLoadHairCache "Load From File" pos:[60,50] checked:false
+		button btnDeleteHairCache "Delete Selected Asset/s Hair" pos:[5,70] width:195 height:20
+
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollHairImportDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollHairImportDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--lb.xml.setAttribute parent.cfgFile ("rollExample1/cateagory") "paramName" "paramValue"
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			--_param = (lb.xml.getAttribute parent.cfgFile ("rollExample1/category") "paramName") as <value type>
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del chekbutton
+		--@control: checkbutton | chkOperateOnSelAssets | Configura el estado del control y realiza la configuración inversa para ckbOperateOnSelection
+		------------------------------------------------
+		on chkOperateOnSelAssets changed state do
+		(
+			chkOperateOnSelAssets.checked = state
+			ckbOperateOnSelection.checked = not state
+		)	
+		
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del chekbutton
+		--@control: checkbutton | ckbOperateOnSelection | Configura el estado del control y realiza la configuración inversa para chkOperateOnSelAssets
+		------------------------------------------------	
+		on ckbOperateOnSelection changed state do
+		(
+			ckbOperateOnSelection.checked = state
+			chkOperateOnSelAssets.checked = not state
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton.
+		--@control: button | btnImportHairCache | Importa el pelo de los assets seleccionados para archivos de caché
+		------------------------------------------------	
+		on btnImportHairCache pressed do 
+		(
+			process = lb.message.show "Process only available for assets without bones in hair\n DO YOU WANT TO CONTINUE?" type:#query
+			if process do 
+			(
+				if lb.asset.listedAssets.count != 0 then
+				(
+	 				_assetsToUse = #()
+
+					if chkOperateOnSelAssets.checked then --almacena solo los assets seleccionados
+					(
+						_assetsToUse = lb.assetManager.getSelectedAssets()
+					)
+					else if ckbOperateOnSelection.checked then --busca los assets de los objetos seleccionados y almacena un array de arrys de nodos y otro de nodos a renombrar
+					(
+						selNodes = getCurrentSelection()
+						_assetsToUse = lb.asset.getAssetsFromNodes selNodes --mira que assets son los dueños de las piezas seleccionadas					
+					)--if
+
+					_loadedCount = 0
+					_notLoadedCount = 0
+					
+					--averiguar si hay pelo ya cargado para alguno de los assets
+					_haveHairLoaded = false
+					for _asset in _assetsToUse where lb.asset.hasHairAsset _asset do _haveHairLoaded = true
+					
+					_proccess = true
+					if _haveHairLoaded then _proccess = lb.message.show "Some selected assets have hair loaded yet. Do you want to delete hair and load it again?\n\nIf you press NO the process will be canceled." type:#query
+
+					if _proccess then
+					(
+						_success = undefined
+						for _asset in _assetsToUse do
+						(
+							if _haveHairLoaded then lb.asset.removeHairAsset _asset
+							if (not chbPromptLoadHairCache.state) then 
+							(
+								_success = lb.asset.importCacheHairAsset _asset 
+							)
+							else 
+							(
+								_success = lb.asset.importCacheHairAsset _asset _specifyRoute:true
+							)
+						if _success then (_loadedCount +=1) else (_notLoadedCount +=1)	
+						)--for
+						lb.assetManager.rollMain.resetSceneAssets()
+
+						--mensaje de resultados
+						--_pos = getDialogPos lb.assetManager.rollMain
+						--_pos += [(lb.assetManager.rollMain.width/2 - 150), (lb.assetManager.rollMain.height/2)]
+						lb.message.show ((_loadedCount as string) + " hair assets loaded successfully" + (if _notLoadedCount != 0 then ("\n" + (_notLoadedCount as string) + " hair assets not loaded or not exist") else "")) --pos:_pos size:[300,75]
+					)
+				)
+			)
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton.
+		--@control: button | btnDeleteHairCache | elimina el pelo de los assets seleccionados en el listado
+		------------------------------------------------			
+		on btnDeleteHairCache pressed do
+		(
+			if lb.asset.listedAssets.count != 0 then
+			(
+ 				_assetsToUse = #()
+
+				if chkOperateOnSelAssets.checked then --almacena solo los assets seleccionados
+				(
+					_assetsToUse = lb.assetManager.getSelectedAssets()
+				)
+				else if ckbOperateOnSelection.checked then --busca los assets de los objetos seleccionados y almacena un array de arrys de nodos y otro de nodos a renombrar
+				(
+					selNodes = getCurrentSelection()
+					_assetsToUse = lb.asset.getAssetsFromNodes selNodes --mira que assets son los dueños de las piezas seleccionadas					
+				)--if
+
+				_deletedCount = 0
+				
+				for _asset in _assetsToUse where lb.asset.hasHairAsset _asset do
+				(
+					 lb.asset.removeHairAsset _asset
+					_deletedCount +=1
+				)--for
+
+				lb.assetManager.rollMain.resetSceneAssets()
+
+				--mensaje de resultados
+				--_pos = getDialogPos lb.assetManager.rollMain
+				--_pos += [(lb.assetManager.rollMain.width/2 - 150), (lb.assetManager.rollMain.height/2)]
+				lb.message.show ((_deletedCount as string) + " hair assets deleted successfully") --pos:_pos size:[300,75]				
+			)
+		)
+
+		------------------------------------------------
+		--@event: rolledUp | Evento que se lanza al desplegar el rollout
+		--@control: rollout | rollHairCacheImportDef | Ajusta la altura del rollout para ajustarlo al tamaño del contenido que se está desplegando.
+		-------------------------------------------------
+		on rollHairCacheImportDef rolledUp state do 
+		(
+			parent.heightAdjust 7
+		)
+
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollHairCacheImportDef | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollHairCacheImportDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollHairCacheImportDef | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollHairCacheImportDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+			if parent.rollMain != undefined then resize [parent.rollMain.width, parent.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollHairCacheImportDef | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollHairCacheImportDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+		)
+	)--rollHairCacheImportDef
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollHairDef | Contiene la herramienta rollHairExportSimDef para el exportado de simulaciones de pelo, subrollout encontrado en la pestaña de Hair.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollHairExportSimDef "Hair Export Simulation"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) 			--@var: string | parent | Herramienta o rolllout del que depende y/o contiene el rollout actual		
+		
+		local minRollWidth = 180																	--@var: integer | minRollWidth | Minimun tool width.
+		local minRollHeight = 30																	--@var: integer | minRollHeight | Minimun tool height.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+
+		local iconpath = if (maxVersion())[1] >= 15000 then (getDir #maxRoot) + "UI_ln\\Icons\\" else (getDir #ui) + "/icons/"		--@var: string | parent | ruta de los iconos de Max.
+
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		
+		checkbutton chkOperateOnSelAssets "Sel Assets" pos:[5,0] width:98 height:20 checked:true
+		checkbutton ckbOperateOnSelection "Sel Objects" pos:[103,0] width:98 height:20
+		button btnExportHairSim "Export Selected Hair Simulation" pos:[5,25] width:195 height:20
+
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollHairImportDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollHairImportDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--lb.xml.setAttribute parent.cfgFile ("rollExample1/cateagory") "paramName" "paramValue"
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			--_param = (lb.xml.getAttribute parent.cfgFile ("rollExample1/category") "paramName") as <value type>
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del chekbutton
+		--@control: checkbutton | chkOperateOnSelAssets | Configura el estado del control y realiza la configuración inversa para ckbOperateOnSelection
+		------------------------------------------------
+		on chkOperateOnSelAssets changed state do
+		(
+			chkOperateOnSelAssets.checked = state
+			ckbOperateOnSelection.checked = not state
+		)	
+		
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del chekbutton
+		--@control: checkbutton | ckbOperateOnSelection | Configura el estado del control y realiza la configuración inversa para chkOperateOnSelAssets
+		------------------------------------------------	
+		on ckbOperateOnSelection changed state do
+		(
+			ckbOperateOnSelection.checked = state
+			chkOperateOnSelAssets.checked = not state
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton
+		--@control: button | btnExportHairSim | Exporta la simulación del pelo de los assets seleccionados en el listado
+		------------------------------------------------			
+		on btnExportHairSim pressed do
+		(
+			if lb.asset.listedAssets.count != 0 then
+			(
+				sourceFolder = maxFilePath + "..\\cache\\source\\"
+ 				_objectsToUse = #()
+				if chkOperateOnSelAssets.checked then --almacena todos los objetos de los assets seleccionados
+				(
+					for _asset in lb.assetManager.getSelectedAssets() do
+						_objectsToUse += _asset.hairNodesAll
+				)
+				else if ckbOperateOnSelection.checked then --filtra en los objetos seleccionados aquellos que sean de  pelo
+				(
+					_objectsToUse = for o in getCurrentSelection() where (lb.nc.getObjectType o) == lb.nc.NC_classHair collect o
+				)--if
+
+				_exportedCount = 0
+				_notExportedCount = 0
+
+				for o in _objectsToUse where (lb.hair.hasHairGenerator o) do
+				(
+					_success = lb.hair.exportHairSimulation o sourceFolder
+					if _success then (_exportedCount +=1) else (_notExportedCount +=1)
+				)--for
+
+				--mensaje de resultados
+				_pos = getDialogPos lb.assetManager.rollMain
+				_pos += [(lb.assetManager.rollMain.width/2 - 150), (lb.assetManager.rollMain.height/2)]
+				lb.message.show ((_exportedCount as string) + " hair sims exported successfully" + (if _notExportedCount != 0 then ("\n" + (_notExportedCount as string) + " hair sims not exported") else "")) pos:_pos size:[300,75]
+			)
+		)
+
+		------------------------------------------------
+		--@event: rolledUp | Evento que se lanza al desplegar el rollout
+		--@control: rollout | rollHairExportSimDef | Ajusta la altura del rollout para ajustarlo al tamaño del contenido que se está desplegando.
+		-------------------------------------------------
+		on rollHairExportSimDef rolledUp state do 
+		(
+			parent.heightAdjust 7
+		)
+
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollHairExportSimDef | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollHairExportSimDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollHairExportSimDef | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollHairExportSimDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+			if parent.rollMain != undefined then resize [parent.rollMain.width, parent.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollHairExportSimDef | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollHairExportSimDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+		)
+	)--rollHairExportSimDef
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollHairDef | Contiene la herramienta rollAnimLoopBreakerDef, para romper loops de animación, rollout dentro de la pestaña de Cloth.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollAnimLoopBreakerDef "Total Anim Loop Breaker"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) 		--@var: string | parent | Herramienta o rolllout del que depende y/o contiene el rollout actual		
+		
+		local minRollWidth = 180																--@var: integer | minRollWidth | Minimun tool width.
+		local minRollHeight = 30																--@var: integer | minRollHeight | Minimun tool height.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+
+		local iconpath = if (maxVersion())[1] >= 15000 then (getDir #maxRoot) + "UI_ln\\Icons\\" else (getDir #ui) + "/icons/"		--@var: string | iconpath | ruta de los iconos de Max.
+
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		
+		checkbutton chkOperateOnSelAssets "Sel Assets" pos:[5,0] width:98 height:20 checked:true
+		checkbutton ckbOperateOnSelection "Sel Objects" pos:[103,0] width:98 height:20
+		button btnBreakSelLoops "Break anim loops" pos:[5,25] width:195 height:20
+		checkBox chbxPreAnim "Pre Anim" pos:[10,50] height:20 checked:true
+		checkBox chbxPostAnim "Post Anim" pos:[100,50] height:20 checked:true
+
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollHairImportDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollHairImportDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--lb.xml.setAttribute parent.cfgFile ("rollExample1/cateagory") "paramName" "paramValue"
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			--_param = (lb.xml.getAttribute parent.cfgFile ("rollExample1/category") "paramName") as <value type>
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | outOfRangeKeysFuncion | Consulta las keys fuera de rango de animación, las configura como tangent y borra todo lo que queda fuera de rango.
+		--@comment: Deprecated! Función que no debería ser usada, sustituida por fixOutOfRangeNotConstantAnimatedNodes
+		--@gets: interval | _duration | El intervalo que dura la animación.
+		--@gets: (opt)boolean | _preAnim | Si vale TRUE indica que la operación de borrado de keys fuera de rango se debe realizar para keys anteriores al inicio de la animación. Por defecto True
+		--@gets: (opt)boolean | _postAnim | Si vale TRUE indica que la operación de borrado de keys fuera de rango se debe realizar para keys posteriores al final de la animación. Por defecto True
+		------------------------------------------------
+		fn outOfRangeKeysFuncion _duration _preAnim:true _postAnim:true= 
+		(
+
+			_process = trackviews.openLastUsedTrackView()
+			if not _process do trackviews.open 1
+
+			trackviews.current.closeUtility "Create Out of Range Keys"
+			trackviews.current.launchUtility "Create Out of Range Keys"
+
+			local BM_CLICK = 245
+			local desktopHWND = windows.getDesktopHWND()
+			local desktopChildren = windows.getChildrenHWND desktopHWND
+			local oorkTool
+
+			_stop = false
+			for child in desktopChildren where not _stop do
+			(
+				if child[5] == "Create Out of Range Keys" do 
+				(
+					oorkTool = child
+					_stop = true
+				)
+			)
+
+			if oorkTool != undefined then 
+			(
+				local oorkToolHWND = oorkTool[1]
+				local oorkSpinnerDlgID = uiaccessor.GetWindowResourceID oorkToolHWND -- Obtenemos el id del cuadro de dialogo del spinner
+				local oorkSpinnerParent = uiaccessor.getparentwindow oorkToolHWND -- Obtenemos el id del padre del cuadro de dialogo del spinner
+				local BM_CLICK = 245	--Constante del mensaje de windows de click
+				local VK_RETURN = 0x000D
+				local WM_SETFOCUS = 0x007
+				local WM_CHAR 	= 0x0102
+				
+				--Aqui se almacenaran los indices 
+				_theIndexes = #()
+				for k in (UIAccessor.getChildWindows oorkToolHWND) do 
+				(
+					if ((UIAccessor.GetWindowText k) == "8") or ((UIAccessor.GetWindowText k) == "10") do 
+					(
+						append _theIndexes k
+					)
+				)
+
+				if lb.cameraFunctions.hasCamInfo cameras[1] do 
+				(
+					lb.cameraFunctions.setAnimRangeFromCamera cameras[1] goToStart:true
+				)
+
+				slidertime = animationRange.start
+				_duration = animationRange.end - animationRange.start
+
+
+				UIAccessor.SetWindowText _theIndexes[1] ((_duration as integer/TicksPerFrame) as string)
+				UIAccessor.SetWindowText _theIndexes[2] ((_duration as integer/TicksPerFrame) as string)
+				UIAccessor.SetWindowText _theIndexes[3] ((_duration as integer/TicksPerFrame) as string)
+				
+
+				UIAccessor.sendMessage  _theIndexes[1] WM_SETFOCUS 0 0
+				windows.sendMessage _theIndexes[1] WM_CHAR VK_RETURN 0 
+				UIAccessor.sendMessage  _theIndexes[2] WM_SETFOCUS 0 0
+				windows.sendMessage _theIndexes[2] WM_CHAR VK_RETURN 0 
+				UIAccessor.sendMessage  _theIndexes[3] WM_SETFOCUS 0 0
+				windows.sendMessage _theIndexes[3] WM_CHAR VK_RETURN 0 
+				
+
+				for k in (UIAccessor.getChildWindows oorkToolHWND) do 
+				(
+					print (UIAccessor.GetWindowText k)
+					if (UIAccessor.GetWindowText k) == "Apply" do 
+					(
+						windows.sendMessage k BM_CLICK 0 0 --Le mandamos un mensaje de click
+					)
+				)
+			)
+			trackviews.current.closeUtility "Create Out of Range Keys"
+
+			trackviews.close (trackviews.current.getName())
+		)
+
+		------------------------------------------------
+		--@fn: array{keys} | getControllerLowTopKeys | Obtiene la primera y la ultima de las llaves de animación de un controlador.
+		--@gets: controller | _controller | El controlador del que consultaremos la animación.
+		--@returns: array{keys} | _result | Primera y ultima llave del controlador.
+		------------------------------------------------		
+		fn getControllerLowTopKeys _controller =
+		(
+			_result = #()
+			_keys = _controller.keys
+			if _keys.count > 0 do 
+			(
+				if _keys.count == 1 then 
+				(
+					append _result _keys[1]
+					append _result _keys[1]
+				)
+				else 
+				(
+					append _result _keys[1] 
+					append _result _keys[_keys.count]
+				)
+			)
+			_result
+		)
+
+		------------------------------------------------
+		--@fn: undefined | fixOutOfRangeNotConstantAnimatedNodes | Consulta las keys fuera de rango de animación de los nodos pasados por parametro y las configura como tangent
+		--@gets: array{nodes} | _nodes | Los nodos a los que realizar los cambios en los tracks.
+		--@gets: (opt)boolean | _before | Si vale TRUE indica que la operación de cambio de tipo de keys fuera de rango se debe realizar para keys anteriores al inicio de la animación. Por defecto True
+		--@gets: (opt)boolean | _after | Si vale TRUE indica que la operación de cambio de tipo de keys fuera de rango se debe realizar para keys posteriores al final de la animación. Por defecto True
+		------------------------------------------------
+		fn fixOutOfRangeNotConstantAnimatedNodes _nodes _before:true _after:true = 
+		(
+			--Configuramos el timeline al del camInfo y ponemos el sliderTime al inicio de la animacion
+			if lb.cameraFunctions.hasCamInfo cameras[1] do 
+			(
+				lb.cameraFunctions.setAnimRangeFromCamera cameras[1] goToStart:true
+			)
+			slidertime = animationRange.start
+
+			_notConstantOORNodes = #()
+			--filtraremos los objetos por los que tienen controladores que no sean #constant
+			for _node in _nodes do 
+			( 
+				--Obtenemos los controladores de los objetos en question
+				_controllers = lb.controller.getObjControllers _node
+				for _controller in _controllers do 
+				(
+					if isProperty _controller[1] #controller do 
+					(
+						_preAnimTrackValues = #()
+						_postAnimTrackValues = #()
+						_keys = undefined 
+						if (getBeforeORT _controller[1].controller != #Constant) or (getAfterORT _controller[1].controller != #Constant) do 
+						(
+							_keys = getControllerLowTopKeys _controller[1]
+							--Preproceso de guardado de trayectorias
+							_time = animationRange.start
+							_Diff = _keys[1].time - animationRange.start
+							_limit = _Diff as integer/TicksPerFrame
+							--Obtenemos los valores de los controladores.
+							for i=1 to _limit do
+							(
+								append _preAnimTrackValues (at time _time _controller[1].controller.value)
+								_time += 1
+							)
+
+							_time = _keys[2].time
+							_Diff = animationRange.end - _keys[2].time
+							_limit = _Diff as integer/TicksPerFrame
+
+							for i=1 to _limit do
+							(
+								append _postAnimTrackValues (at time _time _controller[1].controller.value)
+								_time += 1
+							)
+						)
+
+						--en función de si estan activados los flags de before o after se haran las operaciones para antes del rango, despues, o ambos.
+						if _before == true do 
+						( 
+							--Si el controlador no se encuentra en constant 
+							if (getBeforeORT _controller[1].controller != #Constant) do 
+							(
+								appendIfUnique _notConstantOORNodes _node
+								--Obtendremos la primera key de animacion del controlador 
+								_keys = getControllerLowTopKeys _controller[1]
+								--En el caso de que la key que define el loop no se encuentre en el frame inicial deberemos bakear la animación hasta este punto.
+								if _keys[1].time > animationRange.start do 
+								(
+									_Diff = _keys[1].time - animationRange.start
+									if _Diff > 0 then 
+									(
+										_time = animationRange.start
+										_limit = _Diff as integer/TicksPerFrame
+										--Dejamos el controlador a tipo constant para poder modificar los tracks
+										setBeforeORT _controller[1].controller #Constant
+										--Pegamos los valores del controlador en los frames que tocan.
+										with animate on
+										(
+											_time = animationRange.start
+											_limit = _Diff as integer/TicksPerFrame
+											for k=1 to _limit do
+											(
+												at time _time
+												(
+													_controller[1].controller.value = _preAnimTrackValues[k]
+													_time += 1
+												)
+											)
+										)--with
+									)
+								)
+								setBeforeORT _controller[1].controller #Constant
+							)
+						)
+						if _after == true do 
+						(
+							if (getAfterORT _controller[1].controller != #Constant) do 
+							(
+								appendIfUnique _notConstantOORNodes _node
+								_keys = getControllerLowTopKeys _controller[1]
+								if _keys[2].time < animationRange.end do 
+								(
+									_Diff = animationRange.end - _keys[2].time
+									if _Diff > 0 then 
+									(
+										_time = _keys[2].time
+										_limit = _Diff as integer/TicksPerFrame
+
+										setAfterORT _controller[1].controller #Constant
+										
+										with animate on
+										(
+											_time = _keys[2].time
+											_limit = _Diff as integer/TicksPerFrame
+											for k=1 to _limit do
+											(
+												at time _time
+												(
+													_controller[1].controller.value = _postAnimTrackValues[k]
+													_time += 1
+												)
+											)
+										)--with
+									)
+								)
+								setAfterORT _controller[1].controller #Constant
+							)
+						)
+					)
+				)
+			)
+			select _notConstantOORNodes
+		)
+
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del chekbutton
+		--@control: checkbutton | chkOperateOnSelAssets | Configura el estado del control y realiza la configuración inversa para ckbOperateOnSelection
+		------------------------------------------------
+		on chkOperateOnSelAssets changed state do
+		(
+			chkOperateOnSelAssets.checked = state
+			ckbOperateOnSelection.checked = not state
+		)	
+		
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del chekbutton
+		--@control: checkbutton | ckbOperateOnSelection | Configura el estado del control y realiza la configuración inversa para chkOperateOnSelAssets
+		------------------------------------------------
+		on ckbOperateOnSelection changed state do
+		(
+			ckbOperateOnSelection.checked = state
+			chkOperateOnSelAssets.checked = not state
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton.
+		--@control: button | btnBreakSelLoops | Rompe los loops animados en la escena y deja la animacion en modo constant.
+		------------------------------------------------		
+		on btnBreakSelLoops pressed do
+		(
+			if lb.asset.listedAssets.count != 0 then
+			(
+ 				_objectsToUse = #()
+				if chkOperateOnSelAssets.checked then --almacena todos los nodos animables de los assets seleccionados
+				(
+					for _asset in lb.assetManager.getSelectedAssets() do
+					(
+						join _objectsToUse (lb.asset.getAssetAnimNodes _asset lb.nc.NC_classAnim excludeExtras:true)
+					)
+				)
+				else if ckbOperateOnSelection.checked then --Devuelve una array con los objetos que tienen nodos de animacion de la selección.
+				(
+					_refObjects = #()
+					_currSel = getCurrentSelection()
+					for _asset in lb.asset.getAssetsFromNodes _currSel do
+					(
+						join _refObjects (lb.asset.getAssetAnimNodes _asset lb.nc.NC_classAnim excludeExtras:true)
+					)
+					for _refObject in _refObjects do 
+					(
+						for _node in _currSel do 
+						(
+							if _node.name == _refObject.name do 
+							(
+								append _objectsToUse _node
+							)
+						)
+					)
+				)--if
+				fixOutOfRangeNotConstantAnimatedNodes _objectsToUse _before:lb.assetManager.rollAnimLoopBreaker.chbxPreAnim.checked _after:lb.assetManager.rollAnimLoopBreaker.chbxPostAnim.checked
+
+				--print _nodesToOperate
+			)
+		)
+
+		------------------------------------------------
+		--@event: rolledUp | Evento que se lanza al desplegar el rollout
+		--@control: rollout | rollAnimLoopBreakerDef | Ajusta la altura del rollout para ajustarlo al tamaño del contenido que se está desplegando.
+		-------------------------------------------------
+		on rollAnimLoopBreakerDef rolledUp state do 
+		(
+			parent.heightAdjust 7
+		)
+
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollAnimLoopBreakerDef | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollAnimLoopBreakerDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollAnimLoopBreakerDef | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollAnimLoopBreakerDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+			if parent.rollMain != undefined then resize [parent.rollMain.width, parent.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollAnimLoopBreakerDef | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollAnimLoopBreakerDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+		)
+	)--rollAnimLoopBreakerDef
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollMiscDef | Contiene el la herramienta rollMiscDef, rollout anidado dentro de la pestaña Misc que contiene funciones diversas.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollMiscDef "Misc"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) 			--@var: string | parent | Herramienta o rolllout del que depende y/o contiene el rollout actual		
+
+		local minRollWidth = 180																	--@var: integer | minRollWidth | Minimun tool width.
+		local minRollHeight = 150																	--@var: integer | minRollHeight | Minimun tool height.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		
+		groupBox grpRenameAsset "Rename Asset" pos:[8,0] width:190 height:110
+		label lblAssetType "None" pos:[15,17] width:30 enabled:false
+		edittext edtAssetName "" pos:[43,15] width:150 enabled:false
+		button btnRenameAsset "Apply" pos:[13,39] width:180 enabled:false
+		checkBox chkRenameMaterial "Rename Material" pos:[13,65] width:180
+		checkBox chkOverwrite "Overwrite Asset Name" pos:[13,85] width:180 checked:true
+		groupbox gbxCopies "Asset Copy Manager" pos:[8,110] width:190 height:50
+		button btnCopyAsset "Copy Asset" pos:[13,130] width:125
+		spinner spnCopyAmount "x:" type:#integer pos:[150,132] width:40 range:[1,100,1]
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		------------------------------------------------------------------------------------------------
+		--@fn: undefined | updateMiscControls | Función para callback, se activan los controles de la pestaña misc si hay un asset seleccionado en la lista superior del assetManager
+		------------------------------------------------------------------------------------------------
+		fn updateMiscControls =
+		(
+			--Guardamos los assets seleccionados en un array
+			_assets = lb.assetManager.getSelectedAssets()
+
+			--Si el datagrid de personajes tiene más de uno seleccionado bloquearemos los controles.
+			if lb.asset.selAssets.count == 1 then
+			(
+				--Activamos el texto y ponemos el nombre del asset.
+				edtAssetName.enabled = true
+				lblAssetType.enabled = true
+				btnRenameAsset.enabled = true
+				
+				lblAssetType.text = (filterString lb.asset.listedAssets[lb.asset.selAssets[1]].fullName "_")[1] + "_"
+				edtAssetName.text = (filterString lb.asset.listedAssets[lb.asset.selAssets[1]].fullName "_")[2]
+			)
+			else
+			(
+				edtAssetName.enabled = false
+				lblAssetType.enabled = false
+				btnRenameAsset.enabled = false
+				
+				lblAssetType.caption = "ast_"
+				edtAssetName.text = ""
+			)
+		)		
+
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollMiscDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollMiscDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--lb.xml.setAttribute parent.cfgFile ("rollExample1/cateagory") "paramName" "paramValue"
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			--_param = (lb.xml.getAttribute parent.cfgFile ("rollExample1/category") "paramName") as <value type>
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton.
+		--@control: button | btnRenameAsset | Al pulsar el botón se renombrará el asset seleccionado con el nombre del editText de la interfaz
+		-------------------------------------------------		
+		on btnRenameAsset pressed do
+		(
+			_proccess = true
+			_message = ""
+			_depAssets = #() --array para almacenar los assets dependientes.
+			_currentAsset = undefined --variable para almacenar el asset seleccionado.
+			
+			--si no hay nombre que utilizar.
+			if edtAssetName.text == "" then
+			(
+				_proccess = false
+				_message = "You have to specify a name."
+			)
+			
+			--solo puede haber un asset seleccionado.
+			if _proccess and (lb.asset.selAssets.count == 0 or lb.asset.selAssets.count > 1) then
+			(
+				_proccess = false
+				_message = "You have to select only one asset."
+			)
+			
+			--si cumple los requisitos hasta aqui
+			if _proccess then
+			(
+				--almacena el asset actual y sus dependientes si tuviera
+				_currentAsset = lb.asset.listedAssets[lb.asset.selAssets[1]]
+				_depAssets = lb.asset.getDependencyGroup _currentAsset lb.asset.sceneAssets
+				_renameDependents = true --flag para saber si hay que renombrar los dependientes o no
+				
+				--si hay dependientes y el tick de afectarlos esta activado
+				if _depAssets.count != 0 and lb.assetManager.rollMain.chkaffectDependentAssets.checked then
+				(
+					if not _currentAsset.isDependent then --si es un asset principal
+					(
+						if _depAssets.count > 1 then --si tiene dependientes
+						(
+							--pregunta si renombrar los dependientes
+							_answer = yesNoCancelBox (_currentAsset.fullname + " has dependent assets. If you dont rename them, the dependency will be broken. Do you want to rename them?")
+							
+							if _answer == #cancel then _proccess = false --el usuario ha cancelado
+							_renameDependents = (_answer == #yes)
+						)--if
+					)--if 
+					else
+					(
+						_answer = queryBox (_currentAsset.fullname + " is a dependent asset. If you want to rename all its dependents, you have to select its main asset. Do you want to continue? It will break the dependency.")
+						_renameDependents = false
+						_proccess = _answer
+					)
+				)
+				
+				if _proccess then --si no se ha cancelado la operacion
+				(
+					--agrupa los assets a renombrar en un array
+					_assetsToRename = if _renameDependents then _depAssets else #(_currentAsset)
+					_assetsToRenameNewNames = #() --array para almacenar los nombres que
+					
+					-------------------------------------------------------------------------------------------------------------
+					--averigua que nombre tendrá cada asset a renombrar por si ello va a provocar conflictos
+					_numericPart = ""
+					_newName = edtAssetName.text
+					_newNameParts = filterString edtAssetName.text "#"
+					if _newNameParts.count == 2 and lb.math.isNumeric _newNameParts[2] then
+					(
+						_numericPart = _newNameParts[2]
+						_newName = _newNameParts[1]
+					)
+					
+					for i=1 to _assetsToRename.count do --averigua el nuevo nombre de cada asset
+						if _numericPart != "" then --si hay parte numerica en el nuevo nombre
+						(
+							_assetsToRenameNewNames[i] = substituteString _assetsToRename[i].fullName _assetsToRename[1].name _newName
+							_assetsToRenameNewNames[i] += "#" + _numericPart
+						)
+						else --si no tiene numero de copia o no hay parte numerica en el nuevo nombre
+						(	
+							_assetsToRenameNewNames[i] = substituteString _assetsToRename[i].fullname (_assetsToRename[1].name) edtAssetName.text
+						)						
+					-------------------------------------------------------------------------------------------------------------
+					
+					-------------------------------------------------------------------------------------------------------------
+					--si el nombre que se le va a poner a un asset coincide con el del alguno que ya exista en la escena, no permite realizar la operacion.
+					_sceneAssetsFullNames	= for ast in lb.asset.sceneAssets collect ast.fullname
+					
+					if not chkOverwrite.checked then		
+						for astName in _assetsToRenameNewNames where _proccess and findItem _sceneAssetsFullNames astName != 0 do
+						(
+							_proccess = false
+							_message = "Asset name conflict: \"" + astName + "\" is used by another asset yet. The proccess cant continue."
+						)
+					-------------------------------------------------------------------------------------------------------------
+						
+					if _proccess then --si no hay contratiempos
+						for i=1 to _assetsToRename.count do --renombra los assets
+							lb.asset.renameAsset _assetsToRename[i] (filterString _assetsToRenameNewNames[i] "_")[2] renameMaterials:chkRenameMaterial.checked
+				)
+			)--if _proccess
+			
+			--imprime el mensaje si no se ha podido renombrar el asset
+			if not _proccess and _message != "" then
+				lb.message.show _message type:#message pos:undefined size:[300,75] modal:true
+			
+			lb.assetManager.rollAdvanced.btnRefresh.pressed()
+
+			if lb.objectSetManager.isOpen() then lb.objectSetManager.rollMain.fillInfo()
+		)--on btnRenameAsset
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton.
+		--@control: button | btnCopyAsset | Al pulsar el botón se realizaran tantas copias como haya configuradas en el spinner. 
+		-------------------------------------------------	
+		on btnCopyAsset pressed do 
+		(
+			assetsToProcess = lb.assetManager.getSelectedAssets()
+			if assetsToProcess.count != 0 then 
+			(
+				for _asset in assetsToProcess do 
+				(
+					lb.asset.simpleCopyAsset _asset _times:spnCopyAmount.value
+				)
+			)
+			else lb.message.show "select at least 1 asset to copy."				
+		)
+
+		------------------------------------------------
+		--@event: rolledUp | Evento que se lanza al desplegar el rollout.
+		--@control: rollout | rollMiscDef | Redimensiona el rollout al desplegarlo para que comprenda toda la interfaz.
+		-------------------------------------------------	
+		on rollMiscDef rolledUp state do 
+		(
+			parent.heightAdjust 8
+		)
+
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollMiscDef | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollMiscDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollMiscDef | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollMiscDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+			updateMiscControls()
+			if parent.rollMain != undefined then resize [parent.rollMain.width, parent.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollMiscDef | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollMiscDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+		)
+	)--rollMiscDef
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollCameraAssetsDef | Contiene la herramienta rollCameraAssetsDef, para la carga de variaciones de camara.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollCameraAssetsDef "Asset Camera Variations"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) 			--@var: string | parent | Herramienta o rolllout del que depende y/o contiene el rollout actual		
+		
+		local minRollWidth = 225																	--@var: integer | minRollWidth | Minimun tool width.
+		local minRollHeight = 100																	--@var: integer | minRollHeight | Minimun tool height.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		
+		button btnLoadVariations "Load Variations" pos:[5,5] width:197 height:20 toolTip:"Load the asset camera variations for the current scene"
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollCameraAssetsDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollCameraAssetsDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--lb.xml.setAttribute parent.cfgFile ("rollExample1/cateagory") "paramName" "paramValue"
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			--_param = (lb.xml.getAttribute parent.cfgFile ("rollExample1/category") "paramName") as <value type>
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton.
+		--@control: button | btnLoadVariations | Se cargan las variaciones de asset para la camara abierta.
+		------------------------------------------------
+		on btnLoadVariations pressed do 
+		(
+			for ast in lb.asset.sceneAssets where ast.type == lb.nc.NC_setPrefix do
+			(
+				lb.asset.removeAssetCameraVariations ast
+				completeRedraw()
+				
+				lb.asset.loadAssetCameraVariations ast
+				completeRedraw()
+			)
+
+			--------------------------------------------------------------
+			--refresca el interfaz para que los nodos temporales que se hayan eliminado no se queden como deleted scene nodes
+			selAssetsFullNames = #()
+			for s in lb.asset.selAssets do
+				append selAssetsFullNames lb.asset.sceneAssets[s].fullname
+			
+			lb.assetManager.rollMain.resetSceneAssets()
+
+			lb.asset.selAssets = #()
+			for i=1 to lb.asset.sceneAssets.count do
+				for s in selAssetsFullNames do
+					if lb.asset.sceneAssets[i].fullname == s then
+						append lb.asset.selAssets i
+				
+			lb.assetManager.rollMain.refreshControls()
+			--------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@event: rolledUp | Evento que se lanza al desplegar el rollout
+		--@control: rollout | rollCameraAssetsDef | Se redimensiona el rollout principal para englobar los controles del mismo.
+		------------------------------------------------
+		on rollCameraAssetsDef rolledUp state do 
+		(
+			parent.heightAdjust 8
+		)
+
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollCameraAssetsDef | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollCameraAssetsDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollCameraAssetsDef | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollCameraAssetsDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+			if parent.rollMain != undefined then resize [parent.rollMain.width, parent.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollCameraAssetsDef | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollCameraAssetsDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+		)
+	)--rollCameraAssetsDef
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollCacheSceneDef | Contiene la herramienta Cache Scene, subrollout ubicado en el apartado de cache.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollCacheSceneDef "Cache Scene"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) 			--@var: string | parent | Herramienta o rolllout del que depende y/o contiene el rollout actual		
+		
+		local minRollWidth = 225																	--@var: integer | minRollWidth | Minimun tool width.
+		local minRollHeight = 100																	--@var: integer | minRollHeight | Minimun tool height.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		
+		label lblCacheFormat "Point Cache Format" pos:[10,10] width:105 height:13
+		dropdownList ddlCacheFormat "" pos:[120,5] width:85 height:21 items:#(".pc2", ".xml", ".abc")
+		checkbox chkEnableCloth "Enable cloth in export process" pos:[10,27] width:150 height:15 checked:false toolTip:"All cloth modifiers are disbled in export process"
+		
+		GroupBox grpSceneCacheScene "Cache Scene Options" pos:[5,45] width:202 height:95
+		button btnConvertToCacheScene "Convert to cache scene" pos:[10,64] width:192 height:20
+		checkbox chkProcessAssets "assets" pos:[10,89] width:50 height:15 checked:true toolTip:"Convert assets to cache assets removing all rig objects"
+		checkbox chkProcessCaches "caches" pos:[104,89] width:50 height:15 checked:true toolTip:"Records the caches of the assets"
+		checkbox chkMergeXrefs "Merge xRefs" pos:[10,121] width:80 height:15 checked:false toolTip:"All xRef Scenes and xRefObjects will be merged in scene"
+		checkbox chkSaveNewMaxFile "Save new file" pos:[10,105] width:88 height:15 checked:true toolTip:"Saves a new Max file. You will be asked for filename and folder"
+		checkbox chkDeleteOldCacheFiles "Del old caches" pos:[104,105] width:94 height:15 checked:false toolTip:"Delete old cache files in Source folder"
+		checkbox chkSelAssetsOnly "Sel assets only" pos:[104,121] width:94 height:15 toolTip:"Converts only selected assets. Other assets will be deleted"
+		--checkbox chkParentedCameraScene "Parented Camera Scene" pos:[10,139] width:150 height:15 toolTip:"Breaks link with parenting object of the selected assets" default:false
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		------------------------------------------------
+		--@fn: undefined | prepareAssetForCacheRecording | Cambia el asset a modo de visualización CONNECTALL y desactiva en viewport los Turbosmooth de las piezas de tipo mesh. 
+		--@gets: struct | ast | El asset sobre el que actuar.
+		--@gets: (opt)boolean | enableCloth | Si vale True se habilita también el cloth.
+		------------------------------------------------		
+		fn prepareAssetForCacheRecording ast enableCloth:false =
+		(
+			--	Si el asset no está en modo CONNECTALL se lo activamos.
+			_modeToBe = "CA" -- if ast.clothNodesAll.count != 0 then "CA" else "S+B"
+				
+			if lb.asset.getAssetvismode ast != _modeToBe then
+				lb.asset.setAssetConnectAllMode ast enableCloth:enableCloth
+			
+			--	desactivamos los turbosmooth de las piezas mesh
+			for o in ast.meshNodesAll do lb.modifiers.setTurbosmoothState o #disabledInViews
+		)
+
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollCacheSceneDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollCacheSceneDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--lb.xml.setAttribute parent.cfgFile ("rollExample1/cateagory") "paramName" "paramValue"
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			--_param = (lb.xml.getAttribute parent.cfgFile ("rollExample1/category") "paramName") as <value type>
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al abrir el rollout.
+		--@control: button | btnConvertToCacheScene | Realiza el proceso de generación de la escena de caché partiendo de una escena de animación.
+		------------------------------------------------
+		on btnConvertToCacheScene pressed do
+		(
+			local meshObjs = #()					--	Todas las piezas de tipo mesh de todos los assets
+			local cacheFileName 	= undefined		--	Fichero de caches donde se almacena el resultado
+			local cachesFolder		= undefined		--	Carpeta donde se almacenarán los ficheros de point cache
+			local materialFileName	= undefined		--	Fichero donde iran los materiales
+			local continueProcess	= true			--	Indica si se puede realizar o no la conversión
+			
+			if (queryBox "Assets will be set to (CONNECT ALL) mode and Turbosmooths will be disabled in viewports. Do you want to continue?") then
+			(	
+
+				disableSceneRedraw()
+				suspendEditing()
+				setWaitCursor()
+				lb.assetManager.rollMain.removeSceneEvents()
+				
+				--	apagamos Turbosmooths y colocamos cada asset en el modo de visualizacion skin+box
+				assetsToProcess = if chkSelAssetsOnly.checked then (lb.assetManager.getSelectedAssets()) else lb.asset.sceneAssets
+				
+				for a in assetsToProcess do
+					prepareAssetForCacheRecording a enableCloth:chkEnableCloth.checked
+				
+				resumeEditing()
+				enableSceneRedraw()
+				completeRedraw()
+			
+				--	si se va a guardar un nuevo fichero .max, pedimo un nombre para él y asumimos que, si
+				--	se van a grabar también los ficheros de datos de caché, irán a parar a la misma ruta
+				--	que el fichero .max pero dentro de una carpeta \source
+				if chkSaveNewMaxFile.checked then
+				(
+					if findString maxFileName "_anim" != undefined then
+						newName = (substituteString maxFileName "_anim" "_cache")
+					else if findString maxFileName "_cloth" != undefined then
+						newName = (substituteString maxFileName "_cloth" "_cache")
+					else if findString maxFileName "_fx" != undefined then
+						newName = (substituteString maxFileName "_fx" "_cache")
+					else if findString maxFileName "_hair" != undefined then
+						newName = (substituteString maxFileName "_hair" "_cache")
+					else if findString maxFileName "_cache" != undefined then
+						newName = (substituteString maxFileName "_cache" "_cache")
+					else
+						newName = maxFileName
+					
+					--intenta que se abra en la carpeta de caches
+					 _currentPath = maxfilepath
+					if matchPattern _currentPath pattern:"*anim\\" then
+						if doesFileExist (substituteString _currentPath "anim\\" "cache\\") then
+							_currentPath = (substituteString _currentPath "anim\\" "cache\\")
+					
+					cacheFileName = getSaveFileName caption:"Save Cache Scene" types:"Max Scene File (*.max)|*.max" filename:(_currentPath + newName) historyCategory:"cacheScene"
+					
+					if cacheFileName != undefined then
+					(
+						cachesFolder = ((getFileNamePath cacheFileName) + "source\\")
+						materialFileName = cachesFolder + (lb.materials.materialLibName newName)
+					)
+					else
+						continueProcess = false
+					
+				)
+				--	Si no se va a guardar un nuevo .max pero sí se van a tratar los caches pedimos una ruta
+				--	donde almacenar los ficheros de datos de cache.
+				else if chkProcessCaches.checked then
+				(
+					cachesFolder = getSavePath caption:"Select Caches SOURCE Folder" initialDir:maxFilePath
+					
+					--  Si no se especifica una ruta de salida no se puede continuar
+					if cachesFolder == undefined then continueProcess = false
+				)
+				
+				_fileType = ddlCacheFormat.selected
+				
+				--	si no existían ficheros de cache en la carpeta SOURCE comprobamos que 
+				--	el formato de exportación elegido sea PC2, que es más óptimo.
+				if cachesFolder != undefined and (getFiles (cachesFolder + "*.*")).count == 0 and _fileType != ".pc2" then
+						if (queryBox "No previous cache files in SOURCE folder. Cache format should be PC2.\nDo you want to change to PC2 format?") then
+							ddlCacheFormat.selection = 1
+				
+				if cachesFolder != undefined and (getFiles (cachesFolder + "*.*")).count > 0 then
+				(
+					_oldCacheFiles = (getFiles (cachesFolder + "*.*"))
+					_oldCacheFilesType = undefined
+					
+					--	revisamos el formato de los ficheros de cache que pudieran existir anteriormente
+					for f in _oldCacheFiles where _oldCacheFilesType == undefined do
+					(
+						_fileType = (toLower (getFileNameType f))
+						
+						if _fileType == ".xml" then
+							_oldCacheFilesType = _fileType
+						else if _fileType == ".pc2" then
+							_oldCacheFilesType = _fileType
+						else if _fileType == ".abc" then
+							_oldCacheFilesType = _fileType
+					)
+					
+					--	Si existían ficheros miramos si el formato que vamos a crear es el mismo que ya existía
+					--	Si no coinciden lanzamos un Warning
+					_showFormatWarning = false
+					
+					if _oldCacheFilesType != undefined then
+						_showFormatWarning = (_oldCacheFilesType != ddlCacheFormat.selected)
+			 					--((_oldCacheFilesType == ".xml" and ddlCacheFormat.selected == ".pc2") or \
+			 					--							(_oldCacheFilesType == ".pc2" and ddlCacheFormat.selected == ".xml"))
+					
+					if _showFormatWarning then
+					(
+						messageBox ("Destination SOURCE folder contains " + (toUpper _oldCacheFilesType) + " files and you selected to export " + (toUpper ddlCacheFormat.selected) + " cache files. Can't continue.")
+						continueProcess = false
+					)
+					
+					--	Si la carpeta SOURCE no está vacía pedimos confirmación de borrado o sobreescritura de los ficheros.
+					if continueProcess then
+					(
+						if chkDeleteOldCacheFiles.checked then
+						(
+							if not queryBox "Destination SOURCE folder to save caches is not empty. Files will be deleted. Do you want to continue?" then continueProcess = false
+						)
+						else
+						(
+							if not queryBox "Destination SOURCE folder to save caches is not empty. Files will be overwriten. Do you want to continue?" then continueProcess = false
+						)
+					)
+				)
+					
+				--	Si todos los pasos han sido correctos realizamos la conversión
+				if continueProcess then
+				(
+					--	si solo vamos a convertir ciertos assets, el resto los borramos.
+					for a in lb.asset.sceneAssets where findItem assetsToProcess a == 0 do
+						lb.asset.deleteAsset a includeDependents:false
+					
+					--	conversión de la escena a caches
+
+					if cameras[1] != undefined then
+					(
+						if cameras[1].parent != undefined then 
+						( 
+							--lb.cache.convertToCacheFromLinkedPoint()
+							select cameras[1]
+							lb.bakeAnimation.rollMain.bakeAnimation (getCurrentSelection())
+							clearSelection()
+						)
+					)
+
+					-- se ha añadido de parametro desactivar cloth, para que no saque los caches de los objetos con cloth como tick en el ui
+					lb.cache.convertSceneToCaches chkProcessAssets.checked chkProcessCaches.checked cachesFolder:cachesFolder pcFormat:ddlCacheFormat.selected deleteOldCacheFiles:chkDeleteOldCacheFiles.checked mergeXrefs:chkMergeXrefs.checked --disableCloth:chkDisableCloth.checked
+			
+					--Automatizando procesos de cache. Eliminado de xrefs, sets, emptyLayers. 
+					for i = xrefs.getXRefFileCount() to 1 by -1 do
+					(
+						currentXRefScenesIndexArr = #()
+						append currentXRefScenesIndexArr (xrefs.getXRefFile i).filename
+						delete (xrefs.getXRefFile i)
+					)
+				    lb.misc.passAssetCheck CHK_noSetsOnCacheScene type:#sequenceCache fix:true
+				    lb.layer.deleteEmptyLayers()
+
+					--	guardamos el nuevo fichero .max si se ha indicado
+					if chkSaveNewMaxFile.checked then
+					(
+						saveMaxFile cacheFileName
+						lb.materials.saveLib materialFileName
+					)
+					
+					--	reiniciamos el listado de assets para mostrar el nuevo estado
+					lb.assetManager.rollMain.resetSceneAssets()
+				)
+			)
+			
+			setArrowCursor()
+			lb.assetManager.rollMain.createSceneEvents()
+			lb.assetManager.rollMain.removeSceneEvents()
+		)
+
+		------------------------------------------------
+		--@event: rolledUp | Evento que se lanza al desplegar el rollout
+		--@control: rollout | rollCacheSceneDef | Se redimensiona el rollout principal para englobar los controles del mismo.
+		------------------------------------------------
+		on rollCacheSceneDef rolledUp state do 
+		(
+			parent.heightAdjust 3
+			--parent.rollCacheScene.open = state
+		)
+
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollCacheSceneDef | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollCacheSceneDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollCacheSceneDef | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollCacheSceneDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+			if parent.rollMain != undefined then resize [parent.rollMain.width, parent.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollCacheSceneDef | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollCacheSceneDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+		)
+	)--rollCacheSceneDef
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollCacheExtrasDef | Contiene la herramienta Cache Manager, subrollout ubicado en el apartado de caché
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollCacheExtrasDef "Cache Manager"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) 			--@var: string | parent | Herramienta o rolllout del que depende y/o contiene el rollout actual		
+		
+		local minRollWidth = 225																	--@var: integer | minRollWidth | Minimun tool width.
+		local minRollHeight = 100																	--@var: integer | minRollHeight | Minimun tool height.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		
+		label lblOperateOn "Operate on:" pos:[5,0] width:160 height:15
+		-- 		checkbutton ckbOperateOnAllAssets "All assets" pos:[5,15] width:65 height:20 checked:true 
+		checkbutton ckbOperateOnSelAssets "Sel Assets" pos:[5,15] width:97 height:20 checked:true
+		checkbutton ckbOperateOnSelection "Sel Objects" pos:[105,15] width:97 height:20
+		checkbutton ckbOperateOnSelAssetsHair "Sel Assets Hair" pos:[5,38] width:97 height:20
+			
+		GroupBox grpRecordRange "Record range" pos:[5,65] width:202 height:85	
+		spinner spnRecordStart "Start frame" pos:[30,85] width:110 height:15 range:[-1e+007,1e+007,0] type:#integer
+		spinner spnRecordEnd "End frame  " pos:[30,105] width:110 height:15 range:[-1e+007,1e+007,100] type:#integer
+		button btnGetRange "Get" pos:[165,85] width:35 height:35
+		button btnRecordCache "Record" pos:[10,125] width:193 height:20 --images:#(iconpath + "bip_general_i.bmp", undefined, 30, 7, 7, 8, 8,true)
+			
+		GroupBox grpPlaybackRange "Playback type" pos:[5,155] width:202 height:130
+		dropdownList ddlPlaybackType "" pos:[10,170] width:192 height:20 items:#("Original range", "Custom start", "Custom range","Loop range")
+		spinner spnPlaybackStartFrame "Start" pos:[10,195] width:75 fieldwidth:35 height:16 enabled:false range:[-1e+007,1e+007,0] type:#integer
+		spinner spnPlaybackEndFrame "End" pos:[10,215] width:75 fieldwidth:35 height:16 enabled:false range:[-1e+007,1e+007,100] type:#integer
+		spinner spnCacheStrength "Strength" pos:[126,195] width:75 fieldwidth:35 height:16 range:[-10000,10000,1] type:#float
+		checkbox chkCacheRelativeOffset "Relat. Offset" pos:[111,215] width:80 height:15
+		-- 		checkbox chkCacheLoop "Loop cache" pos:[111,215] width:80 height:15
+		button btnGetPlaybackData "Get" pos:[10,235] width:95 height:20 toolTip:"Gets playback data from operate objects"
+		button btnApplyPlaybackData "Apply" pos:[110,235] width:91 height:20 toolTip:"Apply playback data to operate objects"
+		button btnLoadCache "Load" pos:[10,260] width:192 height:20 toolTip:"Load cache files" --images:#(iconpath + "bip_general_i.bmp", undefined, 30, 5, 5, 6, 6,true)
+			
+		GroupBox grpCacheOperations "Cache operations" pos:[5,290] width:202 height:40
+		button btnEnableCache "Enable" pos:[10,305] width:45 height:20 toolTip:"Enable cache modifiers"
+		button btnDisableCache "Disable" pos:[60,305] width:45 height:20 toolTip:"Disable cache modifiers"
+		button btnReloadCache "Reload" pos:[110,305] width:45 height:20 toolTip:"Reload cache modifiers"
+		button btnResetCache "Reset" pos:[160,305] width:43 height:20 toolTip:"Unload all cache info in modifiers"
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		----------------------------------------------------------------------------------
+		--@fn: array{ndoes} | getOperateObjects | Consulta sobre que objetos se debe operar
+		--@comment: La función recibe los nodos sobre los que operar a través de la selección
+		--@gets: (opt)boolean | operateOnSelection | **TRUE** realiza el proceso para los nodos seleccionados \\ **FALSE** realiza el proceso para los nodos de los assets seleccionados \\ Por defecto false
+		--@returns: array{ndoes} | _operateObjs | Array de nodos sobre los que operar.
+		----------------------------------------------------------------------------------
+		fn getOperateObjects operateOnSelection:false =
+		(
+			_operateObjs = #()
+			
+			if operateOnSelection then
+			(
+				_operateObjs = for o in selection where (superclassof o == GeometryClass) collect o
+			)
+			else
+			(
+				for a in (lb.assetManager.getSelectedAssets()) do
+				(
+					_operateObjs += a.meshNodesAll + a.hairNodesAll + a.connectNodesAll
+				)
+			)--if else
+			
+			_operateObjs
+		)
+		
+		----------------------------------------------------------------------------------
+		--@fn: undefined | setPlaybackSpinnersState | Activa o desactiva los spinners de playback según el tipo de playback seleccionado
+		----------------------------------------------------------------------------------		
+		fn setPlaybackSpinnersState =
+		(
+			case ddlPlaybackType.selection of
+			(
+				1: (spnPlaybackStartFrame.enabled = false; spnPlaybackEndFrame.enabled = false)
+				2: (spnPlaybackStartFrame.enabled = true; spnPlaybackEndFrame.enabled = false)
+				3: (spnPlaybackStartFrame.enabled = true; spnPlaybackEndFrame.enabled = true)
+				4: (spnPlaybackStartFrame.enabled = true; spnPlaybackEndFrame.enabled = true)
+			)
+		)
+
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollCacheExtrasDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollCacheExtrasDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--lb.xml.setAttribute parent.cfgFile ("rollExample1/cateagory") "paramName" "paramValue"
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			--_param = (lb.xml.getAttribute parent.cfgFile ("rollExample1/category") "paramName") as <value type>
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del chekbutton
+		--@control: checkbutton | ckbOperateOnSelAssets | Configura el estado del control y realiza la configuración inversa para ckbOperateOnSelection
+		------------------------------------------------
+		on ckbOperateOnSelAssets changed val do 
+		(
+			if val then
+			(
+				ckbOperateOnSelection.checked = false
+				ckbOperateOnSelAssetsHair.checked = false
+			)
+			else
+				ckbOperateOnSelAssets.checked = true
+		)
+		
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del chekbutton
+		--@control: checkbutton | ckbOperateOnSelection | Configura el estado del control y realiza la configuración inversa para chkOperateOnSelAssets
+		------------------------------------------------
+		on ckbOperateOnSelection changed val do 
+		(
+			if val then
+			(
+				ckbOperateOnSelAssets.checked = false
+				ckbOperateOnSelAssetsHair.checked = false
+			)
+			else
+				ckbOperateOnSelection.checked = true
+		)
+
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del chekbutton
+		--@control: checkbutton | ckbOperateOnSelAssetsHair | Configura el estado del control y realiza la configuración inversa para ckbOperateOnSelection
+		------------------------------------------------
+		on ckbOperateOnSelAssetsHair changed val do 
+		(
+			if val then
+			(
+				ckbOperateOnSelection.checked = false
+				ckbOperateOnSelAssets.checked = false
+			)
+			else
+				ckbOperateOnSelAssetsHair.checked = true
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton
+		--@control: button | btnLoadCache | Carga el caché para los elementos seleccionados según la configuración de UI.
+		------------------------------------------------
+		on btnLoadCache pressed do
+		(
+			f = getsavepath "Point Cache folder" initialDir:maxFilePath
+			if f != undefined then
+			(
+				operateObjs = getOperateObjects operateOnSelection:ckbOperateOnSelection.checked
+				
+				undo "Load Cache" on
+				(
+					for o in operateObjs do
+					(
+						filename = f + "\\" + (lb.nc.getSimpleObjectName o.name)
+						
+						lb.cache.loadCache o filename
+					)
+				)
+			)
+		)
+		
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton.
+		--@control: button | btnRecordCache | Registra el caché de los elementos seleccionados según la configuración. El caché se guarda en la carpeta source, dentro de caché, para la camara de la escena abierta.
+		------------------------------------------------
+		on btnRecordCache pressed do
+		(
+			_operateObjs = getOperateObjects operateOnSelection:ckbOperateOnSelection.checked
+
+			if ckbOperateOnSelAssetsHair.checked then
+			(
+				for i=_operateObjs.count to 1 by -1 do
+				(
+					_nPart5 = lb.nc.getNamePart	_operateObjs[i].name 5
+					_isHairSysNode = false
+					
+					if not _isHairSysNode then _isHairSysNode = MatchPattern _nPart5 pattern:lb.nc.NC_HAIR_draftPattern
+					if not _isHairSysNode then _isHairSysNode = MatchPattern _nPart5 pattern:lb.nc.NC_HAIR_drvPattern
+					if not _isHairSysNode then _isHairSysNode = MatchPattern _nPart5 pattern:lb.nc.NC_HAIR_scalpPattern
+					if not _isHairSysNode then _isHairSysNode = MatchPattern _nPart5 pattern:lb.nc.NC_HAIR_shadowPattern
+
+					if not _isHairSysNode then deleteItem _operateObjs i
+				)
+
+				--print _operateObjs
+				--print "-----------------------"
+			)
+			
+			if (queryBox "Assets will be set to (CONNECT ALL) mode and Turbosmooths will be disabled in viewports. Do you want to continue?") then
+			(
+				assetsToPrepare = lb.asset.getAssetsFromNodes _operateObjs	--	 assets que hay que pasar a S+B y desactivar turbosmooths
+				
+				disableSceneRedraw()				
+				
+				--	Preparamos los assets para la grabación de cachés (paso a modo de visualizacion para caches con todo conectado)
+				for a in assetsToPrepare do
+					lb.assetManager.rollCacheScene.prepareAssetForCacheRecording a enableCloth:parent.rollCacheScene.chkEnableCloth.checked
+				
+				enableSceneRedraw()
+				completeRedraw()
+				
+				--intenta que se abra en la carpeta de source de caches
+				_currentPath = maxfilepath
+				if matchPattern _currentPath pattern:"*anim\\" then
+					if doesFileExist (substituteString _currentPath "anim\\" "cache\\") then
+						_currentPath = (substituteString _currentPath "anim\\" "cache\\")
+				
+				_subFolders = getDirectories (_currentPath + "*") --busca los subdirectorios del actual
+				_stop = false
+				
+				--busca el primer source que encuentre
+				for _subF in _subFolders where not _stop do
+				(
+					if findString _subF "source" != undefined then (_currentPath = _subF; _stop = true)
+					_subFolders += getDirectories (_subF + "*") --busca los subdirectorios del actual
+				)--for
+				
+				f = getsavepath "Point Cache folder" initialDir:_currentPath historyCategory:"assetCache"
+				if f != undefined then
+				(
+					setWaitCursor()
+					progressStart "Saving Caches"
+					
+					for i = 1 to _operateObjs.count do
+					(
+						--	Capturamos el rango de animación del asset al que pertenece la pieza
+						objAsset = (lb.asset.getAssetsFromNodes #(_operateObjs[i]))[1]
+						recordRange = lb.asset.getAssetAnimRange objAsset timeRange:(interval spnRecordStart.value spnRecordEnd.value)
+						
+						lb.cache.recordCacheFromObject _operateObjs[i] f recordRange.start recordRange.end pcFormat:rollCacheSceneDef.ddlCacheFormat.selected
+						
+						progressUpdate (i * 100 / _operateObjs.count)
+					)
+
+					materialFileName = f + "\\" + (lb.materials.materialLibName maxFileName)
+					lb.materials.saveLib materialFileName
+					
+					progressEnd()
+					setArrowCursor()
+				)
+			)
+		)
+		
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton.
+		--@control: button | btnGetRange | Obtiene el rango de animación y lo configura para los objetos a cachear.
+		------------------------------------------------
+		on btnGetRange pressed do
+		(
+			spnRecordStart.value = animationRange.start
+			spnRecordEnd.value = animationRange.end
+		)
+		
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton.
+		--@control: button | btnGetRange | Configura el estado de los spinners del rollout de playback.
+		------------------------------------------------
+		on ddlPlaybackType selected val do
+			setPlaybackSpinnersState()
+		
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton.
+		--@control: button | btnGetPlaybackData | Configura la ui de playback time en función de los objetos seleccionados
+		------------------------------------------------
+		on btnGetPlaybackData pressed do
+		(
+			operateObjs = getOperateObjects operateOnSelection:ckbOperateOnSelection.checked
+			found = false
+			i = 1
+			
+			while not found and i <= operateObjs.count do
+			(
+				mods = lb.cache.getCacheMods operateObjs[i]
+				if mods.count > 0 then
+				(
+					found = true
+					for m in mods do
+					(
+						ddlPlaybackType.selection = m.playbackType + 1
+						spnPlaybackStartFrame.value = m.playbackStart
+						spnPlaybackEndFrame.value = m.playbackEnd
+						setPlaybackSpinnersState()
+						spnCacheStrength.value = m.strength
+						chkCacheRelativeOffset.checked = m.relativeOffset
+					)
+				)
+				i += 1
+			)
+			
+			if not found then lb.message.show "No Point Cache modifiers found on selected objects" type:#message pos:undefined size:[300,75] modal:true
+		)
+		
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton.
+		--@control: button | btnApplyPlaybackData | Aplica la configuración de la ui de playback time a los objetos seleccionados
+		------------------------------------------------
+		on btnApplyPlaybackData pressed do
+		(
+			operateObjs = getOperateObjects operateOnSelection:ckbOperateOnSelection.checked
+			
+			disableSceneRedraw()
+			
+			undo "Apply Playback Data" on
+			(
+				for o in operateObjs do
+					lb.cache.setCachePlaybackData o playbackType:(ddlPlaybackType.selection - 1) playbackStart:spnPlaybackStartFrame.value playbackEnd:spnPlaybackEndFrame.value  strength:spnCacheStrength.value relativeOffset:chkCacheRelativeOffset.checked cacheLoop:(ddlPlaybackType.selection == 4)
+			)
+			
+			enableSceneRedraw()
+		)
+		
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton.
+		--@control: button | btnEnableCache | Habilita los modificadores de caché de los objetos seleccionados
+		------------------------------------------------
+		on btnEnableCache pressed do
+		(
+			operateObjs = getOperateObjects operateOnSelection:ckbOperateOnSelection.checked
+			
+			undo "Enable Cache" on
+			(
+				for o in operateObjs do lb.cache.setCacheEnabled o true
+			)
+		)
+		
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton.
+		--@control: button | btnDisableCache | Dehabilita los modificadores de caché de los objetos seleccionados
+		------------------------------------------------
+		on btnDisableCache pressed do
+		(
+			operateObjs = getOperateObjects operateOnSelection:ckbOperateOnSelection.checked
+			
+			undo "Disable Cache" on
+			(
+				for o in operateObjs do lb.cache.setCacheEnabled o false
+			)
+		)
+		
+		
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton.
+		--@control: button | btnReloadCache | Recarga los modificadores de caché de los objetos seleccionados
+		------------------------------------------------
+		on btnReloadCache pressed do
+		(
+			operateObjs = getOperateObjects operateOnSelection:ckbOperateOnSelection.checked
+			
+			for o in operateObjs do lb.cache.reloadCache o
+		)
+		
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton.
+		--@control: button | btnResetCache | Resetea los modificadores de Caché de las piezas seleccionadas y vacía su referencia al archivo de caché
+		------------------------------------------------
+		on btnResetCache pressed do
+		(
+			operateObjs = getOperateObjects operateOnSelection:ckbOperateOnSelection.checked
+			
+			undo "Reset Cache" on
+			(
+				for o in operateObjs do lb.cache.resetCache o
+			)
+		)
+
+		------------------------------------------------
+		--@event: rolledUp | Evento que se lanza al redimensionar el rollout
+		--@control: rollout | rollCacheExtrasDef | Se redimensiona el rollout principal para englobar los controles del mismo.
+		------------------------------------------------
+		on rollCacheExtrasDef rolledUp state do 
+		(
+			parent.heightAdjust 3
+			--parent.rollCacheExtras.open = state
+		)	
+
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollCacheExtrasDef | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollCacheExtrasDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollCacheExtrasDef | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollCacheExtrasDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+
+			spnRecordStart.value = animationRange.start
+			spnRecordEnd.value = animationRange.end
+
+			if parent.rollMain != undefined then resize [parent.rollMain.width, parent.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollCacheExtrasDef | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollCacheExtrasDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+		)
+	)--rollCacheExtrasDef
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollAnimationDef | Contiene la herramienta Animation, subrollout ubicado en la pestaña de animación.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollAnimationDef "Animation"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) 		--@var: string | parent | Herramienta o rolllout del que depende y/o contiene el rollout actual		
+		
+		local minRollWidth = 225																--@var: integer | minRollWidth | Minimun tool width.
+		local minRollHeight = 100																--@var: integer | minRollHeight | Minimun tool height.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+
+		local animModeButtonsNonSelBG = (dotnetclass "system.drawing.color").fromargb 180 180 180 		
+		local animModeButtonsSelBG = (dotnetclass "system.drawing.color").fromargb 150 150 255			
+
+		local iconpath = if (maxVersion())[1] >= 15000 then (getDir #maxRoot) + "UI_ln\\Icons\\" else (getDir #ui) + "/icons/"		--@var: string | iconpath | ruta de los iconos de Max.
+
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		
+		checkbutton chkOperateOnSelAssets "Sel Assets" pos:[5,0] width:98 height:20 checked:true
+		checkbutton ckbOperateOnSelection "Sel Objects" pos:[108,0] width:98 height:20
+		
+		button btnLoadAnimation "Load" pos:[5,25] width:25 height:25 images:#(iconpath + "bip_general_i.bmp", undefined, 30, 5, 5, 6, 6,true) tooltip:"Load Animation"
+		button btnSaveAnimation "Save" pos:[33,25] width:25 height:25 images:#(iconpath + "bip_general_i.bmp", undefined, 30, 7, 7, 8, 8,true) tooltip:"Save Animation"
+		checkbox chkOneFilePerAsset "One file per asset" pos:[65,30] width:150 height:15 checked:true
+			
+		groupBox grpLoadOptions "Load options" pos:[5,55] width:114 height:90
+		radiobuttons rdoRelAbs "" pos:[10,72] labels:#("Relative", "Absolute") columns:1 default:2
+		radiobuttons rdoReplace "" pos:[10,108] labels:#("Replace", "Insert at") columns:1 default:2
+		spinner spnInsertAt	"" pos:[73,123] width:43 type:#integer scale:1 range:[-1000,100000,0] enabled:true  
+			
+		groupBox grpSaveOptions "Save options" pos:[120,55] width:87 height:90
+		checkbox chkSegment "Segment" pos:[124,72] width:63 height:15 checked:false
+		button btnGetRange "GR" pos:[185,70] width:20 height:20 border:false enabled:false images:#(iconpath + "TrackViewTools_16i.bmp", undefined, 117, 50, 50, 52, 52, true) tooltip:"Get Animation Range"
+		spinner spnFrom	"From" pos:[137,95] width:65 type:#integer scale:1 range:[-1000,100000,0] enabled:false
+		spinner spnTo "   To" pos:[137,115] width:65 type:#integer scale:1 range:[-1000,100000,100] enabled:false
+		
+		groupBox grpLoadSaveFrom "Load to/Save from:" pos:[5,150] width:202 height:55
+		radiobuttons rdoSaveFrom "" pos:[10,167] labels:#("Selected layers",  "Rig", "All animation", "Facial") columns:2 default:3
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		--------------------------------------------------------------
+		--@fn: undefined | toggleSelAssetOptions | Cambia los controles del checkbutton de seleccion de Assets o Objetos y los controles de Ui según el parámetro que se le suministra.
+		--@gets: button | checkedCtrl | La referencia al checkButton de Ui que se encuentra seleccionado.
+		--@gets: boolean | state | Si vale TRUE, el checkbutton pasado por referencia se configura como checked.
+		--------------------------------------------------------------
+		fn toggleSelAssetOptions checkedCtrl state =
+		(
+			case checkedCtrl of
+			(
+				-- 				ckbOperateOnAllAssets:
+				-- 				(
+				-- 					chkOperateOnSelAssets.checked = not state
+				-- 					ckbOperateOnSelection.checked = not state
+				-- 					rdoSaveFrom.enabled = true
+				-- 				)
+				
+				chkOperateOnSelAssets:
+				(
+				-- 					ckbOperateOnAllAssets.checked = not state
+					ckbOperateOnSelection.checked = not state
+					rdoSaveFrom.enabled = true
+				)
+				
+				ckbOperateOnSelection:
+				(
+				-- 					ckbOperateOnAllAssets.checked = not state
+					chkOperateOnSelAssets.checked = not state
+					rdoSaveFrom.enabled = false
+				)
+			)--case of
+		)--toggle
+
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollAnimationDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollAnimationDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--lb.xml.setAttribute parent.cfgFile ("rollExample1/cateagory") "paramName" "paramValue"
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			--_param = (lb.xml.getAttribute parent.cfgFile ("rollExample1/category") "paramName") as <value type>
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+
+		------------------------------------------------
+		--@event: changed | Evento que se lanza cambiar el estado del checkbutton
+		--@control: checkbutton | chkOperateOnSelAssets | Activa/desactiva el checkButton chkOperateOnSelAssets y actualiza el estado de la UI.
+		------------------------------------------------
+		on chkOperateOnSelAssets changed state do
+			if not state then
+				chkOperateOnSelAssets.checked = true
+			else
+				toggleSelAssetOptions chkOperateOnSelAssets state
+		
+		------------------------------------------------
+		--@event: changed | Evento que se lanza cambiar el estado del checkbutton
+		--@control: checkbutton | ckbOperateOnSelection | Activa/desactiva el checkButton ckbOperateOnSelection y actualiza el estado de la UI.
+		------------------------------------------------
+		on ckbOperateOnSelection changed state do
+			if not state then
+				ckbOperateOnSelection.checked = true
+			else
+				toggleSelAssetOptions ckbOperateOnSelection state
+
+		------------------------------------------------
+		--@event: rolledUp | Evento que se lanza al redimensionar el rollout
+		--@control: rollout | rollAnimationDef | Se redimensiona el rollout principal para englobar los controles del mismo.
+		------------------------------------------------
+		on rollAnimationDef rolledUp state do 
+		(
+			parent.heightAdjust 2
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al presionar el botón.
+		--@control: button | btnGetRange | Se actualiza el rango de las Save Options al rango de animación de la secuencia abierta.
+		------------------------------------------------
+		on btnGetRange pressed do
+		(
+			spnFrom.value = animationRange.start.frame as integer
+			spnTo.value = animationRange.end.frame as integer
+		)
+		
+		------------------------------------------------
+		--@event: changed | Evento que se lanza cambiar el estado del checkbutton.
+		--@control: checkbutton | chkSegment | Actualiza la Ui en función del estado del checkbutton. Se habilitan nuevos controles.
+		------------------------------------------------
+		on chkSegment changed state do
+		(
+			btnGetRange.enabled = state
+			spnFrom.enabled = state
+			spnTo.enabled = state
+		)	
+
+		------------------------------------------------
+		--@event: changed | Evento que se lanza cambiar el estado del checkbutton.
+		--@control: checkbutton | rdoReplace | Deshabilita/Habilita el control del spinner spnInsertAt si está habilitada la opción insertAt.
+		------------------------------------------------
+		on rdoReplace changed state do
+			spnInsertAt.enabled = (rdoReplace.state == 2)	
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza presionar el botón.
+		--@control: button | btnLoadAnimation | Carga la animacion del asset seleccionado; si el check de All Assets esta activado se carga la animacion de todos los assets, si el check de Sel. layers only esta activado se carga la animacion de los layer seleccionados
+		------------------------------------------------		
+		on btnLoadAnimation pressed do
+		(
+			_duplicatedObjectNames = #()
+
+			if chkOperateOnSelAssets.checked then
+			(
+				_assetsToUse = lb.assetManager.getSelectedAssets()
+
+				if _assetsToUse.count != 0 then
+				(
+					for _asset in _assetsToUse do
+					(
+						_duplicatedAssetObjectNames = #()
+						_assetObjs = #()
+
+						for _node in _asset.animNodesAll do
+						(
+							_nodepartNames = filterString _node.name "_"
+							if (matchPattern _nodepartNames[7] pattern: lb.nc.NC_controlFlag) or (matchPattern _nodepartNames[7] pattern: lb.nc.NC_extraFlag) then
+							(
+								_simpleName = _nodepartNames[3] + "_" + _nodepartNames[4] + "_" + _nodepartNames[5] 
+								if not (appendIfUnique _assetObjs (toUpper(_simpleName))) then appendIfUnique _duplicatedAssetObjectNames _node
+							)
+						)
+						for _node in _asset.facialNodesAll do
+						(
+							_nodepartNames = filterString _node.name "_"
+							if (matchPattern _nodepartNames[7] pattern: lb.nc.NC_controlFlag) or (matchPattern _nodepartNames[7] pattern: lb.nc.NC_extraFlag) then
+							(
+								_simpleName = _nodepartNames[3] + "_" + _nodepartNames[4] + "_" + _nodepartNames[5] 
+								if not (appendIfUnique _assetObjs (toUpper(_simpleName))) then appendIfUnique _duplicatedAssetObjectNames _node
+							)
+						)
+						for _element in _duplicatedAssetObjectNames do append _duplicatedObjectNames _element
+					) 
+				)
+				else 
+				(
+					lb.message.show "Select at least 1 asset"
+					return undefined
+				)	
+			)
+			else
+			(
+				_sel = getCurrentSelection()
+				_assetObjs = #()
+
+				for _obj in _sel do
+				(
+					_objNameParts = filterString _obj.name "_"
+					if (matchPattern _objNameParts[7] pattern: lb.nc.NC_controlFlag) or (matchPattern _objNameParts[7] pattern: lb.nc.NC_extraFlag) then
+					(
+						if (_objNameParts[3] == lb.nc.NC_classFacial) or (_objNameParts[3] == lb.nc.NC_classAnim) then
+						(
+							_simpleName = _objNameParts[2] + "_" + _objNameParts[3] + "_" + _objNameParts[4] + "_" + _objNameParts[5] 
+							if not (appendIfUnique _assetObjs (toUpper(_simpleName))) then appendIfUnique _duplicatedObjectNames _obj
+						)
+					)
+
+				)
+			)
+			if _duplicatedObjectNames.count != 0 then
+			(
+				_message = "Duplicate names found In the pieces:\n\n"
+				for _node in _duplicatedObjectNames do
+				(
+					_message = _message + _node.name + "\n" 
+				)
+				_message = _message + "\nAborting\n"
+				lb.message.show _message type:#message pos:undefined size:[300,75] modal:true
+				return undefined
+			)
+
+			assetsToLoad = #() --array con los assets de los que guardar la animacion
+			nodesToLoad = #() --array de arrays con los nodos de cada asset de los que guardar animacion
+			selNodes = #() --por si la animacion se guarda de los objetos seleccionados
+			
+			lvSelectedLayers = lb.assetManager.rollAdvanced.lvSelItems --lvSelectedItems
+			
+			if lb.asset.listedAssets.count != 0 then
+			(
+ 				--if ckbOperateOnAllAssets.checked then --almacena todos los assets
+ 					--assetsToLoad = deepCopy listedAssets
+				if chkOperateOnSelAssets.checked then --almacena solo los assets seleccionados
+					assetsToLoad = lb.assetManager.getSelectedAssets()
+				else if ckbOperateOnSelection.checked then --busca los assets de los objetos seleccionados y almacena un array de arrys de nodos y otro de nodos a renombrar
+				(
+					selNodes = getCurrentSelection()
+					assetsToLoad = lb.asset.getAssetsFromNodes selNodes --mira que assets son los dueños de las piezas seleccionadas
+						
+					for i=1 to assetsToLoad.count do
+						nodesToLoad[i] = #()
+						
+					for o in selNodes do
+						for i=1 to assetsToLoad.count where findItem assetsToLoad[i].nodes o != 0 do
+							append nodesToLoad[i] o
+					
+ 						--for i=1 to assetsToLoad.count where (findItem assetsToLoad[i].rigNodesAll o != 0) or (findItem assetsToLoad[i].facialNodesAll o != 0) do
+ 							--append nodesToLoad[i] o
+				)
+			)
+			
+			nodes = #()
+			nodesToRename = #()
+			
+			if not ckbOperateOnSelection.checked then --si es para todos los assets o los assets seleccionados
+			(
+				numLoadedAnimations = 0
+				
+				if chkOneFilePerAsset.checked then --un archivo por asset
+				(
+					--recorre los assets de los que guardar animacion y realiza las operaciones oportunas
+					for a in assetsToLoad do
+					(
+						nodes = #()
+						nodesToRename = #()
+						
+						case rdoSaveFrom.state of
+						(
+							1:
+							(
+								--recorre los layer seleccionados
+								for i=0 to (lvSelectedLayers.count - 1) do
+								(
+									layerType = lvSelectedLayers.item[i].value
+									
+									--si es un tipo de layer animable, almacena su tipo
+									if findItem lb.nc.NC_classAnimatable layerType != 0 then
+									(
+										join nodes (lb.asset.getAssetAnimNodes a layerType)
+										join nodesToRename (lb.asset.getAssetNodesByType a #(layerType))
+									)
+								)--for
+							)
+							
+							2:
+							(
+								nodes = (lb.asset.getAssetAnimNodes a lb.nc.NC_classAnim) 
+								nodesToRename = a.animNodesAll --lb.asset.getAssetNodesByType a #(lb.nc.NC_classAnim)
+							)
+							
+							3:
+							(
+								nodes = lb.asset.getAssetAnimNodes a #all
+								nodesToRename = lb.asset.getAssetNodesByType a lb.nc.NC_classAnimatable
+							)
+							
+							4:
+							(
+								nodes = lb.asset.getAssetAnimNodes a lb.nc.NC_classFacial
+								nodesToRename = a.facialNodesAll --lb.asset.getAssetNodesByType a #(lb.nc.NC_classFacial)
+							)
+						)--case of
+						
+						--pregunta por el fichero de donde queremos cargar la animacion
+						file = getOpenFileName caption:("Load Animation to " + a.fullname) types:"animation(*.xaf)|*.xaf|Todos los formatos (*.*)|*.*|"
+						
+						--una vez obtenidos los nodos animables de el asset actual, cargamos su animacion
+						if file != undefined then
+							if (lb.asset.loadAnimation file nodes nodesToRename relative:(rdoRelAbs.state == 1) insert:(rdoReplace.state == 2) insTime:spnInsertAt.value) then
+	 							numLoadedAnimations += 1
+						
+					)--for
+				)
+				else --un archivo general
+				(
+					nodes = #()
+					nodesToRename = #()
+
+					--recorre los assets de los que guardar animacion y realiza las operaciones oportunas
+					for a in assetsToLoad do
+					(						
+						case rdoSaveFrom.state of
+						(
+							1:
+							(
+								--recorre los layer seleccionados
+								for i=0 to (lvSelectedLayers.count - 1) do
+								(
+									layerType = lvSelectedLayers.item[i].value
+									
+									--si es un tipo de layer animable, almacena su tipo
+									if findItem lb.nc.NC_classAnimatable layerType != 0 then
+									(
+										nodes += (lb.asset.getAssetAnimNodes a layerType)
+										nodesToRename += (lb.asset.getAssetNodesByType a #(layerType))
+									)
+								)--for
+							)
+							
+							2:
+							(
+								nodes += (lb.asset.getAssetAnimNodes a lb.nc.NC_classAnim) 
+								nodesToRename += a.animNodesAll --lb.asset.getAssetNodesByType a #(lb.nc.NC_classAnim)
+							)
+							
+							3:
+							(
+								nodes += lb.asset.getAssetAnimNodes a #all
+								nodesToRename += lb.asset.getAssetNodesByType a lb.nc.NC_classAnimatable
+							)
+							
+							4:
+							(
+								nodes += lb.asset.getAssetAnimNodes a lb.nc.NC_classFacial
+								nodesToRename += a.facialNodesAll --lb.asset.getAssetNodesByType a #(lb.nc.NC_classFacial)
+							)
+						)--case of
+					)--for
+
+					--pregunta por el fichero de donde queremos cargar la animacion
+					file = getOpenFileName caption:("Load Animation to <selected assets>") types:"animation(*.xaf)|*.xaf|Todos los formatos (*.*)|*.*|"
+					
+					--una vez obtenidos los nodos animables de el asset actual, cargamos su animacion
+					if file != undefined then
+						if (lb.asset.loadAnimation file nodes nodesToRename relative:(rdoRelAbs.state == 1) insert:(rdoReplace.state == 2) insTime:spnInsertAt.value) then
+ 							numLoadedAnimations += 1
+				)--if else				
+				
+				lb.message.show (numLoadedAnimations as string + " animations loaded successfully") type:#message pos:undefined size:[300,75] modal:true
+			)
+			else --si es para los objetos seleccionados
+			(
+				numLoadedAnimations = 0
+				
+				nonAssetObjects = #() --objetos que no pertenecen a ningun asset
+				
+				--busca los objetos que no pertenecen a ningun asset
+				for obj in selNodes do
+				(
+					found = false
+					
+					for ast in assetsToLoad where findItem ast.nodes obj != 0 do--(findItem ast.rigNodesAll obj != 0) or (findItem ast.facialNodesAll obj != 0) do
+						found = true
+					
+					if not found do
+						appendIfUnique nonAssetObjects obj
+				)
+
+				if chkOneFilePerAsset.checked then --un archivo por asset
+				(
+					--carga la animacion de los assets
+					for i=1 to assetsToLoad.count do
+					(
+						nodes = #()
+						nodesToRename = #()
+						
+						nodes = nodesToLoad[i]
+									
+						nodesToRename = nodesToLoad[i]
+						nodesToRenameParents = #()
+						
+						for obj in nodesToRename where obj.parent != undefined do
+							appendIfUnique nodesToRenameParents obj.parent
+						
+						for obj in nodesToRenameParents do
+							appendIfUnique nodesToRename obj
+						
+						--pregunta por el fichero donde queremos guardar la animacion
+						file = getOpenFileName caption:("Load Animation to " + assetsToLoad[i].fullname) types:"animation(*.xaf)|*.xaf|Todos los formatos (*.*)|*.*|"
+						
+						--una vez obtenidos los nodos animables de el asset actual, guardamos su animacion
+						if file != undefined then
+							if (lb.asset.loadAnimation file nodes nodesToRename relative:(rdoRelAbs.state == 1) insert:(rdoReplace.state == 2) insTime:spnInsertAt.value) then
+								numLoadedAnimations += 1
+						
+					)--for
+				)
+				else
+				(
+					nodes = #()
+					nodesToRename = #()
+
+					--carga la animacion de los assets
+					for i=1 to assetsToLoad.count do
+					(						
+						nodes += nodesToLoad[i]
+									
+						nodesToRename += nodesToLoad[i]
+						nodesToRenameParents = #()
+						
+						for obj in nodesToRename where obj.parent != undefined do
+							appendIfUnique nodesToRenameParents obj.parent
+						
+						for obj in nodesToRenameParents do
+							appendIfUnique nodesToRename obj						
+					)--for
+
+					--pregunta por el fichero donde queremos guardar la animacion
+					file = getOpenFileName caption:("Load Animation to <selected objects assets>") types:"animation(*.xaf)|*.xaf|Todos los formatos (*.*)|*.*|"
+					
+					--una vez obtenidos los nodos animables de el asset actual, guardamos su animacion
+					if file != undefined then
+						if (lb.asset.loadAnimation file nodes nodesToRename relative:(rdoRelAbs.state == 1) insert:(rdoReplace.state == 2) insTime:spnInsertAt.value) then
+							numLoadedAnimations += 1
+				)--if else
+
+				if nonAssetObjects.count != 0 then --si hay objetos seleccionados que no pertenecen a ningun asset, salvamos su animacion y sus links en un archivo a parte
+				(
+					nodes = #()
+					nodesToRename = #()
+						
+					nodes = nonAssetObjects
+						
+					nodesToRename = nonAssetObjects
+					nodesToRenameParents = #()
+					
+					for obj in nodesToRename where obj.parent != undefined do
+						appendIfUnique nodesToRenameParents obj.parent
+					
+					for obj in nodesToRenameParents do
+						appendIfUnique nodesToRename obj
+					
+					--pregunta por el fichero donde queremos guardar la animacion
+					file = getOpenFileName caption:("Load Animation - Non asset objects") types:"animation(*.xaf)|*.xaf|Todos los formatos (*.*)|*.*|"
+						
+					--una vez obtenidos los nodos animables de el asset actual, guardamos su animacion
+					if file != undefined then
+						if (lb.asset.loadAnimation file nodes nodesToRename relative:(rdoRelAbs.state == 1) insert:(rdoReplace.state == 2) insTime:spnInsertAt.value) then
+							numLoadedAnimations += 1
+					--saveAnimation file nodes nodesToRename	save
+				)
+				
+				lb.message.show (numLoadedAnimations as string + " animations loaded successfully") type:#message pos:undefined size:[300,75] modal:true
+			)--if	
+		)--on
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza presionar el botón.
+		--@control: button | btnSaveAnimation | Salva la animacion del asset seleccionado; si el check de All Assets esta activado se guarda la animacion de todos los assets, si el check de Sel. layers only esta activado se guarda la animacion de los layer seleccionados
+		------------------------------------------------		
+		on btnSaveAnimation pressed do
+		(
+			if not (lb.misc.passAssetCheck CHK_NCuniqueNamesTask fix:false) do
+			(
+				lb.message.show "Duplicate names found. Aborting" type:#message pos:undefined size:[300,75] modal:true
+				return undefined
+			)
+
+			assetsToSave = #() --array con los assets de los que guardar la animacion
+			nodesToSave = #() --array de arrays con los nodos de cada asset de los que guardar animacion
+			assetsToSaveProjectIds = #() --array con el id de proyecto de cada asset a salvar, para saber que técnica usar.
+			selNodes = #() --por si la animacion se guarda de los objetos seleccionados
+			
+			lvSelectedLayers = lb.assetManager.rollAdvanced.lvSelItems --lvSelectedItems
+			
+			--necesitamos saber en que proyecto se está trabajando para salvar la animación con una técnica u otra.
+			_projectId = undefined
+			if maxfilePath != "" then
+			(
+				_prjct = (lb.project.getProjectByRoot (((filterString maxfilepath "\\")[1]) + "\\"))
+				if _prjct != undefined then _projectId = _prjct.getId()
+			)
+			
+			if lb.asset.listedAssets.count != 0 then
+			(
+ 				--if ckbOperateOnAllAssets.checked then --almacena todos los assets
+ 					--assetsToSave = deepCopy listedAssets
+				if chkOperateOnSelAssets.checked then --almacena solo los assets seleccionados
+				(
+					assetsToSave = lb.assetManager.getSelectedAssets()
+				)
+				else if ckbOperateOnSelection.checked then --busca los assets de los objetos seleccionados y almacena un array de arrys de nodos y otro de nodos a renombrar
+				(
+					selNodes = getCurrentSelection()
+					assetsToSave = lb.asset.getAssetsFromNodes selNodes --mira que assets son los dueños de las piezas seleccionadas
+						
+					for i=1 to assetsToSave.count do
+						nodesToSave[i] = #()
+							
+					for o in selNodes do
+						for i=1 to assetsToSave.count where findItem assetsToSave[i].nodes o != 0 do
+							append nodesToSave[i] o
+ 						--for i=1 to assetsToSave.count where (findItem assetsToSave[i].rigNodesAll o != 0) or (findItem assetsToSave[i].facialNodesAll o != 0) do
+ 							--append nodesToSave[i] o
+				)--if
+				
+				--averigua el id de proyecto para cada asset
+				for i=1 to assetsToSave.count do
+				(
+					if _projectId != undefined then
+						assetsToSaveProjectIds[i] = _projectId
+					else
+					(
+						_assetFolder = if assetsToSave[i].folder != "" then assetsToSave[i].folder else maxFilePath
+						_drive = (filterString _assetFolder "\\:")[1] + "\\"
+						_pj = lb.project.getProjectByRoot _drive
+						assetsToSaveProjectIds[i] = if _pj != undefined then _pj.getId() else (lb.project.getProjectByRoot "z:\\").getId()
+					)
+				)--for
+			)--if
+			
+			animInterval = (if chkSegment.checked then (interval spnFrom.value spnTo.value) else animationRange)
+			
+			if not ckbOperateOnSelection.checked then --si es para todos los assets o los assets seleccionados
+			(
+				numSavedAnimations = 0
+				
+				_oneFilePerAsset = false
+
+				if chkOneFilePerAsset.checked then --un archivo por asset
+				(
+					--recorre los assets de los que guardar animacion y realiza las operaciones oportunas
+					for i=1 to assetsToSave.count do
+					(
+						a = assetsToSave[i]
+						nodes = #()
+						nodesToRename = #()
+						
+						case rdoSaveFrom.state of
+						(
+							1:
+							(
+								--recorre los layer seleccionados
+								for i=0 to (lvSelectedLayers.count - 1) do
+								(
+									layerType = lvSelectedLayers.item[i].value
+									
+									--si es un tipo de layer animable, almacena su tipo
+									if findItem lb.nc.NC_classAnimatable layerType != 0 then
+									(
+										join nodes (lb.asset.getAssetAnimNodes a layerType)
+										join nodesToRename (lb.asset.getAssetNodesByType a #(layerType))
+									)
+								)--for
+							)
+							
+							2:
+							(
+								nodes = a.animNodesAll --lb.asset.getAssetAnimNodes a lb.nc.NC_classAnim
+								nodesToRename = a.animNodesAll --lb.asset.getAssetNodesByType a #(lb.nc.NC_classAnim)
+							)
+							
+							3:
+							(
+								nodes = lb.asset.getAssetAnimNodes a #all
+								nodesToRename = lb.asset.getAssetNodesByType a lb.nc.NC_classAnimatable
+							)
+							
+							4:
+							(
+								nodes = lb.asset.getAssetAnimNodes a lb.nc.NC_classFacial
+								nodesToRename = a.facialNodesAll --lb.asset.getAssetNodesByType a #(lb.nc.NC_classFacial)
+							)
+						)--case of
+						
+						--pregunta por el fichero donde queremos guardar la animacion
+						file = getSaveFileName caption:("Save Animation from " + a.fullname) types:"animation(*.xaf)|*.xaf|Todos los formatos (*.*)|*.*|"
+						
+						--una vez obtenidos los nodos animables de el asset actual, guardamos su animacion
+						if file != undefined then
+							if (lb.asset.saveAnimation file nodes nodesToRename	saveSegment:true segInterval:animInterval projectId:assetsToSaveProjectIds[i]) then
+								numSavedAnimations += 1
+							--saveAnimation file nodes nodesToRename	saveSegment:chkSegment.checked segInterval:animInterval
+					)--for
+				)
+				else --un archivo general
+				(
+					nodes = #()
+					nodesToRename = #()
+
+					--recorre los assets de los que guardar animacion y realiza las operaciones oportunas
+					for i=1 to assetsToSave.count do
+					(
+						a = assetsToSave[i]						
+						
+						case rdoSaveFrom.state of
+						(
+							1:
+							(
+								--recorre los layer seleccionados
+								for i=0 to (lvSelectedLayers.count - 1) do
+								(
+									layerType = lvSelectedLayers.item[i].value
+									
+									--si es un tipo de layer animable, almacena su tipo
+									if findItem lb.nc.NC_classAnimatable layerType != 0 then
+									(
+										nodes += (lb.asset.getAssetAnimNodes a layerType)
+										nodesToRename += (lb.asset.getAssetNodesByType a #(layerType))
+									)
+								)--for
+							)
+							
+							2:
+							(
+								nodes += a.animNodesAll --lb.asset.getAssetAnimNodes a lb.nc.NC_classAnim
+								nodesToRename += a.animNodesAll --lb.asset.getAssetNodesByType a #(lb.nc.NC_classAnim)
+							)
+							
+							3:
+							(
+								nodes += lb.asset.getAssetAnimNodes a #all
+								nodesToRename += lb.asset.getAssetNodesByType a lb.nc.NC_classAnimatable
+							)
+							
+							4:
+							(
+								nodes += lb.asset.getAssetAnimNodes a lb.nc.NC_classFacial
+								nodesToRename += a.facialNodesAll --lb.asset.getAssetNodesByType a #(lb.nc.NC_classFacial)
+							)
+						)--case of						
+					)--for
+
+					--pregunta por el fichero donde queremos guardar la animacion
+					file = getSaveFileName caption:("Save Animation from <selected assets>") types:"animation(*.xaf)|*.xaf|Todos los formatos (*.*)|*.*|"
+					
+					--una vez obtenidos los nodos animables de los assets, guardamos su animacion
+					if file != undefined then
+						if (lb.asset.saveAnimation file nodes nodesToRename	saveSegment:true segInterval:animInterval projectId:assetsToSaveProjectIds[1]) then
+							numSavedAnimations += 1
+						--saveAnimation file nodes nodesToRename	saveSegment:chkSegment.checked segInterval:animInterval
+				)--if else				
+				
+				lb.message.show ((numSavedAnimations as string) + " animations saved successfully") type:#message pos:undefined size:[300,75] modal:true
+			)
+			else --si es para los objetos seleccionados
+			(
+				numSavedAnimations = 0
+				
+				nonAssetObjects = #() --objetos que no pertenecen a ningun asset
+				
+				--busca los objetos que no pertenecen a ningun asset
+				for obj in selNodes do
+				(
+					found = false
+					
+					for ast in assetsToSave where findItem ast.nodes obj != 0 do-- (findItem ast.rigNodesAll obj != 0) or (findItem ast.facialNodesAll obj != 0) do
+						found = true
+					
+					if not found do
+						appendIfUnique nonAssetObjects obj
+				)
+				
+				if chkOneFilePerAsset.checked then --un archivo por asset
+				(
+					--salva la animacion de los assets
+					for i=1 to assetsToSave.count do
+					(
+						nodes = #()
+						nodesToRename = #()
+						
+						nodes = nodesToSave[i]
+									
+						nodesToRename = nodesToSave[i]
+						nodesToRenameParents = #()
+						
+						for obj in nodesToRename where obj.parent != undefined do
+							appendIfUnique nodesToRenameParents obj.parent
+						
+						for obj in nodesToRenameParents do
+							appendIfUnique nodesToRename obj
+						
+						--pregunta por el fichero donde queremos guardar la animacion
+						file = getSaveFileName caption:("Save Animation from " + assetsToSave[i].fullname) types:"animation(*.xaf)|*.xaf|Todos los formatos (*.*)|*.*|"
+							
+						--una vez obtenidos los nodos animables de el asset actual, guardamos su animacion
+						if file != undefined then
+							if  (lb.asset.saveAnimation file nodes nodesToRename	saveSegment:true segInterval:animInterval projectId:assetsToSaveProjectIds[i]) then
+								numSavedAnimations += 1
+							--saveAnimation file nodes nodesToRename	saveSegment:chkSegment.checked segInterval:animInterval						
+					)--for
+				)
+				else --un archivo general
+				(
+					nodes = #()
+					nodesToRename = #()
+
+					--salva la animacion de los assets
+					for i=1 to assetsToSave.count do
+					(						
+						nodes += nodesToSave[i]
+									
+						nodesToRename += nodesToSave[i]
+						nodesToRenameParents = #()
+						
+						for obj in nodesToSave[i] where obj.parent != undefined do
+							appendIfUnique nodesToRenameParents obj.parent
+						
+						for obj in nodesToRenameParents do
+							appendIfUnique nodesToRename obj
+						
+					)--for
+					
+					--pregunta por el fichero donde queremos guardar la animacion
+					file = getSaveFileName caption:("Save Animation from <selected obhjects assets>") types:"animation(*.xaf)|*.xaf|Todos los formatos (*.*)|*.*|"
+							
+					--una vez obtenidos los nodos animables de el asset actual, guardamos su animacion
+					if file != undefined then
+						if  (lb.asset.saveAnimation file nodes nodesToRename	saveSegment:true segInterval:animInterval projectId:assetsToSaveProjectIds[1]) then
+							numSavedAnimations += 1
+						--saveAnimation file nodes nodesToRename	saveSegment:chkSegment.checked segInterval:animInterval						
+				)--if else
+				
+				if nonAssetObjects.count != 0 then --si hay objetos seleccionados que no pertenecen a ningun asset, salvamos su animacion y sus links en un archivo a parte
+				(
+					nodes = #()
+					nodesToRename = #()
+						
+					nodes = nonAssetObjects
+						
+					nodesToRename = nonAssetObjects
+					nodesToRenameParents = #()
+					
+					for obj in nodesToRename where obj.parent != undefined do
+						appendIfUnique nodesToRenameParents obj.parent
+					
+					for obj in nodesToRenameParents do
+						appendIfUnique nodesToRename obj
+					
+					--pregunta por el fichero donde queremos guardar la animacion
+					file = getSaveFileName caption:("Save Animation - Non asset objects") types:"animation(*.xaf)|*.xaf|Todos los formatos (*.*)|*.*|"
+						
+					--una vez obtenidos los nodos animables de el asset actual, guardamos su animacion
+					if file != undefined then
+						if  (lb.asset.saveAnimation file nodes nodesToRename saveSegment:true segInterval:animInterval projectId:(if _projectId != undefined then _projectId else ((lb.project.getProjectByDrive "z:\\").getId()))) then
+							numSavedAnimations += 1
+					--saveAnimation file nodes nodesToRename	save
+				)--if
+				
+				lb.message.show ((numSavedAnimations as string) + " animations saved successfully") type:#message pos:undefined size:[300,75] modal:true
+			)--if
+		)
+
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollAnimationDef | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollAnimationDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollAnimationDef | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollAnimationDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+
+			spnInsertAt.value = animationRange.start
+
+			if parent.rollMain != undefined then resize [parent.rollMain.width, parent.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollAnimationDef | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollAnimationDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+		)
+	)--rollAnimationDef
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollSecondaryAnimationDef | Contiene la herramienta Secondary Animation, subrollout ubicado en la pestaña de animación.
+	------------------------------------------------------------------------------------------------------------------------------------------------	
+	rollout rollSecondaryAnimationDef "Secondary Animation"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) 		--@var: string | parent | Herramienta o rolllout del que depende y/o contiene el rollout actual		
+		
+		local minRollWidth = 225																--@var: integer | minRollWidth | Minimun tool width.
+		local minRollHeight = 100																--@var: integer | minRollHeight | Minimun tool height.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+
+		local animModeButtonsNonSelBG = (dotnetclass "system.drawing.color").fromargb 180 180 180
+		local animModeButtonsSelBG = (dotnetclass "system.drawing.color").fromargb 150 150 255	
+
+		local iconpath = if (maxVersion())[1] >= 15000 then (getDir #maxRoot) + "UI_ln\\Icons\\" else (getDir #ui) + "/icons/"		--@var: string | iconpath | ruta de los iconos de Max.
+
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+				
+		button btnSave "Save Options" pos:[5,5] width:100 
+		button btnLoad "Load Options" pos:[105,5] width:100 		
+		groupBox grpPoint "Point" pos:[5,30] width:200 height:40
+		spinner spnMass "Mass:" pos:[25,45] width:80 type:#float scale:1.0 range:[-10000.0,10000.0,300.0] --enabled:false
+		spinner spnDrag "Drag:" pos:[120,45] width:80 type:#float scale:0.01 range:[0.0,10.0,1.0] --enabled:false
+		
+		groupBox grpSprings "Springs" pos:[5,75] width:200 height:40
+		spinner spnTension "Tension:" pos:[28,92] width:70 type:#float scale:0.01 range:[-100.0,100.0,2.0] --enabled:false
+		spinner spnDampering "Dampering:" pos:[130,92] width:73 type:#float scale:0.001 range:[-10.0,10.0,0.5]
+
+		button btnBake "Bake Animation" pos:[5,120] width:100
+		spinner spnPercent "Percent:" pos:[135,122] width:65 type:#integer scale:1 range:[0,100,100]
+		button btnUnbake "Unbake Animation" pos:[5,145] width:200 
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollSecondaryAnimationDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollSecondaryAnimationDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--lb.xml.setAttribute parent.cfgFile ("rollExample1/cateagory") "paramName" "paramValue"
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			--_param = (lb.xml.getAttribute parent.cfgFile ("rollExample1/category") "paramName") as <value type>
+		)
+		
+		------------------------------------------------
+		--@fn: boolean | verifyChain | Consulta si la cadena de huesos pasada por parámetro se bifurca y/o si los huesos están unidos directamente
+		--@gets: array{bones} | bonechain | Array que contiene los huesos para la consulta.
+		--@returns: boolean | _chainOk | Devuelve **TRUE** si la cadena no se bifurca y si los huesos estan todos unidos entre ellos directamente.
+		------------------------------------------------		
+		fn verifyChain bonechain =
+		(
+			_chainOk = true
+			if bonechain.count == 0 then _chainOk = false
+			
+			for i=bonechain.count to 1 by -1 where _chainOk do
+			(
+				--Si no es el último hueso entonces esperaremos que el padre sea el hueso anterior
+				if i!= 1 then 
+				(
+					if bonechain[i].parent != bonechain[i-1] then
+					(
+						_chainOk = false
+					)
+				)
+			)
+			_chainOk
+		)
+
+		------------------------------------------------
+		--@fn: arrau{array{nodes},array{nodes}} | createSpringSystem | Crea una cadena de huesos con puntos y aplica springs en todos sus valores
+		--@gets: array{bones} | bonechain | Array que contiene los huesos para la operación.
+		--@gets: (opt)float | mass | Parámetro de configuración de la spring, la masa del objeto. \\ Por defecto 300.0
+		--@gets: (opt)float | drag | Parámetro de configuración de la spring, la elasticidad. \\ Por defecto 1.0
+		--@gets: (opt)float | tension | Parámetro de configuración de la spring, la tensión. \\ Por defecto 2.0
+		--@gets: (opt)float | dampering | Parámetro de configuración de la spring, la decaída de la fuerza. \\ Por defecto 0.5
+		--@gets: (opt)float | effectPercent | Parámetro de configuración de la spring, el porcentaje de aplicación de la malla en los controladores de posición. \\ Por defecto 0.5
+		--@returns: arrau{array{nodes},array{nodes}} | _springSystem | Devuelve una array que contiene 2 arrays, una primera con los springs, y otra con los puntos de lookAt.
+		------------------------------------------------			
+		fn createSpringSystem bonechain mass:300.0 drag:1.0 tension:2.0 dampering:0.5 effectPercent:100.0 =
+		(
+			struct springSystem (springs = #(), lookAts = #(), boneChain = #())
+			_springSystem = springSystem()
+			if bonechain[1].parent != undefined then 
+			(
+				_springChain = #()
+				_lookAtChain = #()
+
+				with animate off
+				(
+					--Ponemos el slider al comienzo de la animación
+					sliderTime = animationRange.start
+
+					--Creamos las dos cadenas de huesos y las emparentamos correctamente
+					for i=1 to bonechain.count do
+					(
+						--Creamos y orientamos los puntos
+						_springPoint = Point centermarker:false axistripod:false cross:false box:true constantscreensize:true
+						_springPoint.transform = bonechain[i].transform
+						append _springChain _springPoint
+
+						_lookAtPoint = Point centermarker:false axistripod:true cross:false box:false constantscreensize:true
+						_lookAtPoint.transform = bonechain[i].transform
+						append _lookAtChain _lookAtPoint
+
+						--Si son los primeros los emparentaremos al padre del inicio de la cadena de hueso dada, sino al hueso anterior.
+						if i==1 then 
+						(
+							_springPoint.parent = bonechain[1].parent
+							_lookAtPoint.parent = bonechain[1].parent
+						)
+						else
+						(
+							_springPoint.parent = _springChain[_springChain.count-1]
+							_lookAtPoint.parent = _lookAtChain[_lookAtChain.count-1]
+						)
+					)
+					
+					--Ahora toca crear los springs (el primero no lleva)
+					for i=2 to _springChain.count do
+					(
+						_springChain[i].position.controller = SpringPositionController()
+						_springChain[i].position.controller.setMass mass
+						_springChain[i].position.controller.setDrag drag
+						_springChain[i].position.controller.setTension 1 tension
+						_springChain[i].position.controller.setDampening 1 dampering
+
+						_springChain[i].position.controller.x_effect = effectPercent
+						_springChain[i].position.controller.y_effect = effectPercent
+						_springChain[i].position.controller.z_effect = effectPercent
+					)
+
+					--Por ultimo los LookAt_Constraint
+					for i=1 to _lookAtChain.count-1 do
+					(
+						_lookAtChain[i].rotation.controller = LookAt_Constraint()
+						_lookAtChain[i].rotation.controller.appendTarget _springChain[i+1] 50.0
+						_lookAtChain[i].rotation.controller.pickUpNode = _springChain[i+1] 
+						_lookAtChain[i].rotation.controller.upnode_world = false
+						_lookAtChain[i].rotation.controller.target_axisFlip = (bonechain[i].objectoffsetscale == [-1,1,1])
+						_lookAtChain[i].rotation.controller.StoUP_axis = 2
+						_lookAtChain[i].rotation.controller.viewline_length_abs = false
+					)
+				)
+				_springSystem.springs = _springChain
+				_springSystem.lookAts = _lookAtChain
+				_springSystem.boneChain = bonechain
+			)
+			else
+			(
+				print "BAKE CHAIN: Bone chain starting bone has no parent, cannot bake."
+				_springChain = undefined
+			)
+			_springSystem
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | bakeSpringSystem | Realiza un bakeo de la cadena de puntos con springs y lookats obtenidos de fn createSpringSystem
+		--@gets: arrau{array{nodes},array{nodes}} | springSystem | Sistema de spring a bakear.
+		--@gets: (opt)integer | effectPercent | **NO USAR** .Este parametro se usaba en versiones anteriores de codigo. 
+		------------------------------------------------
+
+		fn bakeSpringSystem springSystem percent:100 =
+		(
+			for i=1 to springSystem.boneChain.count do
+			(
+				_bone = springSystem.boneChain[i]
+
+				if not lb.animLayers.hasAnimLayers _bone then
+				(
+					lb.animLayers.enable _bone
+					lb.animLayers.addLayer _bone suffix:"secAnim"
+				)
+				else
+				(
+					lb.animLayers.addLayer _bone
+				)
+
+				with animate on
+				(
+					for j=animationRange.start to animationRange.end do
+					(
+						--_tmpPoint = Point centermarker:false axistripod:false cross:true box:false constantscreensize:false size:2
+
+						at time j
+						(							
+							/*_tmpPoint.transform = springSystem.lookAts[i].transform
+							
+							_pos = _tmpPoint.position
+							_rot = _tmpPoint.rotation as eulerangles
+							_rot.x = _rot.x*percent
+							_rot.y = _rot.y*percent
+							_rot.z = _rot.z*percent
+							_tmpPoint.rotation = (_rot as quat)
+							_tmpPoint.position = _pos
+
+							_bone.transform = _tmpPoint.transform*/
+
+							_bone.transform = springSystem.lookAts[i].transform
+						)
+
+						--delete _tmpPoint
+					)--for
+				)
+			)
+			
+			--Una vez terminado borramos los puntos de lookat y spring
+			delete springSystem.springs
+			delete springSystem.lookAts
+		)
+
+		------------------------------------------------
+		--@fn: undefined | bakeSecondaryAnimation | Crea una cadena de huesos con puntos y aplica springs en todos sus valores, luego lo bakea en la cadena objetivo. Finalmente borra la cadena auxiliar.
+		--@gets: array{bones} | bonechain | Array que contiene los huesos para la operación.
+		--@gets: (opt)float | mass | Parámetro de configuración de la spring, la masa del objeto. \\ Por defecto 300.0
+		--@gets: (opt)float | drag | Parámetro de configuración de la spring, la elasticidad. \\ Por defecto 1.0
+		--@gets: (opt)float | tension | Parámetro de configuración de la spring, la tensión. \\ Por defecto 2.0
+		--@gets: (opt)float | dampering | Parámetro de configuración de la spring, la decaída de la fuerza. \\ Por defecto 0.5
+		--@gets: (opt)float | effectPercent | Parámetro de configuración de la spring, el porcentaje de aplicación de la malla en los controladores de posición. \\ Por defecto 0.5
+		------------------------------------------------			
+		fn bakeSecondaryAnimation bonechain mass:300.0 drag:1.0 tension:2.0 dampering:0.5 percent:100 =
+		(
+			_isBone = (classof bonechain[bonechain.count].baseObject) == BoneGeometry
+			if _isBone then
+			(
+				at time animationRange.start
+				(
+					_auxEndPoint = Point centermarker:false axistripod:false cross:false box:true constantscreensize:false size:5
+					_auxEndPoint.transform = bonechain[bonechain.count].transform
+
+					_offset = bonechain[bonechain.count].length
+					if (bonechain[bonechain.count].objectoffsetscale == [-1,1,1]) then _offset = -_offset
+
+					with animate off (in coordsys local (_auxEndPoint.position.x += _offset))
+				)
+				append boneChain _auxEndPoint
+			)
+
+			_springSystem = (createSpringSystem bonechain mass:mass drag:drag tension:tension dampering:dampering effectPercent:percent)
+			if _springSystem != undefined then
+			(
+				bakeSpringSystem _springSystem percent:percent
+			)
+
+			if _isBone then delete _auxEndPoint
+		)
+
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al presionar el botón.
+		--@control: button | btnLoad | Obtiene los settings de los springs de un xml
+		------------------------------------------------		
+		on btnLoad pressed do
+		(
+			_filename = getOpenFileName caption:"Load Options File" types:"Spring Options File(*.spo)|*.spo"
+			--print _filename
+			if _filename == undefined and doesFileExist _filename then
+			(
+				spnMass.value = (lb.xml.getAttribute _filename ("spring/options") "mass") as Number
+				spnDrag.value = (lb.xml.getAttribute _filename ("spring/options") "drag") as Number
+				spnTension.value = (lb.xml.getAttribute _filename ("spring/options") "tension") as Number
+				spnDampering.value = (lb.xml.getAttribute _filename ("spring/options") "dampering") as Number
+			)
+			else
+			(
+				lb.message.show "Could not load file."
+			)
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al presionar el botón.
+		--@control: button | btnSave | Salva un xml con la configuración de springs
+		-----------------------------------------------		
+		on btnSave pressed do
+		(
+			_filename = undefined
+			_nodes = (getCurrentSelection())
+
+			--Sin selección sacamos la ruta del max
+			if _nodes.count == 0 then
+			(
+				_filename = maxFilePath 
+			)
+			else
+			(
+				--Si hay más de un asset sacamos la ruta del max, sino la del asset
+				_assets = lb.asset.getAssetsFromNodes _nodes[1]
+
+				if _assets.count == 1 then
+				(
+					_filename = _assets[1].folder
+				)
+				else
+				(
+					_filename = maxfilepath
+				)
+			)
+
+			if _filename == undefined  or _filename == "" then
+			(
+				_filename = "c:\\spring_options.spo"
+			)
+			else
+			(
+				_filename += "spring_options.spo"
+			)
+
+			_filename = getSaveFileName caption:"Save Options File" filename:_filename 
+
+			lb.xml.setAttribute _filename ("spring/options") "mass" (spnMass.value As String)
+			lb.xml.setAttribute _filename ("spring/options") "drag" (spnDrag.value As String)
+			lb.xml.setAttribute _filename ("spring/options") "tension" (spnTension.value As String)
+			lb.xml.setAttribute _filename ("spring/options") "dampering" (spnDampering.value As String)
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al presionar el botón.
+		--@control: button | btnUnbake | Botón de unbakear animación, borra las capas que encuentre con el sufijo "secAnim"
+		-----------------------------------------------			
+		on btnUnbake pressed do
+		(
+			_selection = getCurrentSelection()
+
+			--elimina lo que no sean huesos de la seleccion
+			--for i=_selection.count to 1 by -1 where classof _selection[i].baseObject != BoneGeometry do deleteItem _selection i
+
+			--Elimina una capa por selección
+			if _selection.count > 0 then
+			(
+				_sliderTimeBackup = sliderTime
+				setWaitCursor()
+				sliderTime = animationRange.start
+				
+				_boneslists = lb.rig.getHierarchiesFromNodes _selection useVirtualHierarchy:false
+
+				for _bones in _bonesLists do
+				(
+					for _bone in _bones do
+					(
+						lb.animLayers.removeLayerBySuffix _bone "secAnim"
+						if (lb.animLayers.count _bone) == 1 then 
+						(
+							lb.animLayers.disable _bone
+						)
+					)
+				)
+
+				setArrowCursor()
+				sliderTime = _sliderTimeBackup
+			)
+			else
+			(
+				lb.message.show "UNBAKE SECONDARY ANIMATION: No nodes are selected. Aborting."
+			)
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al presionar el botón.
+		--@control: button | btnBake | Botón de bakear animación
+		-----------------------------------------------			
+		on btnBake pressed do
+		(
+			_selection = getCurrentSelection()
+
+			--elimina lo que no sean huesos de la seleccion
+			--for i=_selection.count to 1 by -1 where classof _selection[i].baseObject != BoneGeometry do deleteItem _selection i
+
+			if _selection.count > 0 then
+			(
+				_sliderTimeBackup = sliderTime
+				setWaitCursor()
+
+				_boneslists = lb.rig.getHierarchiesFromNodes _selection useVirtualHierarchy:false
+				for _bones in _bonesLists do
+				(
+					--primero hace unbake de la animacion
+					for _bone in _bones do
+					(
+						lb.animLayers.removeLayerBySuffix _bone "secAnim"
+						if (lb.animLayers.count _bone) == 1 then 
+						(
+							lb.animLayers.disable _bone
+						)
+					)
+
+					--hace bake de la animacion
+					if (verifyChain _bones) then
+					(
+						bakeSecondaryAnimation _bones mass:spnMass.value drag:spnDrag.value tension:spnTension.value dampering:spnDampering.value percent:(spnPercent.value)
+					)
+					else
+					(
+						print "BAKE SECONDARY ANIMATION: Bones are not directly linked or chain bifurcates, aborting process."
+					)
+				)
+
+				setArrowCursor()
+				sliderTime = _sliderTimeBackup
+			)
+			else
+			(
+				lb.message.show "BAKE SECONDARY ANIMATION: No bones are selected, please select one or more bones."
+			)
+		)
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+
+		------------------------------------------------
+		--@event: rolledUp | Evento que se lanza al redimensionar el rollout
+		--@control: rollout | rollSecondaryAnimationDef | Se redimensiona el rollout principal para englobar los controles del mismo.
+		------------------------------------------------
+		on rollSecondaryAnimationDef rolledUp state do 
+		(
+			parent.heightAdjust 2
+		)
+
+		
+
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollMain | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollSecondaryAnimationDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollMain | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollSecondaryAnimationDef open do
+		(
+			--loadSettings()
+			--createSceneEvents() --crea los callbacks
+
+			--spnInsertAt.value = animationRange.start
+
+			if parent.rollMain != undefined then resize [parent.rollMain.width, parent.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollMain | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollSecondaryAnimationDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+		)
+	)--rollSecondaryAnimationDef
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollCacheReloadAssetDef | Contiene la herramienta Cache fixes, subrollout ubicado en la pestaña de Caché.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollCacheReloadAssetDef "Cache fixes"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) 			--@var: string | parent | Herramienta o rolllout del que depende y/o contiene el rollout actual		
+		
+		local minRollWidth = 225																	--@var: integer | minRollWidth | Minimun tool width.
+		local minRollHeight = 100																	--@var: integer | minRollHeight | Minimun tool height.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		
+		button btnReloadAsset "Reload Asset" pos:[10,5] width:192 height:20
+		button btnReloadHeadTextures "Reload Head Textures" pos:[10,30] width:192 height:20
+		button btnLoadVariations "Load Asset Variations" pos:[10,55] width:192 height:20
+		button btnBakeSelectionAnimation "Bake Selection Animation" pos:[10,80] width:192 height:20
+
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollCacheReloadAssetDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollCacheReloadAssetDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--lb.xml.setAttribute parent.cfgFile ("rollExample1/cateagory") "paramName" "paramValue"
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			--_param = (lb.xml.getAttribute parent.cfgFile ("rollExample1/category") "paramName") as <value type>
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton
+		--@control: button | btnReloadAsset | Se recarga el asset (Se elimina de escena, y se vuelve a traer con a animación que tenía.) seleccionado el la lista superior del manager.
+		------------------------------------------------
+		on btnReloadAsset pressed do 
+		(
+			_isPrpSetAsset = false
+			--Configuramos la tool de creación de puntos des de objetos
+			_tool = (lb.getScript "createPointsFromObjects")
+			--Conseguimos el asset a usar de la seleccion del asset manager
+			_assetsToUse = lb.assetManager.getSelectedAssets()
+			if _assetsToUse.count == 1 then
+			(
+				for _node in _assetsToUse[1].nodes do
+				(
+					if (matchpattern _node.name pattern: "*base*") or (matchpattern _node.name pattern: "*handCross*") then 
+					(
+						--Creamos los puntos en la base y los controles de ik
+						select _node
+						_tool.run() --lanza el script
+					)
+				)
+			
+				--Debemos cambiar de tab del assetManager para que las llamadas a las funciones de alli no se "pudren"
+				lb.assetManager.rollMain.tbTabs.selectedTabPageIndex = 1
+				--Salvamos la animación
+				lb.assetManager.rollAnimation.btnSaveAnimation.pressed()
+				
+				if lb.nodeInfo.hasNodeInfo _assetsToUse[1].nodes[1] and _assetsToUse[1].nodes[1].nodeInfo.fileHistory.count != 0 then
+				(
+					_assetBaseName = undefined
+					_assetfileHistory = undefined
+					for j = 1 to _assetsToUse[1].nodes[1].nodeInfo.fileHistory.count do
+					(
+						if ((filterString  _assetsToUse[1].nodes[1].nodeInfo.fileHistory[j] "\\")[3]) == lb.nc.NC_setPrefix or ((filterString  _assetsToUse[1].nodes[1].nodeInfo.fileHistory[j] "\\")[3]) == lb.nc.NC_prpPrefix then
+						(
+							_isPrpSetAsset = true
+							if ((filterString  _assetsToUse[1].nodes[1].nodeInfo.fileHistory[j] "\\")[6]) == lb.nc.NC_presetFolderName then
+							(
+								_assetBaseName =  _assetsToUse[1].nodes[1].nodeInfo.layerNameHistory[j]
+								_assetfileHistory = _assetsToUse[1].nodes[1].nodeInfo.fileHistory[j]
+							)
+						)
+						else
+						(
+							if ((filterString  _assetsToUse[1].nodes[1].nodeInfo.fileHistory[j] "\\")[7]) == lb.nc.NC_presetFolderName then
+							(
+								_assetBaseName =  _assetsToUse[1].nodes[1].nodeInfo.layerNameHistory[j]
+								_assetfileHistory = _assetsToUse[1].nodes[1].nodeInfo.fileHistory[j]
+							)
+						)
+
+					)
+					if _assetfileHistory != undefined then
+					(
+						lb.assetManager.rollMain.selectAssetByName _assetBaseName
+						lb.assetManager.rollMain.btnDeleteAsset.pressed()
+						--Cargamos el preset
+						if not doesFileExist (_assetfileHistory) then 
+						(
+							_assetfileHistory = getOpenFileName filename:(_assetfileHistory) caption: ("Archivo "+ (_assetfileHistory))
+						)	
+						--Cargaremos siempre la ultima versión del Preset del Asset
+						--------------------------------------------------------------------------
+						
+						_assetFileHistoryFolderParts = filterString _assetfileHistory "\\"
+						if not _isPrpSetAsset then
+						(
+							_assetHistoryFolder = _assetFileHistoryFolderParts[1]+"\\"+_assetFileHistoryFolderParts[2]+"\\"+_assetFileHistoryFolderParts[3]+"\\"+_assetFileHistoryFolderParts[4]+"\\"+_assetFileHistoryFolderParts[5]+"\\"+_assetFileHistoryFolderParts[6]+"\\"+_assetFileHistoryFolderParts[7]+"\\"+"*.prt"
+						)
+						else
+						(
+							_assetHistoryFolder = _assetFileHistoryFolderParts[1]+"\\"+_assetFileHistoryFolderParts[2]+"\\"+_assetFileHistoryFolderParts[3]+"\\"+_assetFileHistoryFolderParts[4]+"\\"+_assetFileHistoryFolderParts[5]+"\\"+_assetFileHistoryFolderParts[6]+"\\"+"*.prt"
+						)
+						_files = getFiles _assetHistoryFolder
+
+						_fromParts = filterString _assetfileHistory "_"
+						_fromVersion = (filterString _fromParts[_fromParts.count] ".")[1]
+						_newFrom = substituteString _assetfileHistory _fromVersion "v*"
+						_hightestIndex = (-1)
+						_highestVersionName = ""
+						for _file in _files do
+						(
+							if matchpattern _file pattern:(_newFrom) do
+							(
+								_fileParts =  filterString _file "_"
+								_fileVersion = (filterString _fileParts[_fileParts.count] ".")[1]
+								_fileVersion = (filterString _fileVersion "v")[1]
+								if (_fileVersion as integer) > (_hightestIndex as integer) then
+								(
+									_hightestIndex = _fileVersion
+									_highestVersionName = _file	
+								)
+							)
+						)
+						_assetfileHistory = _highestVersionName
+						---------------------------------------------------------------------------
+						
+						lb.presets.loadPreset _assetfileHistory
+						--Vamos a la pestaña de renombrado y renombramos el asset como se llamaba antes
+						lb.assetManager.rollMain.tbTabs.selectedTabPageIndex = 7
+						lb.assetManager.rollMain.selectAssetByName _assetBaseName
+						--refrescamos la memoria del asset con las nuevas referencias
+						_assetsToUse = lb.assetManager.getSelectedAssets()
+						_assetBaseName = substituteString _assetBaseName "chr_" ""
+						lb.assetManager.rollMisc.edtAssetName.text = _assetBaseName
+						lb.assetManager.rollMisc.btnRenameAsset.pressed()
+						--Cargamos la animación guardada
+						lb.assetManager.rollAnimation.btnLoadAnimation.pressed()
+					)
+					else lb.message.show "Preset not found in asset's nodeInfo, tool closing "
+				)
+
+				lb.assetManager.rollMain.tbTabs.selectedTabPageIndex = 2
+				--Alineamos la base y las ik's a los puntos que se habian crreado antes
+				_pointsToDelete = #()
+				if not _isPrpSetAsset then
+				(
+					for _node in _assetsToUse[1].nodes do
+					(
+						if (matchpattern _node.name pattern: "*base*") then 
+						(
+							for _point in helpers do 
+							(
+								if (matchpattern _point.name pattern: "*base*") then 
+								(
+									_node.transform = _point.transform
+									append _pointsToDelete _point
+								)
+							)
+						)
+						if (matchpattern _node.name pattern: "*l_handCross*") then 
+						(
+							for _point in helpers do 
+							(
+								if (matchpattern _point.name pattern: "*l_handCross*") then 
+								(
+									_node.transform = _point.transform
+									append _pointsToDelete _point
+								)
+							)
+						)
+						if (matchpattern _node.name pattern: "*r_handCross*") then 
+						(
+							for _point in helpers do 
+							(
+								if (matchpattern _point.name pattern: "*r_handCross*") then 
+								(
+									_node.transform = _point.transform
+									append _pointsToDelete _point
+								)
+							)
+						)
+					)
+					delete _pointsToDelete
+				)
+				--Volvemos al tab inicial
+			) else lb.message.show "Select only 1 asset."	
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton
+		--@control: button | btnReloadHeadTextures | Se vuelven a cargar las texturas de la cabeza para los assets seleccionados. Se buscan las que tiene el objeto en el nodeInfo.
+		------------------------------------------------
+		on btnReloadHeadTextures pressed do 
+		(
+			for o in objects where ((lb.nc.getNamePart o.name 5) == lb.nc.NC_ANIM_head) and ((lb.nc.getNamePart o.name 3) == lb.nc.NC_classMesh)  do
+			(
+				if lb.nodeInfo.hasNodeInfo o then
+				(
+					o.material.srcFileName = o.nodeInfo.fileHistory[o.nodeInfo.fileHistory.count]
+					o.material.srcItemName = o.nodeInfo.nameHistory[o.nodeInfo.nameHistory.count]
+				)
+			)		
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton
+		--@control: button | btnLoadVariations | Se cargan las variaciones de los assets seleccionados 
+		------------------------------------------------
+		on btnLoadVariations pressed do
+		(
+			_assets = lb.assetManager.getSelectedAssets()
+			lb.variations.loadVariations _assets:_assets
+		)
+		------------------------------------------------
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton
+		--@control: button | btnBakeSelectionAnimation | Se bakea la animación de los elementos seleccionados.
+		------------------------------------------------		
+		on btnBakeSelectionAnimation pressed do
+		(
+			lb.bakeSelectionAnimation.run()
+		)
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollCacheReloadAssetDef | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollCacheReloadAssetDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollCacheReloadAssetDef | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollCacheReloadAssetDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+			if parent.rollMain != undefined then resize [parent.rollMain.width, parent.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollCacheReloadAssetDef | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollCacheReloadAssetDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+		)
+
+	)--rollCacheReloadAssetDef
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollCopiesVariationsDef | Contiene la herramienta Copy Variations.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollCopiesVariationsDef "Copy Variations"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) 		--@var: string | parent | Herramienta o rolllout del que depende y/o contiene el rollout actual		
+		
+		local minRollWidth = 225																--@var: integer | minRollWidth | Minimun tool width.
+		local minRollHeight = 100																--@var: integer | minRollHeight | Minimun tool height.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+
+		local iconpath = if (maxVersion())[1] >= 15000 then (getDir #maxRoot) + "UI_ln\\Icons\\" else (getDir #ui) + "/icons/"		--@var: string | iconpath | ruta de los iconos de Max.
+
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		
+		checkbox chkVariationsEnable "enabled" pos:[5,0] width:75 checked:true
+		
+		label lblVariationPos "Pos" pos:[5,20] width:30 height:15
+		spinner spnVariationPosX "" pos:[55,20] width:50 height:16 range:[-100000,100000,0]
+		spinner spnVariationPosY "" pos:[105,20] width:50 height:16 range:[-100000,100000,0]
+		spinner spnVariationPosZ "" pos:[155,20] width:50 height:16 range:[-100000,100000,0]
+		
+		label lblVariationRot "Rot" pos:[5,35] width:30 height:15
+		spinner spnVariationRotX "" pos:[55,35] width:50 height:16 range:[-100000,100000,0]
+		spinner spnVariationRotY "" pos:[105,35] width:50 height:16 range:[-100000,100000,0]
+		spinner spnVariationRotZ "" pos:[155,35] width:50 height:16 range:[-100000,100000,0]
+		
+		label lblVariationScale "scale%" pos:[5,50] width:35 height:15
+		spinner spnVariationScaleX "" pos:[55,50] width:50 height:16 range:[0,100000,0]
+		spinner spnVariationScaleY "" pos:[105,50] width:50 height:16 range:[0,100000,0] enabled:false --visible:false
+		-- 		label lblVariationScaleYdisabled "" pos:[106,32] width:38 height:15 enabled:false visible:true style_sunkenedge:true
+		spinner spnVariationScaleZ "" pos:[155,50] width:50 height:16 range:[0,100000,0] enabled:false --visible:false
+		-- 		label lblVariationScaleZdisabled "" pos:[156,32] width:38 height:15 enabled:false visible:true style_sunkenedge:true
+		checkButton ckbVariationScaleLock "" pos:[42,50] width:13 height:16 images:#(iconpath + "LockButtonExt_i.bmp", undefined, 2, 2, 1, 1, 1,true) checked:true border:false
+		
+		button btnVariationReset "Reset" pos:[5,75] width:200 height:20
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollCopiesVariationsDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollCopiesVariationsDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--lb.xml.setAttribute parent.cfgFile ("rollExample1/cateagory") "paramName" "paramValue"
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			--_param = (lb.xml.getAttribute parent.cfgFile ("rollExample1/category") "paramName") as <value type>
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del checkbutton
+		--@control: checkButton | ckbVariationScaleLock | actualiza el interface con los locks
+		------------------------------------------------		
+		on ckbVariationScaleLock changed state do
+		(
+			spnVariationScaleY.value = spnVariationScaleZ.value = spnVariationScaleX.value
+			
+			spnVariationScaleY.enabled = not state
+			-- 			spnVariationScaleY.visible = not state
+			-- 			lblVariationScaleYdisabled.visible = state
+			
+			spnVariationScaleZ.enabled = not state
+			-- 			spnVariationScaleZ.visible = not state
+			-- 			lblVariationScaleZdisabled.visible = state
+		)
+		
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del checkbutton
+		--@control: checkButton | chkVariationsEnable | habilita o deshabilita las variaciones
+		------------------------------------------------			
+		on chkVariationsEnable changed state do
+		(
+			lblVariationPos.enabled = state
+			spnVariationPosX.enabled = state
+			spnVariationPosY.enabled = state
+			spnVariationPosZ.enabled = state
+			
+			lblVariationRot.enabled = state
+			spnVariationRotX.enabled = state
+			spnVariationRotY.enabled = state
+			spnVariationRotZ.enabled = state
+			
+			lblVariationScale.enabled = state
+			spnVariationScaleX.enabled = state
+			spnVariationScaleY.enabled = state and not ckbVariationScaleLock.checked
+			spnVariationScaleZ.enabled = state and not ckbVariationScaleLock.checked
+			ckbVariationScaleLock.enabled = state
+			
+			btnVariationReset.enabled = state
+		)
+			
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton.
+		--@control: button | btnVariationReset | resetea los valores de los spinners
+		------------------------------------------------			
+		on btnVariationReset pressed do
+		(
+			spnVariationPosX.value = spnVariationPosY.value = spnVariationPosZ.value = 0
+			spnVariationRotX.value = spnVariationRotY.value = spnVariationRotZ.value = 0
+			spnVariationScaleX.value = spnVariationScaleY.value = spnVariationScaleZ.value = 0
+		)
+		
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al recibir un cambio de valor
+		--@control: spinner | spnVariationScaleX | Actualiza el valor de los spinners spnVariationScaleY e spnVariationScaleZ con el valor del spinner spnVariationScaleX
+		------------------------------------------------			
+		on spnVariationScaleX changed val do
+			if ckbVariationScaleLock.checked then
+				spnVariationScaleY.value = spnVariationScaleZ.value = val		
+
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollCopiesVariationsDef | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollCopiesVariationsDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollCopiesVariationsDef | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollCopiesVariationsDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+			if parent.rollMain != undefined then resize [parent.rollMain.width, parent.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollCopiesVariationsDef | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollCopiesVariationsDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+		)
+	)--rollCopiesVariationsDef
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollpreCamFramesDef | Contiene la herramienta Set Start Time, subrollout ubicado en la pesaña de cloth.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollpreCamFramesDef "Set Start Time"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) 			--@var: string | parent | Herramienta o rolllout del que depende y/o contiene el rollout actual		
+		
+		local minRollWidth = 225																	--@var: integer | minRollWidth | Minimun tool width.
+		local minRollHeight = 100																	--@var: integer | minRollHeight | Minimun tool height.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		
+		spinner spnOffsetTime "" range:[-1000000,1000000,10] type:#integer pos:[5,7] width:80 height:20 enabled:true
+		button btnGo "Go to frame!" pos:[90, 5] width:80 height:20 enabled:true
+		button btnZero "0!" pos:[180,5] width:20 height:20 enabled:true
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+
+		-----------------------------------------------------------------------------------
+		--@fn: undefined | setPreCamXFrames | Ajusta el rango de animación; añadiendo el numero de frames pasados por parámetro antes del rango de camara.
+		--@gets: integer | numframes | La cantidad de frames que se deben añadir **ANTES** del rango inicial de la camara.
+		--@gets: integer | _optionValue | Configuraciones del rango de animación \\ Si vale **1** el frame se ajusta el valor de frames que indica numframes antes del inicio de camara \\ Si vale **2** El frame se situa en el frame 0
+		----------------------------------------------------------------------------------- 
+		fn setPreCamXFrames numframes _optionValue=
+		(
+			--Obtenemos las camaras en escena
+			_cameras = lb.cameraFunctions.getSceneCameras()
+			if _cameras.count == 0 then
+			(
+				lb.message.show "Debe de haber una camara en escena"
+			)
+			else if cameras.count >0 then
+			( 
+				--Si la camara no tiene camInfo se lo añadimos.
+				if not lb.cameraFunctions.hasCamInfo _cameras[1] then 
+				(
+					lb.cameraFunctions.addCamInfo _cameras[1]
+					_camRange = lb.animation.getAnimRange _cameras[1]
+					--Configuramos el rango de animación del camInfo.
+		 			_cameras[1].camInfo.recStart = _camRange.start
+		 			_cameras[1].camInfo.recEnd 	= _camRange.end
+	 			)
+				case _optionValue of
+				(
+					1:
+					(
+						firstFrame = _cameras[1].camInfo.recStart - numframes
+					)
+					2:
+					(
+						firstFrame = 0
+					)
+				)
+				-------------------------------------------------------------------------------------------------
+				--deja el rango de animacion adaptado
+				animationRange = interval firstFrame _cameras[1].camInfo.recEnd
+				----------------------------------------------------------------------------------------
+				--Finalmente ponemos el slider de tiempo en el frame inicial.
+				sliderTime = firstFrame
+
+			)
+		)
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollpreCamFramesDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollpreCamFramesDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--lb.xml.setAttribute parent.cfgFile ("rollExample1/cateagory") "paramName" "paramValue"
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			--_param = (lb.xml.getAttribute parent.cfgFile ("rollExample1/category") "paramName") as <value type>
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton
+		--@control: button | btnGo | Se configura el rango inicial de animación tantos frames antes como indique el spinner spnOffsetTime.
+		------------------------------------------------		
+		on btnGo pressed do 
+		(
+			setPreCamXFrames spnOffsetTime.value 1
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton
+		--@control: button | btnZero | Se configura el rango inicial de animación a 0
+		------------------------------------------------	
+		on btnZero pressed do 
+		(
+			setPreCamXFrames spnOffsetTime.value 2
+		)
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollpreCamFramesDef | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollpreCamFramesDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollpreCamFramesDef | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollpreCamFramesDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+			if parent.rollMain != undefined then resize [parent.rollMain.width, parent.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollpreCamFramesDef | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollpreCamFramesDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+		)
+	)--rollpreCamFramesDef
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollClothOverrideDef | Contiene la herramienta Cloth Override, subrollout ubicado en la pesaña de cloth.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollClothOverrideDef "Cloth Override"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) 		--@var: string | parent | Herramienta o rolllout del que depende y/o contiene el rollout actual		
+		
+		local minRollWidth = 225																--@var: integer | minRollWidth | Minimun tool width.
+		local minRollHeight = 100																--@var: integer | minRollHeight | Minimun tool height.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		
+		spinner spnStartFrame "" range:[-1000000,1000000,0] type:#integer pos:[5,7] width:100 height:20 enabled:true
+		button btnOverride "Override!" pos:[120, 5] width:80 height:20 enabled:true
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollClothOverrideDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollClothOverrideDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--lb.xml.setAttribute parent.cfgFile ("rollExample1/cateagory") "paramName" "paramValue"
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			--_param = (lb.xml.getAttribute parent.cfgFile ("rollExample1/category") "paramName") as <value type>
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al presionar el botón.
+		--@control: button | btnOverride | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		------------------------------------------------
+		on btnOverride pressed do 
+		(
+			_mod = modPanel.getCurrentObject()
+			if classof _mod == Cloth then
+			(	
+				_mod.startframe = spnStartFrame.value
+				lb.message.show ("<" + _mod.name + ">:\n\n Simulation start frame set to " + (spnStartFrame.value As String))	
+			)
+			else
+			(
+				lb.message.show "You must select cloth modifier"
+			)
+		)
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollClothOverrideDef | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollClothOverrideDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollClothOverrideDef | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollClothOverrideDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+			if parent.rollMain != undefined then resize [parent.rollMain.width, parent.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollClothOverrideDef | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollClothOverrideDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+		)
+	)--rollClothOverrideDef
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollPrepareAnimDef | Contiene la herramienta Prepare animation, subrollout ubicado en la pesaña de cloth. 
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollPrepareAnimDef "Prepare animation"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) 			--@var: string | parent | Herramienta o rolllout del que depende y/o contiene el rollout actual		
+		
+		local minRollWidth = 225																	--@var: integer | minRollWidth | Minimun tool width.
+		local minRollHeight = 100																	--@var: integer | minRollHeight | Minimun tool height.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		
+		button btnPrepareAnimation "Prepare animation" pos:[5,5] width:197 height:20 toolTip:"Prepares the animation file deleting all the keys previous to the current animation range and creating zero poses 10 and 20 frames before the animation."
+		spinner spnPreAnimationFrames "Pre animation frames" pos:[5,30] type:#integer range:[1,99999,20]
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollPrepareAnimDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollPrepareAnimDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--lb.xml.setAttribute parent.cfgFile ("rollExample1/cateagory") "paramName" "paramValue"
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			--_param = (lb.xml.getAttribute parent.cfgFile ("rollExample1/category") "paramName") as <value type>
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton.
+		--@control: button | btnPrepareAnimation | prepara los asset seleccionados para que tenga animacion previa al rango, para cloth y hair.
+		------------------------------------------------		
+		on btnPrepareAnimation pressed do 
+		(
+			if (querybox "This operation can't be undo. Do you want to continue?") then
+			(
+				setWaitCursor() --pone el cursor de espera
+				
+				firstFrame = animationRange.start --	primer fotograma del rango de animación
+				
+				-------------------------------------------------------------------------------------------------
+				--Assets a procesar. Solo tratamos los assets de tipo Character.
+				assetsToProcess = for a in lb.assetManager.getSelectedAssets() where a.type == lb.nc.NC_chrPrefix collect a
+				-------------------------------------------------------------------------------------------------
+				
+				--	creamos una clave a todas las piezas animables al princpio del rango de animación y borramos la animación que pueda haber antes.
+				--	creamos la pose zero tantos frames antes de la animación como indique el spinner.
+				with undo off
+				(					
+					for a in assetsToProcess do lb.asset.prepareAnimation a spnPreAnimationFrames.value
+				)
+				
+				-------------------------------------------------------------------------------------------------
+				--deja el rango de anomacion adaptado
+				animationRange = interval (firstFrame - spnPreAnimationFrames.value) animationRange.end
+				-------------------------------------------------------------------------------------------------
+				
+				completeRedraw() --redibuja el viewport
+				setArrowCursor() --deja el cursor en modo flecha
+			)
+		)
+
+		------------------------------------------------
+		--@event: rolledUp | Evento que se lanza al redimensionar el rollout
+		--@control: rollout | rollPrepareAnimDef | Se redimensiona el rollout principal para englobar los controles del mismo.
+		------------------------------------------------
+		on rollPrepareAnimDef rolledUp state do 
+		(
+			parent.heightAdjust 4
+		)
+
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollPrepareAnimDef | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollPrepareAnimDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollPrepareAnimDef | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollPrepareAnimDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+			if parent.rollMain != undefined then resize [parent.rollMain.width, parent.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollPrepareAnimDef | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollPrepareAnimDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+		)
+	)--rollPrepareAnimDef
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollClothGeneralDef | Contiene la herramienta Cloth Visualization, subrollout ubicado en la pesaña de cloth. .
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollClothGeneralDef "Cloth Visualization"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) 		--@var: string | parent | Herramienta o rolllout del que depende y/o contiene el rollout actual		
+		
+		local minRollWidth = 225																--@var: integer | minRollWidth | Minimun tool width.
+		local minRollHeight = 100																--@var: integer | minRollHeight | Minimun tool height.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+
+		local iconpath = if (maxVersion())[1] >= 15000 then (getDir #maxRoot) + "UI_ln\\Icons\\" else (getDir #ui) + "/icons/"		--@var: string | parent | ruta de los iconos de Max.
+
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		
+		groupBox grpClothVisModes "Cloth Visualization Modes" pos:[5,5] width:200 height:47
+		button btnVMcloth "Cloth" pos:[10,21] width:40 height:25
+		button btnVMskinCloth "Skin + Cloth" pos:[55,21] width:65 height:25
+		button btnTurbosmoothEnable "" pos:[152,21] width:22 height:25 images:#(iconpath + "patches_24i.bmp", undefined, 2, 2, 2, 2, 2,true) tooltip:"Enable asset/s turbosmooth"
+		button btnTurbosmoothDisable "" pos:[178,21] width:20 height:25 images:#(iconpath + "patches_24i.bmp", undefined, 2, 1, 1, 1, 1,true) tooltip:"Disable asset/s turbosmooth"
+		button btnModifiersClothEnable ""  pos:[127,21] width:20 height:25 images:#(iconpath + "IsolateSelection_16i.bmp", undefined, 1, 1, 1, 1, 1,true) tooltip:"Enable/Disable asset modifiers above current cloth modifier selected "
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+
+		-----------------------------------------------------------------------------------
+		--@fn: array{struct} | getAssetsToWork | Consulta los assets con los que trabajar segun la opcion seleccionada en la interfaz.
+		--@returns: array{struct} | _assetsToWork | Los assets consultados.
+		-----------------------------------------------------------------------------------			
+		fn getAssetsToWork =
+		(
+			_assetsToWork = #() --array para almacenar los assets que se pondran en el modo de visualizacion
+			
+			_assetsToWork = lb.assetManager.getSelectedAssets()
+			
+			_assetsToWork --devuelve los assets con los que trabajar
+		)	
+
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollClothGeneralDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollClothGeneralDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--lb.xml.setAttribute parent.cfgFile ("rollExample1/cateagory") "paramName" "paramValue"
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			--_param = (lb.xml.getAttribute parent.cfgFile ("rollExample1/category") "paramName") as <value type>
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton.
+		--@control: button | btnVMcloth | cambia los assets que proceda a modo cloth
+		------------------------------------------------		
+		on btnVMcloth pressed do
+		(
+			_assetsToWork = getAssetsToWork() --obtiene los assets con los que trabajar
+			
+			--Activamos la pestaña de crear para que vaya más fluido
+			max create mode
+			
+			setWaitCursor()			
+			disableSceneRedraw()
+			suspendEditing()
+				
+			--pone cada asset en el modo de visualizacion cloth
+			with undo off			
+				for ast in _assetsToWork do lb.asset.setAssetClothMode ast
+				
+			resumeEditing()
+			enableSceneRedraw()
+			completeRedraw()
+			setArrowCursor()
+				
+			lb.assetManager.rollAdvanced.fillLayerControls()
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton.
+		--@control: button | btnVMskinCloth | cambia los assets que proceda a modo skin + cloth
+		------------------------------------------------		
+		on btnVMskinCloth pressed do
+		(
+			_assetsToWork = getAssetsToWork() --obtiene los assets con los que trabajar
+			
+			--Activamos la pestaña de crear para que vaya más fluido
+			max create mode
+			
+			setWaitCursor()			
+			disableSceneRedraw()
+			suspendEditing()
+				
+			--pone cada asset en el modo de visualizacion skin + cloth
+			with undo off
+				for ast in _assetsToWork do lb.asset.setAssetSkinClothMode ast
+				
+			resumeEditing()
+			enableSceneRedraw()
+			completeRedraw()
+			setArrowCursor()
+				
+			lb.assetManager.rollAdvanced.fillLayerControls()
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton.
+		--@control: button | btnModifiersClothEnable | activa los modificadores por encima del modificador seleccionado (de cloth) para todo el asset
+		------------------------------------------------			
+		on btnModifiersClothEnable pressed do
+		(
+			_selection = getCurrentSelection()
+			if _selection.count == 1 then
+			(
+				_mod = modPanel.getCurrentObject() 
+				if classOf _mod == Cloth then
+				(
+					_done = false
+					for i = 1 to _selection[1].modifiers.count do
+					(
+						if (not _done) do
+						(
+							_selection[1].modifiers[i].enabled = (not _mod.enabled)
+						)
+					if _mod == _selection[1].modifiers[i] do _done = true
+					)
+					
+					_assetsToUse = lb.assetManager.getSelectedAssets()
+					for _asset in _assetsToUse do
+					(
+						_hasClothModifiers = false
+						for _node in _asset.nodes where _node.name != _selection[1].name do
+						(
+							_limit = 0
+							for i = _node.modifiers.count to 1 by -1 do
+							(
+								if (classOf _node.modifiers[i] == Cloth) and not _hasClothModifiers do 
+								(
+									_limit = i
+									_hasClothModifiers = true
+								)
+							)
+							if _hasClothModifiers do
+							(
+								for i = 1 to _limit do
+								(
+									_node.modifiers[i].enabled = _mod.enabled
+								)
+							)
+						)
+					)
+					suspendEditing()
+					resumeEditing()
+				)
+				else lb.message.show "Selecciona un modificador de cloth de un asset para Activar/Desactivar"
+			)
+			else lb.message.show "Selecciona un objeto de un asset"
+
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton.
+		--@control: button | btnTurbosmoothEnable | activa los turbosmooths
+		------------------------------------------------			
+		on btnTurbosmoothEnable pressed do
+		(
+			_assetsToWork = getAssetsToWork() --obtiene los assets con los que trabajar
+			for ast in _assetsToWork do lb.asset.enableAssetTurbosmooths ast --activa los turbosmooths
+		)
+		
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton.
+		--@control: button | btnTurbosmoothDisable | desactiva los turbosmooths
+		------------------------------------------------			
+		on btnTurbosmoothDisable pressed do
+		(
+			_assetsToWork = getAssetsToWork() --obtiene los assets con los que trabajar
+			for ast in _assetsToWork do lb.asset.disableAssetTurbosmooths ast --desactiva los turbosmooths
+		)
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+
+		------------------------------------------------
+		--@event: rolledUp | Evento que se lanza al redimensionar el rollout
+		--@control: rollout | rollClothGeneralDef | Se redimensiona el rollout principal para englobar los controles del mismo.
+		------------------------------------------------
+		on rollClothGeneralDef rolledUp state do 
+		(
+			parent.heightAdjust 4
+		)
+
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollClothGeneralDef | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollClothGeneralDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollClothGeneralDef | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollClothGeneralDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+			if parent.rollMain != undefined then resize [parent.rollMain.width, parent.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollClothGeneralDef | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollClothGeneralDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+		)
+	)--rollClothGeneralDef
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollClothImportExportDef | Contiene la herramienta Cloth Import, subrollout ubicado en la pesaña de cloth. .
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollClothImportExportDef "Cloth Import"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) 			--@var: string | parent | Herramienta o rolllout del que depende y/o contiene el rollout actual		
+		
+		local minRollWidth = 225																	--@var: integer | minRollWidth | Minimun tool width.
+		local minRollHeight = 100																	--@var: integer | minRollHeight | Minimun tool height.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+
+		local iconpath = if (maxVersion())[1] >= 15000 then (getDir #maxRoot) + "UI_ln\\Icons\\" else (getDir #ui) + "/icons/"		--@var: string | iconpath | ruta de los iconos de Max.
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+
+		checkbutton chkOperateOnSelAssetsCloth "Sel Assets" pos:[11,5] width:90 height:20 checked:true
+		checkbutton ckbOperateOnSelectionCloth "Sel Objects" pos:[109,5] width:90 height:20
+		
+		button btnImportCloth "Import Selected Asset/s Cloth" pos:[5,35] width:195 height:20
+
+
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollClothImportExportDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollClothImportExportDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--lb.xml.setAttribute parent.cfgFile ("rollExample1/cateagory") "paramName" "paramValue"
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			--_param = (lb.xml.getAttribute parent.cfgFile ("rollExample1/category") "paramName") as <value type>
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del checkbutton
+		--@control: checkbutton | chkOperateOnSelAssetsCloth | Activa/desactiva el checkButton chkOperateOnSelAssetsCloth y actualiza el estado de la UI.
+		------------------------------------------------
+		on chkOperateOnSelAssetsCloth changed state do
+		(
+			if state then
+				ckbOperateOnSelectionCloth.checked = false
+			else
+				chkOperateOnSelAssetsCloth.checked = true
+		)	
+			
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del checkbutton
+		--@control: checkbutton | ckbOperateOnSelectionCloth | Activa/desactiva el checkButton ckbOperateOnSelectionCloth y actualiza el estado de la UI.
+		------------------------------------------------
+		on ckbOperateOnSelectionCloth changed state do
+		(
+			if state then
+				chkOperateOnSelAssetsCloth.checked = false
+			else
+				ckbOperateOnSelectionCloth.checked = true
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al puslar el boton.
+		--@control: button | btnImportCloth | Importa el cloth para los assets seleccionados.
+		------------------------------------------------
+		on btnImportCloth pressed do 
+		(
+			_assetsToUse = #()
+			_selNodes = #()
+
+			if chkOperateOnSelAssetsCloth.checked then --almacena solo los assets seleccionados
+			(
+				_assetsToUse = lb.assetManager.getSelectedAssets()
+			)
+			else if ckbOperateOnSelectionCloth.checked then --busca los assets de los objetos seleccionados y almacena un array de arrys de nodos y otro de nodos a renombrar
+			(
+				_selNodes = getCurrentSelection()
+				if _selNodes.count != 0 then
+				(
+					_assetsToUse = lb.asset.getAssetsFromNodes _selNodes --mira que assets son los dueños de las piezas seleccionadas
+				)
+				else lb.message.show "Select at least 1 object"					
+			)--if
+			_filesInScene = #()
+			
+			for _asset in _assetsToUse do
+			(
+				for _node in _asset.meshNodesAll where lb.nodeInfo.hasNodeInfo _node do
+				(
+					for _fileHistory in _node.nodeInfo.fileHistory do
+					(
+						if matchpattern _fileHistory pattern: ("*" + lb.nc.NC_presetFolderName+ "*") do 
+						(
+							if matchpattern _fileHistory pattern: ("*" + lb.nc.NC_animFileName+ "*") do appendIfUnique _filesInScene _fileHistory	
+						)
+					)
+				) 
+			)
+			for _file in _filesInScene do 
+			(
+				
+				_routeParts = filterString _file "\\"
+				_route = _routeParts[1] + "\\" + _routeParts[2] + "\\" + _routeParts[3] + "\\" + _routeParts[4] + "\\" + _routeParts[5] + "\\" + lb.nc.NC_versionFolderName + "\\" + lb.nc.NC_baseFolderName + "\\"
+				_routeFileName = (filterString _file "\\")[8]
+				_routeFileName = filterString _routeFileName "_"
+				_routeFileName = _routeFileName[1] + "_" + _routeFileName[2] + "_" + lb.nc.NC_clothFileName + "_v01" 
+
+				_clothFile = getOpenFileName filename:(_route+_routeFileName) caption: ("Archivo de cloth para "+ (_routeFileName))
+				
+				if _clothFile != undefined then
+				(
+					--Hacemos un set del frame de animacion en 0
+					lb.assetManager.rollpreCamFrames.setPreCamXFrames 10 2
+
+					--Activamos el modo skin + cloths
+					--Activamos la pestaña de crear para que vaya más fluido
+					max create mode
+					
+					setWaitCursor()			
+					disableSceneRedraw()
+					suspendEditing()
+						
+					--pone cada asset en el modo de visualizacion skin + cloth
+					with undo off
+						for ast in _assetsToUse do lb.asset.setAssetSkinClothMode ast
+						
+					resumeEditing()
+					enableSceneRedraw()
+					completeRedraw()
+					setArrowCursor()
+						
+					lb.assetManager.rollAdvanced.fillLayerControls()
+					
+					--Cargamos el fichero de cloth del base via merge.
+					_ast = lb.asset.loadAsset _clothFile #merge
+
+					if ckbOperateOnSelectionCloth.checked then
+					(
+						_notDeleteNodes = #()
+						for _astNode in _ast do 
+						(
+							for _nodeSel in _selNodes do 
+							(
+								_nodeSelPart5 = (filterString _nodeSel.name "_")[5]
+								_astNodePart5 = (filterString _astNode.name "_")[5]
+								if matchPattern _astNodePart5 pattern: ("*-"+_nodeSelPart5+"*") do appendIfUnique _notDeleteNodes _astNode
+							)
+						)
+						for i = _ast.count to 1 by -1 do
+						(
+							if (findItem _notDeleteNodes _ast[i]) == 0 do
+							(
+								_objToDelete = _ast[i]
+								deleteItem _ast i
+								delete _objToDelete	
+							) 
+						)
+						if _ast.count == 0 then lb.message.show "Los objetos seleccionados no tienen ninguna pieza de cloth"
+					)
+
+					
+					--Por ahora asumiremos que en la carga del asset, solo existe un personaje de cada tipo en escena, y cargaremos el cloth al "base"
+					if _ast != undefined then
+					(
+						_astLayer = _ast[1].layer
+
+						for _astNode in _ast do
+						(
+
+							--recalculamos la ruta de la carpeta de skin del asset
+							_route = _routeParts[1] + "\\" + _routeParts[2] + "\\" + _routeParts[3] + "\\" + _routeParts[4] + "\\" + _routeParts[5] + "\\" + lb.nc.NC_rigFolderName + "\\" + "skin" + "\\"
+							_versionNumber = _astNode.nodeInfo.FileHistory[_astNode.nodeInfo.FileHistory.count]
+							_versionNumber = (filterString _versionNumber "\\")[8] 
+							_versionNumber = (filterString _versionNumber "_")[4]
+							_versionNumber = (filterString _versionNumber ".")[1]
+							_route = _route + _versionNumber + "\\"
+							
+							--quitamos el #00X y redirigimos el asset a la capa correspondiente, borrando la que queda vacía
+							_astNode.name = (lb.nc.removeAssetNumber (_astNode.name))
+							target = LayerManager.getLayerFromName (lb.nc.removeAssetNumber (_astNode.layer.name))
+							target.addNode _astNode
+							_turbokProcess = false 
+
+							_nodeWithTurbo2k = #()
+							--Si la pieza de cloth tiene un modificador turbosmooth:k hay que hacer un proceso para que el cloth reconozca los grupos de la malla de baja.
+							for modifier in _astNode.modifiers do 
+							(
+								if (modifier.name == "TurboSmooth:k") and ( classOf modifier == TurboSmooth ) do
+								(
+									_turbokProcess = true 
+									appendIfUnique _nodeWithTurbo2k _astNode 	
+								) 
+							)
+
+							if _turbokProcess do
+							(
+								for modifier in _astNode.modifiers do 
+								(
+									if ( classOf modifier == Cloth) do modifier.enabled = false
+								)
+								for modifier in _astNode.modifiers do 
+								(
+									if ( classOf modifier == TurboSmooth) do modifier.enabled = false
+								)
+							)
+							--Cargaremos los skins a las piezas de cloth
+							--Añadir el modificador skin
+							lb.skin.addSkinModifier _astNode
+
+							--Añadir la info de skin de cloth 	
+							_skinMod = lb.modifiers.getNodeModifier _astNode skin
+
+							if (_skinMod != undefined) then
+							(
+								_filename = _astNode.nodeInfo.nameHistory[_astNode.nodeInfo.nameHistory.count] 
+								_skinFile = _route+_filename+".skn"
+								if not doesFileExist (_route+_filename+".skn") then 
+								(
+									_skinFile = getOpenFileName filename:(_route+_filename+".skn") caption: ("Archivo de skin para "+ (_astNode.name))
+								)
+								
+								if _skinFile != undefined do lb.skin.loadSkin _skinFile _skinMod
+							)
+							--Reactivamos en el orden correcto los modificadores que se habian deshabilitado por el turbosmooth:k
+							if _turbokProcess do
+							(
+								for modifier in _astNode.modifiers do 
+								(
+									if ( classOf modifier == TurboSmooth) do modifier.enabled = false
+								)
+								for modifier in _astNode.modifiers do 
+								(
+									if ( classOf modifier == Cloth) do modifier.enabled = false
+								)
+							)
+
+							--Hay que borrar los skins/Skin Morph de las piezas de mesh que tengan su drv, y hacer un skin wrap a éstas
+							_astNodeNamePart5 = (filterString _astNode.name  "_")[5]
+							if  not matchpattern _astNodeNamePart5 pattern: "*col-*" do
+							(
+								_astNodeNamePart5Parts =( filterString _astNodeNamePart5 "-")
+								_astNodeNamePart5  = substituteString _astNodeNamePart5 (_astNodeNamePart5Parts[1]+"-") ""
+								for _asset in _assetsToUse do
+								(
+									for _node in _asset.nodes do 
+									(
+										--print _node
+
+										_nodePart5 = (filterString _node.name  "_")[5]
+
+										if _astNodeNamePart5 == _nodePart5 then
+										(
+											--borramos los modificadores
+											for j=_node.modifiers.count to 1 by -1 do
+											(
+												if classOf _node.modifiers[j] == Skin then
+												(
+													deleteModifier _node _node.modifiers[j]
+												)
+												if classOf _node.modifiers[j] == Skin_Morph then
+												(
+													deleteModifier _node _node.modifiers[j]
+												)
+											)
+											--Añadimos Skin wrap al drv
+											_skinWrap = skin_Wrap()
+											addModifier _node _skinWrap before:20
+											--Configuramos el target del _skinWrap
+											append _skinWrap.meshlist _astNode
+
+											--Rompemos el XRef del objeto
+											objXRefMgr.MergeXRefItemsIntoScene _node.baseObject
+											objXRefMgr.MergeXRefItemsIntoScene _node.baseObject.controller
+											
+											--Hay que ponerle a la pieza de alta un truboSmooth para igualar al que hay en la de baja.
+											if _turbokProcess do
+											(
+												for k = 1 to _node.modifiers.count do 
+												(
+													if classOf _node.modifiers[k] == Skin_Wrap do 
+													(
+														_turbok = TurboSmooth()
+														_turbok.name = "TurboSmooth:k"
+														addModifier _node _turbok before:k
+													)
+												)
+
+												/*for o in _nodeWithTurbo2k do
+												(
+													for i=1 to _nodeWithTurbo2k[i].modifiers do
+													(
+														if _nodeWithTurbo2k[i].modifiers.name == "TurboSmooth:k" then
+														(
+
+														)
+													)
+													_turbok = TurboSmooth()
+													_turbok.name = "TurboSmooth:k"
+													addModifier o _turbok before:k
+												)*/
+											)
+										)
+									)
+								)
+							)
+							--
+
+							--Configuramos el Frame incial del cloth con el frame inicial de la camara (donde empezar a simular)
+							for _modifier in _astNode.modifiers where classof _modifier == Cloth do
+							(
+								_cameras = lb.cameraFunctions.getSceneCameras()								 
+								_modifier.startframe = _cameras[1].camInfo.recStart - 10
+							)
+						
+						) 
+						--Con la capa vacía, la podemos borrar.
+						layerManager.deleteLayerByName _astLayer.name
+					)
+					--Volvemos a dejar la camara como estaba, en su rango inicial
+					lb.assetManager.rollpreCamFrames.setPreCamXFrames 0 1
+					gc()
+				)
+			)
+		)
+
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+
+		------------------------------------------------
+		--@event: rolledUp | Evento que se lanza al redimensionar el rollout
+		--@control: rollout | rollClothImportExportDef | Se redimensiona el rollout principal para englobar los controles del mismo.
+		------------------------------------------------
+		on rollClothImportExportDef rolledUp state do 
+		(
+			parent.heightAdjust 4
+		)
+
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollClothImportExportDef | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollClothImportExportDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollClothImportExportDef | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollClothImportExportDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+			if parent.rollMain != undefined then resize [parent.rollMain.width, parent.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollClothImportExportDef | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollClothImportExportDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+		)
+	)--rollClothImportExportDef
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollClothDef | Contiene la herramienta Cloth, subrollout ubicado en la pesaña de cloth. .
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollClothDef "Cloth"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) 		--@var: string | parent | Herramienta o rolllout del que depende y/o contiene el rollout actual		
+		
+		local minRollWidth = 225																--@var: integer | minRollWidth | Minimun tool width.
+		local minRollHeight = 100																--@var: integer | minRollHeight | Minimun tool height.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+
+		local iconpath = if (maxVersion())[1] >= 15000 then (getDir #maxRoot) + "UI_ln\\Icons\\" else (getDir #ui) + "/icons/"		--@var: string | iconpath | ruta de los iconos de Max.
+
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		
+		/*groupBox grpClothVisModes "Cloth Visualization Modes" pos:[5,220] width:200 height:47
+		button btnVMcloth "Cloth" pos:[10,236] width:40 height:25
+		button btnVMskinCloth "Skin + Cloth" pos:[55,236] width:65 height:25
+		button btnTurbosmoothEnable "" pos:[142,236] width:25 height:25 images:#(iconpath + "patches_24i.bmp", undefined, 2, 2, 2, 2, 2,true) tooltip:"Enable asset/s turbosmooth"
+		button btnTurbosmoothDisable "" pos:[172,236] width:25 height:25 images:#(iconpath + "patches_24i.bmp", undefined, 2, 1, 1, 1, 1,true) tooltip:"Disable asset/s turbosmooth"*/
+
+		/*checkbutton chkOperateOnSelAssetsCloth "Sel Assets" pos:[11,5] width:90 height:20 checked:true
+		checkbutton ckbOperateOnSelectionCloth "Sel Objects" pos:[109,5] width:90 height:20
+
+		button btnLoadCloth "Load" pos:[11,30] width:25 height:25 images:#(iconpath + "bip_general_i.bmp", undefined, 30, 5, 5, 6, 6,true) tooltip:"Load Cloth"
+		button btnSaveCloth "Save" pos:[39,30] width:25 height:25 images:#(iconpath + "bip_general_i.bmp", undefined, 30, 7, 7, 8, 8,true) tooltip:"Save Cloth"*/
+
+		/*button btnImportCloth "Import Sel" pos:[75,30] width:60 height:25 
+		button btnLoadFromCloth "Load From" pos:[138,30] width:60 height:25 */
+
+		groupBox grpClothModifier "Cloth Modifier" pos:[5,5] width:200 height:75 
+		button btnAddClothModifier "Add Cloth" pos:[11,21] width:90 height:25 
+		button btnAddCollisionModifier "Add Collision" pos:[110,21] width:90 height:25 
+		button btnSetInitialState "Set Initial State" pos:[11,50] width:90 height:25 
+		button btnResetClothModifier "Reset Cloth" pos:[110,50] width:90 height:25 
+
+		groupBox grpClothFixes "Cloth Fix" pos:[5,85] width:200 height:75 
+		button btnFixPoly "Edit Poly Fix" pos:[11,101] width:90 height:25 
+		button btnFixMesh "Edit Mesh Fix" pos:[110,101] width:90 height:25 
+		button btnFixPush "Edit Push Fix" pos:[11,131] width:90 height:25 
+		button btnFixRelax "Edit Relax Fix" pos:[110,131] width:90 height:25
+
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		-----------------------------------------------------------------------------------
+		--@fn: array{struct} | getAssetsToWork | Consulta los assets con los que trabajar segun la opcion seleccionada en la interfaz.
+		--@returns: array{struct} | _assetsToWork | Los assets consultados.
+		-----------------------------------------------------------------------------------				
+		fn getAssetsToWork =
+		(
+			_assetsToWork = #() --array para almacenar los assets que se pondran en el modo de visualizacion
+			
+			_assetsToWork = lb.assetManager.getSelectedAssets()
+			
+			_assetsToWork --devuelve los assets con los que trabajar
+		)
+
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollClothDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollClothDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--lb.xml.setAttribute parent.cfgFile ("rollExample1/cateagory") "paramName" "paramValue"
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			--_param = (lb.xml.getAttribute parent.cfgFile ("rollExample1/category") "paramName") as <value type>
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		/*----------------------------------------------------------------------------------
+		--cambia las opciones en funcion de los checkbuttons inciales, para elegir con que assets trabaja
+		----------------------------------------------------------------------------------
+		on chkOperateOnSelAssetsCloth changed state do
+		(
+			if state then
+				ckbOperateOnSelectionCloth.checked = false
+			else
+				chkOperateOnSelAssetsCloth.checked = true
+		)	
+			
+		on ckbOperateOnSelectionCloth changed state do
+		(
+			if state then
+				chkOperateOnSelAssetsCloth.checked = false
+			else
+				ckbOperateOnSelectionCloth.checked = true
+		)*/
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton
+		--@control: button | btnFixMesh | Se añade un modificador de fixing (edit_Mesh) a los objetos seleccionados, configurado correctamente para fixing
+		------------------------------------------------
+		on btnFixMesh pressed do
+		(
+		    fix_editMesh = (Edit_Mesh())
+		    
+		    fix_editMesh.name = "Fix_editMesh_01"
+		        
+		    index = 0
+		        
+		    filterName = undefined
+
+			if lb.asset.listedAssets.count != 0 then
+			(
+				_objectsToUse = #()
+				/*if chkOperateOnSelAssetsCloth.checked then --almacena todos los objetos de los assets seleccionados
+				(
+					for _asset in lb.assetManager.getSelectedAssets() do
+						_objectsToUse += _asset.clothNodesAll
+				)
+				else if ckbOperateOnSelectionCloth.checked then --filtra en los objetos seleccionados aquellos que sean de cloth
+				(*/
+				_objectsToUse = for o in getCurrentSelection() where (lb.nc.getObjectType o) == lb.nc.NC_classCloth collect o
+		-- 				)--if
+
+			    for o in _objectsToUse do
+			    (
+			        for m in o.modifiers where (classOf m == Edit_Mesh) do
+			        (
+			                index = index +1
+			                filterName = filterString m.name "_"
+			        )
+			        
+			        if filterName != undefined then
+			        (
+			            filterName[3] = "0" + (((execute filterName[3]) + index) as string)
+
+			            finalName = filterName[1] + "_" + filterName[2] + "_" + filterName[3]
+			            
+			            fix_editMesh.name = finalName
+			            
+			            addModifier o fix_editMesh
+			        )
+			        else
+			            addModifier o fix_editMesh
+			    )
+			)		    
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton
+		--@control: button | btnFixPoly | Se añade un modificador de fixing (edit_poly) a los objetos seleccionados, configurado correctamente para fixing
+		------------------------------------------------
+		on btnFixPoly pressed do
+		(
+			fix_editPoly = (edit_poly())
+	    
+		    fix_editPoly.name = "Fix_editPoly_01"
+		        
+		    index = 0
+		        
+		    filterName = undefined
+
+			if lb.asset.listedAssets.count != 0 then
+			(
+				_objectsToUse = #()
+				/*if chkOperateOnSelAssetsCloth.checked then --almacena todos los objetos de los assets seleccionados
+				(
+					for _asset in lb.assetManager.getSelectedAssets() do
+						_objectsToUse += _asset.clothNodesAll
+				)
+				else if ckbOperateOnSelectionCloth.checked then --filtra en los objetos seleccionados aquellos que sean de cloth
+				(*/
+				objectsToUse = for o in getCurrentSelection() where (lb.nc.getObjectType o) == lb.nc.NC_classCloth collect o
+		-- 				)--if
+			    for o in _objectsToUse do
+			    (
+			        for m in o.modifiers where (classOf m == edit_poly) do
+			        (
+			                index = index +1
+			                filterName = filterString m.name "_"
+			        )
+			        
+			        if filterName != undefined then
+			        (
+			            filterName[3] = "0" + (((execute filterName[3]) + index) as string)
+
+			            finalName = filterName[1] + "_" + filterName[2] + "_" + filterName[3]
+			            
+			            fix_editPoly.name = finalName
+			            
+			            addModifier o fix_editPoly
+			        )
+			        else
+			            addModifier o fix_editPoly
+			    )
+			)		    
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton
+		--@control: button | btnFixPush | Se añade un modificador de fixing (Push) a los objetos seleccionados, configurado correctamente para fixing
+		------------------------------------------------
+		on btnFixPush pressed do
+		(
+		    fix_Push = (Push())
+		    
+		    fix_Push.name = "Fix_push_01"
+		        
+		    index = 0
+		        
+		    filterName = undefined
+
+			if lb.asset.listedAssets.count != 0 then
+			(
+				_objectsToUse = #()
+				/*if chkOperateOnSelAssetsCloth.checked then --almacena todos los objetos de los assets seleccionados
+				(
+					for _asset in lb.assetManager.getSelectedAssets() do
+						_objectsToUse += _asset.clothNodesAll
+				)
+				else if ckbOperateOnSelectionCloth.checked then --filtra en los objetos seleccionados aquellos que sean de cloth
+				(*/
+				_objectsToUse = for o in getCurrentSelection() where (lb.nc.getObjectType o) == lb.nc.NC_classCloth collect o
+		-- 				)--if
+
+			    for o in _objectsToUse do
+			    (
+			        for m in o.modifiers where (classOf m == Push) do
+			        (
+			                index = index +1
+			                filterName = filterString m.name "_"
+			        )
+			        
+			        if filterName != undefined then
+			        (
+			            filterName[3] = "0" + (((execute filterName[3]) + index) as string)
+
+			            finalName = filterName[1] + "_" + filterName[2] + "_" + filterName[3]
+			            
+			            fix_push.name = finalName
+			            
+			            addModifier o fix_push
+			        )
+			        else
+			            addModifier o fix_push
+			    )			
+			)		    
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton
+		--@control: button | btnFixRelax | Se añade un modificador de fixing (Relax) a los objetos seleccionados, configurado correctamente para fixing
+		------------------------------------------------
+		on btnFixRelax pressed do
+		(
+		    fix_relax = (Relax())
+		    
+		    fix_relax.name = "Fix_relax_01"
+		        
+		    index = 0
+		        
+		    filterName = undefined
+			if lb.asset.listedAssets.count != 0 then
+			(
+				_objectsToUse = #()
+				/*if chkOperateOnSelAssetsCloth.checked then --almacena todos los objetos de los assets seleccionados
+				(
+					for _asset in lb.assetManager.getSelectedAssets() do
+						_objectsToUse += _asset.clothNodesAll
+				)
+				else if ckbOperateOnSelectionCloth.checked then --filtra en los objetos seleccionados aquellos que sean de cloth
+				(*/
+				_objectsToUse = for o in getCurrentSelection() where (lb.nc.getObjectType o) == lb.nc.NC_classCloth collect o
+			-- 				)--if
+
+			    for o in _objectsToUse do
+			    (
+			        for m in o.modifiers where (classOf m == Relax) do
+			        (
+			                index = index +1
+			                filterName = filterString m.name "_"
+			        )
+			        
+			        if filterName != undefined then
+			        (
+			            filterName[3] = "0" + (((execute filterName[3]) + index) as string)
+
+			            finalName = filterName[1] + "_" + filterName[2] + "_" + filterName[3]
+			            
+			            fix_relax.name = finalName
+			            
+			            addModifier o fix_relax
+			        )
+			        else
+			            addModifier o fix_relax
+			    )
+			)		    
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton
+		--@control: button | btnAddClothModifier | Se añade un modificador de Cloth a los objetos seleccionados
+		------------------------------------------------
+		on btnAddClothModifier pressed do
+		(
+			if lb.asset.listedAssets.count != 0 then
+			(
+				_objectsToUse = getCurrentSelection()
+				for i=1 to _objectsToUse.count do
+				(
+					lb.cloth.addClothModifier _objectsToUse[i] type:#cloth
+				)
+			)
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton
+		--@control: button | btnAddCollisionModifier | Se añade un modificador de Colisión para cloth a los objetos seleccionados
+		------------------------------------------------
+		on btnAddCollisionModifier pressed do
+		(
+			if lb.asset.listedAssets.count != 0 then
+			(
+				_objectsToUse = getCurrentSelection()
+				for i=1 to _objectsToUse.count do
+				(
+					lb.cloth.addClothModifier _objectsToUse[i] type:#collision
+				)
+			)
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton
+		--@control: button | btnResetClothModifier | Resetea los modificadores de cloth de los objetos seleccionados.
+		------------------------------------------------
+		on btnResetClothModifier pressed do
+		(
+			if lb.asset.listedAssets.count != 0 then
+			(
+				-- Nos aseguramos que estamos en el panel modificar
+				if (getCommandPanelTaskMode()) != #modify then setCommandPanelTaskMode #modify
+					
+				-- Capturamos el modificador actual seleccionado
+				_mod = modPanel.getCurrentObject() 
+					
+				if classof _mod == Cloth then
+				(
+					_objectsToUse = getCurrentSelection()
+					for i=1 to _objectsToUse.count do
+					(
+						lb.cloth.resetClothModifier _objectsToUse[i] _mod 
+					)
+				)
+			)
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton
+		--@control: button | btnSetInitialState | Se configura los parametros de cloth de los objetos seleccionados a los valores por defecto.
+		------------------------------------------------
+		on btnSetInitialState pressed do
+		(
+			if lb.asset.listedAssets.count != 0 then
+			(
+				_objectsToUse = getCurrentSelection()
+				for i=1 to _objectsToUse.count do
+				(
+					lb.cloth.setInitialStateCloth _objectsToUse[i]
+				)
+			)
+		)
+
+		------------------------------------------------
+		--@event: rolledUp | Evento que se lanza al redimensionar el rollout
+		--@control: rollout | rollClothDef | Se redimensiona el rollout principal para englobar los controles del mismo.
+		------------------------------------------------
+		on rollClothDef rolledUp state do 
+		(
+			parent.heightAdjust 5
+		)
+
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollClothDef | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollClothDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollClothDef | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollClothDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+			if parent.rollMain != undefined then resize [parent.rollMain.width, parent.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollClothDef | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollClothDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+		)
+	)--rollClothDef
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollCopiesDef | Contiene la herramienta Asset Copies
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollCopiesDef "Asset Copies"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) 			--@var: string | parent | Herramienta o rolllout del que depende y/o contiene el rollout actual	
+
+		local minRollWidth = 180																	--@var: integer | minRollWidth | Minimun tool width.
+		local minRollHeight = 450																	--@var: integer | minRollHeight | Minimun tool height.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+
+		local lvSelItemsArray = #()																	
+		local lastCopyOption = 3 																	--@var: integer | lastCopyOption | ultima opcion de copia elegida 	
+		local iconpath = if (maxVersion())[1] >= 15000 then (getDir #maxRoot) + "UI_ln\\Icons\\" else (getDir #ui) + "/icons/"		--@var: iconpath | parent | ruta de los iconos de Max.
+
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		
+		checkbutton ckbAssetsBySelObjects "Asts by Selection" pos:[5,0] width:86 height:20 tooltip:"Assets from selected objects"
+		checkbutton chkOperateOnSelAssets "Sel Assets" pos:[94,0] width:57 height:20 tooltip:"Selected assets from asset list"
+		checkbutton ckbOperateOnSelection "Sel Objs" pos:[154,0] width:52 height:20 tooltip:"Selected objects" checked:true
+				
+		checkbutton ckbStartCopy "Copy" pos:[5,30] width:200 height:20
+		--checkbox chkDependents "dependents" pos:[130,33] width:100 height:15 checked:true
+		
+		groupBox grpCopyModes "Copy Modes" pos:[5,52] width:202 height:35
+		radiobuttons rdoCopyModes pos:[10,69] width:190 height:20 labels:#("Paint        ", "Place", "Make") columns:3 default:3
+		
+		groupBox grpCopyOptions "Copy Options" pos:[5,90] width:202 height:85
+		radioButtons rdoCopyOptions pos:[10,107] width:190 height:20 labels:#("instance   ", "reference", "copy") columns:3 default:3
+		editText edtSufix pos:[7,130] width:160 height:15
+		label lblSufix "Sufix" pos:[170,132] width:30
+		spinner spnNumberCopies "number of copies:" pos:[60,152] width:80 height:15 range:[1,10000,1] type:#integer
+		checkbox chkAutogrid "autogrid" pos:[10,152] width:60 height:15 checked:true
+		checkbox chkNormalAlign "normalAlign" pos:[70,152] width:75 height:15 checked:true
+		checkbox chkByGroup "byGroup" pos:[145,152] width:60 height:15 checked:true
+
+		groupBox grpCopyOffsets "Copy Offsets" pos:[5,178] width:202 height:95
+		label lblOffsetPos "Pos" pos:[10,195] width:30 height:15
+		spinner spnOffsetPosX "" pos:[55,195] width:50 height:16 range:[-100000,100000,0]
+		spinner spnOffsetPosY "" pos:[105,195] width:50 height:16 range:[-100000,100000,0]
+		spinner spnOffsetPosZ "" pos:[155,195] width:50 height:16 range:[-100000,100000,0]
+		
+		label lblOffsetRot "Rot inc" pos:[10,210] width:60 height:15
+		checkbox chkOffsetRotIncrementals pos:[42,210] width:13 checked:true tooltip:"enable/disable incremental rotation"
+		spinner spnOffsetRotX "" pos:[55,210] width:50 height:16 range:[-100000,100000,0]
+		spinner spnOffsetRotY "" pos:[105,210] width:50 height:16 range:[-100000,100000,0]
+		spinner spnOffsetRotZ "" pos:[155,210] width:50 height:16 range:[-100000,100000,0]
+		
+		label lblOffsetScale "scale%" pos:[10,225] width:35 height:15
+		spinner spnOffsetScaleX "" pos:[55,225] width:50 height:16 range:[0,100000,100]
+		spinner spnOffsetScaleY "" pos:[105,225] width:50 height:16 range:[0,100000,100] enabled:false --visible:false
+		-- 		label lblOffsetScaleYdisabled "" pos:[106,32] width:38 height:15 enabled:false visible:true style_sunkenedge:true
+		spinner spnOffsetScaleZ "" pos:[155,225] width:50 height:16 range:[0,100000,100] enabled:false --visible:false
+		-- 		label lblOffsetScaleZdisabled "" pos:[156,32] width:38 height:15 enabled:false visible:true style_sunkenedge:true
+		checkButton ckbOffsetScaleLock "" pos:[42,225] width:13 height:16 images:#(iconpath + "LockButtonExt_i.bmp", undefined, 2, 2, 1, 1, 1,true) checked:true border:false
+		
+		button btnOffsetReset "Reset" pos:[10,245] width:195 height:20
+
+		groupBox grpRandom "Random Options" pos:[5,275] width:202 height:115
+		checkbox chkVariationsEnable "enabled" pos:[10,290] width:75 checked:true
+		label lblVariationPos "Pos" pos:[10,310] width:30 height:15
+		spinner spnVariationPosX "" pos:[55,310] width:50 height:16 range:[-100000,100000,0]
+		spinner spnVariationPosY "" pos:[105,310] width:50 height:16 range:[-100000,100000,0]
+		spinner spnVariationPosZ "" pos:[155,310] width:50 height:16 range:[-100000,100000,0]
+		
+		label lblVariationRot "Rot" pos:[10,325] width:30 height:15
+		spinner spnVariationRotX "" pos:[55,325] width:50 height:16 range:[-100000,100000,0]
+		spinner spnVariationRotY "" pos:[105,325] width:50 height:16 range:[-100000,100000,0]
+		spinner spnVariationRotZ "" pos:[155,325] width:50 height:16 range:[-100000,100000,0]
+		
+		label lblVariationScale "scale%" pos:[10,340] width:35 height:15
+		spinner spnVariationScaleX "" pos:[55,340] width:50 height:16 range:[0,100000,0]
+		spinner spnVariationScaleY "" pos:[105,340] width:50 height:16 range:[0,100000,0] enabled:false --visible:false
+		-- 		label lblVariationScaleYdisabled "" pos:[106,32] width:38 height:15 enabled:false visible:true style_sunkenedge:true
+		spinner spnVariationScaleZ "" pos:[155,340] width:50 height:16 range:[0,100000,0] enabled:false --visible:false
+		-- 		label lblVariationScaleZdisabled "" pos:[156,32] width:38 height:15 enabled:false visible:true style_sunkenedge:true
+		checkButton ckbVariationScaleLock "" pos:[42,340] width:13 height:16 images:#(iconpath + "LockButtonExt_i.bmp", undefined, 2, 2, 1, 1, 1,true) checked:true border:false
+		
+		button btnVariationReset "Reset" pos:[10,360] width:195 height:20
+
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		----------------------------------------------------------------------------------
+		--@fn: undefined | updateUI | actualiza el interface comun
+		----------------------------------------------------------------------------------
+		fn updateUI =
+		(
+			-- 			chkDependents.enabled = not ckbOperateOnSelection.checked
+			
+			case rdoCopyModes.state of
+			(
+				1:--Paint
+				(
+					ckbStartCopy.caption = "Copy: Paint"
+			-- 					ckbStartCopy.caption = "Copy: Place"
+					
+					spnNumberCopies.enabled = false
+					spnNumberCopies.visible = false
+					
+					chkAutogrid.enabled = true
+					chkAutogrid.visible = true
+					
+					chkNormalAlign.enabled = chkAutogrid.checked
+					chkNormalAlign.visible = true
+				)--Paint
+				
+				2:--Place
+				(
+					ckbStartCopy.caption = "Copy: Place"
+					
+					spnNumberCopies.enabled = false
+					spnNumberCopies.visible = false
+					
+					chkAutogrid.enabled = true
+					chkAutogrid.visible = true
+					
+					chkNormalAlign.enabled = chkAutogrid.checked
+					chkNormalAlign.visible = true
+				)--Place
+				
+				3:--Make
+				(
+					ckbStartCopy.caption = "Copy: Make"
+					
+					spnNumberCopies.enabled = true
+					spnNumberCopies.visible = true
+					
+					chkAutogrid.enabled = false
+					chkAutogrid.visible = false
+					chkNormalAlign.enabled = false
+					chkNormalAlign.visible = false
+				)--Place
+			)--case of
+		)
+		
+		----------------------------------------------------------------------------------
+		--@fn: array{array{struct}} | getAssetsToCopy | obtiene los assets seleccionados del listado en un array que se deben copiar, se devuelven en un array de arrays en el que cada array es un grupo de dependencia, se devuelven por grupos de dependencia porque hay que copiarlos en bloque
+		--@comment: si el asset principal de un grupo de dependencia no estaba seleccionado, los assets dependientes de ese grupo no se copian
+		--@gets: (opt)name | mode | **#fromSelection** obtiene los assets de los objetos seleccionados de la escena \\ **#fromSelAssets** obtiene los assets de los seleccionados en el listado del assetManager \\ Por defecto #fromSelection
+		--@gets: (opt)boolean | dependents | **TRUE** indica que hay que coger los assets dependientes tambien \\ Por defecto true
+		--@gets: (opt)array{struct} | allAssets | Array con todos los assets en escena.
+		--@returns: array{array{struct}} | depGroups | la primera array contiene los assets de los grupos de dependencia, 
+		----------------------------------------------------------------------------------		
+		fn getAssetsToCopy mode:#fromSelection dependents:true allAssets:#() =
+		(
+			depGroups = #() --array de arrays para guardar los grupos de dependencia de assets
+			asts = #() --array de assets del que sacar los grupos de dependencia
+			
+			--si no se han pasado assets donde buscar los dependientes, usa sceneassets
+			if allAssets.count == 0 then allAssets = lb.asset.sceneAssets
+			
+			case mode of
+			(
+				#fromSelection: --obtiene los assets de la seleccion de la escena
+				(
+					asts = lb.asset.getAssetsFromNodes (getCurrentSelection()) --obtiene los assets según la seleccion de objetos de la escena
+				)--#fromSelection
+				
+				#fromSelAssets: --obtiene los assets del listado del assetManager
+				(
+					asts = for index in selAssets collect listedAssets[index]
+				)--#fromSelAssets
+				
+			)--case mode
+			
+			if dependents then --si tiene que coger los dependientes tambien
+				for ast in asts do --recorre los assets obteniendo los grupos de dependencia
+				(
+					depG = (lb.asset.getDependencyGroup ast allAssets)
+					if depG.count != 0 then
+					(
+						found = false
+						for dg in depGroups where dg[1].fullname == depG[1].fullname do
+							found = true
+						
+						if not found then append depGroups depG
+					)
+				)
+			else --si no tiene que coger los dependientes
+				for ast in asts do
+				(
+					depG = (lb.asset.getDependencyGroup ast asts)
+					
+					if depG.count != 0 then
+					(
+						found = false
+						for dg in depGroups where dg[1].fullname == depG[1].fullname do
+							found = true
+						
+						if not found then append depGroups depG
+					)
+					else
+						append depGroups #(ast)
+				)
+				
+			depGroups
+		)
+		
+		----------------------------------------------------------------------------------
+		--@fn: integer | sortByHitDistance | funcion para realizar un **quickSort**;  averigua cual de los dos elementos pasados está más cercano.
+		--@gets: rayCast | n1 | Primer rayo para realizar la comprobación.
+		--@gets: rayCast | n2 | Segundo rayo para realizar la comprobación.
+		--@returns: integer | undefined | ********
+		----------------------------------------------------------------------------------			
+		fn sortByHitDistance n1 n2 = if n1[3] < n2[3] then -1 else if n1[3] > n2[3] then 1 else 0
+		----------------------------------------------------------------------------------------------------------------
+		--------------------------------------------------- TOOLS ---------------------------------------------------
+		----------------------------------------------------------------------------------------------------------------
+			
+		----------------------------------------------------------------------------------
+		--Tool antigua, no se usa, se mantiene la documentación en formato antiguo para no generarla en la wiki.
+		--Hace copias de asset o de objeto, haciendo place en el lugar pinchado
+		----------------------------------------------------------------------------------
+		tool toolPlaceCopies
+		(
+			local newNodes = #() 						--array donde ir almacenando los nuevos objetos copiados
+			
+			local placeCount = 0						--contador de copias por place
+			local normalAlign = false					--flag para saber si hay que alinear las copias a la normal donde se ha hecho click
+			local incrementalRot = false				--indica si la rotacion entre una copia  y otra es incremental
+			
+			local offsetPos = [0,0,0]					--offset de posicion
+			local offsetRot = quat 0					--offset de rotacion
+			local offsetScale = [1,1,1]					--offset de escala
+			
+			local varPos = [0,0,0]						--variacion de posicion
+			local varRot = eulerangles 0 0 0			--variacion de rotacion positiva
+			local varRotNeg = eulerangles 0 0 0	 		--variacion de rotacion negativa
+			local varScale = [1,1,1]					--variacion de escala positiva
+			local varScaleNeg = [1,1,1]				 	--variacion de escala negativa
+			
+			local varScaleLock = true					--indica si la variacion de escala es igual en los tres ejes
+			
+			local prevRot = quat 1						--rotacion previa de cada copia, necesario para hacer la roación incremental
+			
+			local copyMode = #copy					 	--modo de copia, #copy, #instance, #reference
+			local sufix = ""							--sufijo que añadir a las copias
+			
+			local nodes = #()							--array de nodos que copiar
+			local hierarchies = #()						--array de jerarquias obtenidas de los nodos que copiar
+				
+			--arrays de matrices de transformacion que habrá que aplicar a los objetos que se copiarán
+			local auxHierarchyParent = undefined	 	--si hay que hacer las copias relativas, se necesita un padre auxiliar general que ir moviendo
+			local auxHierarchyParents = #()  			--padres auxiliares de cada jerarquia para ir averiguando esas transformaciones
+			
+			local initPosition = [0,0,0]  				--posicion inicial del auxHierarchyParent
+			local initRotation = quat 1  				--rotacion inicial del auxHierarchyParent
+			local initScale = [1,1,1]  					--escala inicial del auxHierarchyParent
+			
+			local initPositions = #()  					--array de posiciones iniciales de cada jerarquia
+			local initRotations = #()  					--array de rotaciones iniciales de cada jerarquia
+			local initScales = #()  					--array de escalas iniciales de cada jerarquia
+			
+			local copiesTransforms = #()  				--array de matrices de transformacion que habrá que aplicar a los objetos que se copiarán
+			-----------------------------------------------------------------------------------------------------
+			
+			------------------------------------------------
+			--@event: clickNumber | Evento que se lanza al pulsar los botones del mouse.
+			--@control: mouse | mousePoint | Evento vinculado al presionar el botón del mouse. Contiene los procesos para la copia de assets.
+			------------------------------------------------
+			on mousePoint clickNumber do ----------------------------------------------
+			(
+				if clickNumber > 1 then -- Los click 1 y 2 se lanzan simultáneamente. Ignoramos el primero.
+				(
+					--Obtiene los valores de los offsets y las variaciones ---------------------------------------------------------------------------
+					if clickNumber == 2 then --solo lo obtiene una vez
+					(
+						placeCount = 1
+						normalAlign = parent.rollCopies.chkNormalAlign.checked and parent.rollCopies.chkAutoGrid.checked
+								
+						--Valores comunes 
+						offsetPos = [spnOffsetPosX.value, spnOffsetPosY.value, spnOffsetPosZ.value]
+						offsetRot = ((eulerangles -spnOffsetRotX.value -spnOffsetRotY.value -spnOffsetRotZ.value) as quat)
+						offsetScale = [spnOffsetScaleX.value, spnOffsetScaleY.value, spnOffsetScaleZ.value]/100.0
+						if offsetScale == [0,0,0] then offsetScale = [1,1,1]								
+						incrementalRot = chkOffsetRotIncrementals.checked
+						
+						varPos = [0,0,0]
+						varRot = eulerangles 0 0 0
+						varRotNeg = eulerangles 0 0 0
+						varScale = [1,1,1]
+						varScaleNeg = [1,1,1]
+						
+						if chkVariationsEnable.checked then
+						(
+							varPos = [spnVariationPosX.value, spnVariationPosY.value, spnVariationPosZ.value]
+							
+							varRot = (eulerangles -spnVariationRotX.value -spnVariationRotY.value -spnVariationRotZ.value)
+							varRotNeg = (eulerangles spnVariationRotX.value spnVariationRotY.value spnVariationRotZ.value)
+							
+							varScale = [(100 + spnVariationScaleX.value),(100 + spnVariationScaleY.value),(100 + spnVariationScaleZ.value)]/100.0
+							varScaleNeg = [amax #(0,100 - spnVariationScaleX.value),amax #(0,100 - spnVariationScaleY.value),amax #(0,100 - spnVariationScaleZ.value)]/100.0
+							
+							varScaleLock = ckbVariationScaleLock.checked
+						)
+						
+						copyMode = if rdoCopyOptions.state == 3 then #copy else if rdoCopyOptions.state == 1 then #instance else #reference
+						sufix = edtSufix.text
+						
+						nodes = getCurrentSelection() --obtiene la seleccion actual
+						hierarchies = lb.rig.getHierarchiesFromNodes nodes --obtiene las jerarquías de los objetos  seleccionados
+						
+						if hierarchies.count != 0 then
+							seed (hierarchies[1][1].pivot.x + hierarchies[1][1].pivot.y + hierarchies[1][1].pivot.z)
+						
+						lb.assetManager.rollCopies.removeSceneEvents() --desactiva los callbacks de la herramienta deforma temporal
+					)-- si es el primer click ------------------------------------------------------------------------------------------
+					
+					--crea los objetos auxiliares de los que va a coger las transformaciones para cada jerarquia
+					--almacena tambien las transformaciones iniciales de cada jerarquia
+					for h in hierarchies do
+					(
+						auxDummy = dummy pos:[0,0,0]
+						append auxHierarchyParents auxDummy
+						
+						auxDummy.transform = h[1].transform
+						append initPositions h[1].transform.pos
+						append initRotations h[1].transform.rotation
+						append initScales h[1].transform.scale
+						
+						append copiesTransforms #()
+					)--for
+					
+					--si hay que hacer la copia por grupo, primero creamos una pieza auxiliar en la parte central
+					--del bounding box general de todos los objetos, después emparentamos cada auxHierarchyParent
+					--a dicha pieza para que sean una sola jerarquía y así copiarlos de una sola vez.
+					---------------------------------------------------------------------------------------
+					auxParent = undefined --pieza auxiliar a la que emparentar todas las jerarquías
+					if chkByGroup.checked and hierarchies.count > 1 then
+					(
+						auxBB = lb.geometry.getNodesBoundingBox nodes (matrix3 1) --bounding box de los nodos seleccionados
+						auxHierarchyParent = dummy pos:((auxBB[1] + auxBB[2])/2.0)
+						
+						initPosition = auxHierarchyParent.transform.pos
+						initRotation = auxHierarchyParent.transform.rotation
+						initScale = auxHierarchyParent.transform.scale
+						
+						for ah in auxHierarchyParents do ah.parent = auxHierarchyParent
+					)
+					
+					copiesTransforms = #()
+					---------------------------------------------------------------------------------------
+					
+					newPos = worldPoint --posicion del grid donde ha hecho click el raton
+					newDir = [0,0,1] --direccion del grid donde se ha hecho click con el raton
+					
+					if chkAutogrid.checked then -----------------------------------------
+					(
+						clickRay = mapScreenToWorldRay mouse.pos
+							
+						try --lo metemos en un try ya que no logramos averiguar en que ocasiones salta (cuando hay un set por xrefScene)
+						(
+							collisionObjects = objects as array --almacenamos toda la geometria (incluidos huesos) de la escena (excepto los xrefScene objects que no los reconoce como tal)
+								
+							intersectedFound = #() --array de intersecciones encontradas
+								
+							for o in collisionObjects do --busca la interseccion del rayo con cada objeto
+							(
+								auxRay = intersectRay o clickRay --lanza la interseccion
+								if auxRay != undefined do append intersectedFound (#(o, auxRay))
+							)
+									
+							if intersectedFound.count != 0 do --si el rayo ha colisionado con algun objeto de la escena
+							(
+								auxItersected = for item in intersectedFound where not item[1].isHidden collect #(item[1], item[2], (distance clickRay.pos item[2].pos))
+								qsort auxItersected sortByHitDistance
+									
+								newPos = auxItersected[1][2].pos
+								newDir = auxItersected[1][2].dir
+							)
+						)
+						catch (lb.message.show "Place couldn't be made on picked surface. It will be placed on the ground." type:#message pos:undefined size:[300,75] modal:true)
+						
+					)--if chkAutoGrid ----------------------------------------------------------
+					
+					-----------------------------------------------------------------------------------------------------------------
+					--copia del asset u objeto seleccionado y su colocacion en el lugar pinchado con la orientación adecuada
+						
+					--si el modo de trabajo es por asset-------------
+					if ckbAssetsBySelObjects.checked or chkOperateOnSelAssets.checked then
+					(
+						print "place de asset"
+					)
+					else if ckbOperateOnSelection.checked then --si el modo de trabajo es por objeto
+					(
+						with undo off
+						(
+							--ahora calculamos las matrices de transformacion de cada jerarquia, en funcion de los objetos axiliares creados para cada una de elloas
+							if auxHierarchyParent != undefined then --si hay que hacerlo en grupo
+							(
+								--calculo de los offset y las variaciones de Posicion Rotacion y Escala-------------------------
+								auxPos = newPos + offsetPos + (random -varPos varPos) --calcula la nueva posicion del asset
+								
+								tempRot = prevRot + offsetRot --calcula la rotacion nueva, que puede ser incremental respecto a la anterior o no
+								randRot = ((random varRotNeg varRot) as quat)
+								auxRot = initRotation + tempRot + randRot --calcula la nueva rotacion del asset
+								if incrementalRot then prevRot = tempRot --si tiene que haber rotacion incremental
+								
+								randScale = (random varScale varScaleNeg)
+								if varScaleLock then randScale = [randScale.x,randScale.x,randScale.x]
+								auxScale = initScale*offsetScale*randScale --calcula la nueva escala del asset
+								------------------------------------------------------------------------------------------------------
+								
+								--si hay que alinear a la normal las copias, alinea el auxHierarchyParent primero y luego aplicamos el resto de offsets y variaciones
+								if normalAlign and newDir != [0,0,1] then
+								(
+									normalTransform = matrixFromNormal newDir
+									auxHierarchyParent.transform = normalTransform
+									
+									--nueva rotacion, si hay que alinear a la normal, lo hace en local
+									defRot = auxRot as eulerangles 
+									in coordsys local rotate auxHierarchyParent defRot
+								)
+								else
+								(
+									--nueva rotacion, si no hay que alinear a la normal, se hace absoluta respecto al mundo
+									defRot = (initRotation - auxHierarchyParent.transform.rotation - auxRot) as eulerangles
+									rotate auxHierarchyParent defRot
+								)
+								
+								--aplica la nueva posicion
+								auxHierarchyParent.pos = auxPos
+								
+								--aplica la nueva escala a cada padre auxiliar de jerarquia,
+								--y almacena la transformación de cada uno de ellos en un array
+								--para aplicarla mas tarde a la copias
+								for j=1 to auxHierarchyParents.count do
+								(
+									auxHierarchyParents[j].scale = auxScale
+									append copiesTransforms auxHierarchyParents[j].transform
+								)--for j
+							)
+							else --si hay que hacerlo individual para cada jerarquia-------------------------------
+							(
+								tempRot = prevRot + offsetRot --calcula la rotacion nueva, que puede ser incremental respecto a la anterior o no
+								auxPos = newPos + offsetPos + (random -varPos varPos) --calcula la nueva posicion, es comun para todas las jerarquias
+								
+								for j=1 to auxHierarchyParents.count do
+								(
+									--calculo de los offset y las variaciones de Posicion Rotacion y Escala-------------------------
+									randRot = ((random varRotNeg varRot) as quat)
+									auxRot = initRotations[j] + tempRot + randRot --calcula la nueva rotacion del asset
+										
+									randScale = (random varScale varScaleNeg)
+									if ckbVariationScaleLock.checked then randScale = [randScale.x,randScale.x,randScale.x]
+									auxScale = initScales[j]*offsetScale*randScale --calcula la nueva escala del asset
+									------------------------------------------------------------------------------------------------------
+									
+									--si hay que alinear a la normal las copias, alinea el auxHierarchyParent primero y luego aplicamos el resto de offsets y variaciones
+									if normalAlign and newDir != [0,0,1] then
+									(
+										normalTransform = matrixFromNormal newDir
+										auxHierarchyParents[j].transform = normalTransform
+										
+										--nueva rotacion, si hay que alinear a la normal, lo hace en local
+										defRot = auxRot as eulerangles 
+										in coordsys local rotate auxHierarchyParents[j] defRot
+									)
+									else
+									(
+										--nueva rotacion, si no hay que alinear a la normal, se hace absoluta respecto al mundo
+										defRot = (initRotation - auxHierarchyParents[j].transform.rotation - auxRot) as eulerangles
+										rotate auxHierarchyParents[j] defRot
+									)
+									
+									--aplica la nueva posicion
+									auxHierarchyParents[j].pos = auxPos
+										
+									--aplica la nueva escala
+									auxHierarchyParents[j].scale = auxScale
+										
+									append copiesTransforms auxHierarchyParents[j].transform
+								)--for j
+								
+								if incrementalRot then prevRot = tempRot --guarda la rotacion para que sea incremental
+							)--------------------------------------------------------------------------------------
+						
+							placeCount += 1 --incrementa el contador de copias por place
+							
+							--Elimina los elementos auxiliares---------------------------------------------------------------
+							if isValidnode auxHierarchyParent then (delete auxHierarchyParent; auxHierarchyParent = undefined)
+							if auxHierarchyParents.count != 0 then (delete auxHierarchyParents; auxHierarchyParents = #())
+							-----------------------------------------------------------------------------------------------------
+						)--undo off
+						
+						undo "Place Copy Objects" on
+						(
+							stop = false --flag de parada
+							
+							--recorre las jerarquias haciendo tantas copies de cada una como se haya indicado
+							for i=1 to hierarchies.count where not stop do
+							(
+								newNodes += lb.asset.copyObjects hierarchies[i] mode:copyMode sufix:sufix index:(placeCount as string) transform:copiesTransforms[i] --pos:newPos rot:newRot scale:newScale
+								
+								if keyboard.escPressed then stop = queryBox "Do you want to stop copy process?"
+							)
+							
+			-- 							--*** Si no metemos el cambio de seleccion en el undo, deja podrido el undo personalizado que estamos haciendo ***--
+			-- 							if newNodes.count != 0 then --si hay objetos nuevos, los selecciona
+			-- 								select newNodes
+							
+						)--undo off
+					)--if ckbOperateOnSelection
+					-----------------------------------------------------
+					
+					--restaura los arrays de nodos seleccionados y de jerarquias-------------------------
+			-- 					nodes = getCurrentSelection() --obtiene la seleccion actual
+			-- 					hierarchies = lb.rig.getHierarchiesFromNodes nodes --obtiene las jerarquías de los objetos  seleccionados
+					--------------------------------------------------------------------------------------------
+					
+					-----------------------------------------------------------------------------------------------------------------
+					-----------------------------------------------------------------------------------------------------------------
+				)--if clickNumber --------------------------------------------------------------
+			)--on mousePoint -------------------------------------------------------------------
+			
+			------------------------------------------------
+			--@event: stop | Evento que se lanza al interrumpir una acción realizada en la tool.
+			------------------------------------------------	
+			on stop do --para de hacer place
+			(
+				--*** Si no metemos el cambio de seleccion en unl undo, deja podrido los undo personalizados de cada place que estamos haciendo ***--
+				if newNodes.count != 0 then --si hay objetos nuevos, los selecciona
+					undo "Select all new copies" on
+						select newNodes
+				
+				completeRedraw() --redibujado completo
+				lb.assetManager.rollMain.createSceneEvents() --reactiva los callbacks de la herramienta
+				lb.assetManager.rollMain.removeSceneEvents()
+				
+				ckbStartCopy.checked = false
+			)
+		)
+
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollCopiesDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollCopiesDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--lb.xml.setAttribute parent.cfgFile ("rollExample1/cateagory") "paramName" "paramValue"
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			--_param = (lb.xml.getAttribute parent.cfgFile ("rollExample1/category") "paramName") as <value type>
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al realizar un cambio de estado del checkbutton.
+		--@control: checkbutton | ckbOffsetScaleLock | actualiza el interface con los locks
+		------------------------------------------------		
+		on ckbOffsetScaleLock changed state do
+		(
+			spnOffsetScaleY.value = spnOffsetScaleZ.value = spnOffsetScaleX.value
+			
+			spnOffsetScaleY.enabled = not state
+			-- 			spnOffsetScaleY.visible = not state
+			-- 			lblOffsetScaleYdisabled.visible = state
+			
+			spnOffsetScaleZ.enabled = not state
+			-- 			spnOffsetScaleZ.visible = not state
+			-- 			lblOffsetScaleZdisabled.visible = state
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton
+		--@control: button | btnOffsetReset | resetea los valores de los spinners
+		------------------------------------------------			
+		on btnOffsetReset pressed do
+		(
+			chkOffsetRotIncrementals.checked = true
+			spnOffsetPosX.value = spnOffsetPosY.value = spnOffsetPosZ.value = 0
+			spnOffsetRotX.value = spnOffsetRotY.value = spnOffsetRotZ.value = 0
+			spnOffsetScaleX.value = spnOffsetScaleY.value = spnOffsetScaleZ.value = 100
+		)
+		
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el valor del spinner.
+		--@control: spinner | spnOffsetScaleX | actualiza los valores de escala
+		------------------------------------------------				
+		on spnOffsetScaleX changed val do
+		(
+			if val == 0.0 then val = 100
+			if ckbOffsetScaleLock.checked then
+				spnOffsetScaleX.value = spnOffsetScaleY.value = spnOffsetScaleZ.value = val
+		)
+		
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el valor del spinner.
+		--@control: spinner | spnOffsetScaleY | actualiza los valores de escala
+		------------------------------------------------				
+		on spnOffsetScaleY changed val do
+		(
+			if val == 0.0 then
+			(
+				val = 100
+				spnOffsetScaleY.value = val
+			)
+		)	
+
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el valor del spinner.
+		--@control: spinner | spnOffsetScaleZ | actualiza los valores de escala
+		------------------------------------------------				
+		on spnOffsetScaleZ changed val do
+		(
+			if val == 0.0 then
+			(
+				val = 100
+				spnOffsetScaleZ.value = val
+			)
+		)
+
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el valor del checkbutton.
+		--@control: checkbutton | ckbVariationScaleLock | actualiza el interface con los locks
+		------------------------------------------------		
+		on ckbVariationScaleLock changed state do
+		(
+			spnVariationScaleY.value = spnVariationScaleZ.value = spnVariationScaleX.value
+			
+			spnVariationScaleY.enabled = not state
+			-- 			spnVariationScaleY.visible = not state
+			-- 			lblVariationScaleYdisabled.visible = state
+			
+			spnVariationScaleZ.enabled = not state
+			-- 			spnVariationScaleZ.visible = not state
+			-- 			lblVariationScaleZdisabled.visible = state
+		)
+		
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el valor del checkbutton.
+		--@control: checkbutton | chkVariationsEnable | habilita o deshabilita las variaciones
+		------------------------------------------------				
+		on chkVariationsEnable changed state do
+		(
+			lblVariationPos.enabled = state
+			spnVariationPosX.enabled = state
+			spnVariationPosY.enabled = state
+			spnVariationPosZ.enabled = state
+			
+			lblVariationRot.enabled = state
+			spnVariationRotX.enabled = state
+			spnVariationRotY.enabled = state
+			spnVariationRotZ.enabled = state
+			
+			lblVariationScale.enabled = state
+			spnVariationScaleX.enabled = state
+			spnVariationScaleY.enabled = state and not ckbVariationScaleLock.checked
+			spnVariationScaleZ.enabled = state and not ckbVariationScaleLock.checked
+			ckbVariationScaleLock.enabled = state
+			
+			btnVariationReset.enabled = state
+		)
+			
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton
+		--@control: button | btnVariationReset | resetea los valores de los spinners
+		------------------------------------------------			
+		on btnVariationReset pressed do
+		(
+			spnVariationPosX.value = spnVariationPosY.value = spnVariationPosZ.value = 0
+			spnVariationRotX.value = spnVariationRotY.value = spnVariationRotZ.value = 0
+			spnVariationScaleX.value = spnVariationScaleY.value = spnVariationScaleZ.value = 0
+		)
+		
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el valor del spinner
+		--@control: spinner | spnVariationScaleX | actualiza los valores de escala
+		------------------------------------------------		
+		on spnVariationScaleX changed val do
+			if ckbVariationScaleLock.checked then
+				spnVariationScaleY.value = spnVariationScaleZ.value = val		
+
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del checkbutton
+		--@control: checkbutton | ckbStartCopy | comienza la copia de assets u objetos
+		------------------------------------------------		
+		on ckbStartCopy changed state do
+		(
+			if state then
+			(
+				max create mode
+				
+				--Valores comunes 
+				--Obtiene los valores de los offsets y las variaciones ---------------------------------------------------------------------------
+				offsetPos = [spnOffsetPosX.value, lb.assetManager.rollCopies.spnOffsetPosY.value, lb.assetManager.rollCopies.spnOffsetPosZ.value]
+				offsetRot = ((eulerangles (-spnOffsetRotX.value) (-spnOffsetRotY.value) (-spnOffsetRotZ.value)) as quat)
+				offsetScale = [ spnOffsetScaleX.value, spnOffsetScaleY.value, spnOffsetScaleZ.value]/100.0
+				if offsetScale == [0,0,0] then offsetScale = [1,1,1]								
+				incrementalRot =  chkOffsetRotIncrementals.checked
+				
+				varPos = [0,0,0]
+				varRot = eulerangles 0 0 0
+				varRotNeg = eulerangles 0 0 0
+				varScale = [1,1,1]
+				varScaleNeg = [1,1,1]
+				
+				varScaleLock =  ckbVariationScaleLock.checked
+				
+				if chkVariationsEnable.checked then
+				(
+					varPos = [spnVariationPosX.value, spnVariationPosY.value, spnVariationPosZ.value]
+					
+					varRot = (eulerangles -spnVariationRotX.value -spnVariationRotY.value -spnVariationRotZ.value)
+					varRotNeg = (eulerangles spnVariationRotX.value spnVariationRotY.value spnVariationRotZ.value)
+					
+					varScale = [(100 + spnVariationScaleX.value),(100 + spnVariationScaleY.value),(100 + spnVariationScaleZ.value)]/100.0
+					varScaleNeg = [amax #(0,100 - spnVariationScaleX.value),amax #(0,100 - spnVariationScaleY.value),amax #(0,100 - spnVariationScaleZ.value)]/100.0
+				)
+				------------------------------------------------------------------------------------------
+				
+				--segun el modo de copia seleccionado hay que entrar en el modo paint, place o make
+				case rdoCopyModes.state of
+				(
+					1:--modo paint
+					(
+						print "paint"
+					)--modo paint
+					
+					2:--modo place
+					(
+						proceed = true --flag para saber si empezar a hacer place
+						
+						--si es copia por objeto o por assets por objetos seleccionados debe haber algo seleccionado en la escena para poder trabajar.
+						if (ckbOperateOnSelection.checked or ckbAssetsBySelObjects.checked) and selection.count == 0 then
+						(
+							proceed = false
+							lb.message.show "You cannot copy without selecting objects." type:#message pos:undefined size:[300,75] modal:true
+						)
+						
+						if proceed do startTool toolPlaceCopies prompt:"Coping objects: place mode"--inicia la tool de hacer copias
+					)--modo place
+					
+					3:--modo make
+					(
+						--arrays de matrices de transformacion que habrá que aplicar a los objetos que se copiarán
+						auxHierarchyParent = undefined	--si hay que hacer las copias relativas, se necesita un padre auxiliar general que ir moviendo
+						auxHierarchyParents = #() --padres auxiliares de cada jerarquia para ir averiguando esas transformaciones
+						
+						initPosition = [0,0,0] --posicion inicial del auxHierarchyParent
+						initRotation = quat 1 --rotacion inicial del auxHierarchyParent
+						initScale = [1,1,1] --escala inicial del auxHierarchyParent
+						
+						initPositions = #() --array de posiciones iniciales de cada jerarquia
+						initRotations = #() --array de rotaciones iniciales de cada jerarquia
+						initScales = #() --array de escalas iniciales de cada jerarquia
+						
+						copiesTransforms = #() --arrays de matrices de transformacion que habrá que aplicar a los objetos que se copiarán
+						-----------------------------------------------------------------------------------------------------
+						
+						lb.assetManager.rollMain.removeSceneEvents() --desactiva los callbacks de la herramienta deforma temporal
+						setWaitCursor() --coloca el cursor de espera
+						
+						--si el modo de trabajo es por asset----------------------------------------------------------------
+						if ckbAssetsBySelObjects.checked or chkOperateOnSelAssets.checked then
+						(
+							mode = if chkOperateOnSelAssets.checked then #fromSelAssets else if ckbAssetsBySelObjects.checked then #fromSelection else #none
+							newAssets = #() --array donde almacenar los nuevos assets
+							
+							--devuelve los assets a copiar, en grupos de dependencia
+							depGroups = getAssetsToCopy mode:mode dependents:lb.assetManager.rollMain.chkaffectDependentAssets.checked
+							
+							undo "Copy Assets" on
+							--with undo off --realiza las operaciones sin almacenar undos
+							(
+								stop = false
+								
+								--recorre los grupos de dependencia haciendo la copia de los assets de cada uno de ellos
+								for d in depGroups where not stop do
+								( 	 
+									setWaitCursor() --coloca el cursor de espera
+									
+									depAssets = for i=2 to d.count collect d[i]
+									
+									nodeRoot = lb.asset.getAssetRootNode d[1]
+									
+									astPos = lb.asset.getAssetPosition d[1] nodeRoot:nodeRoot --obtenemos la posicion del asset
+									astRot = lb.asset.getAssetRotation d[1] nodeRoot:nodeRoot--obtenemos la rotación del asset
+									astScale = lb.asset.getAssetScale d[1] nodeRoot:nodeRoot --obtenemos la escala del asset
+									
+									prevRot = quat 1 --rotacion previa de cada copia, necesario para hacer la roación incremental
+									
+									seed (if nodeRoot != undefined then (nodeRoot.pivot.x + nodeRoot.pivot.y + nodeRoot.pivot.z) else 12345)
+									
+									for i=1 to spnNumberCopies.value where not stop do --hace tantas copias como se hayan pedido
+									(
+										--calculo de los offset y las variaciones de Posicion Rotacion y Escala-------------------------
+										newPos = astPos + (i*offsetPos) + (random -varPos varPos) --calcula la nueva posicion del asset
+										
+										auxRot = prevRot + offsetRot --calcula la rotacion nueva, que puede ser incremental respecto a la anterior o no
+										randRot = ((random varRotNeg varRot) as quat)
+										--if randRot == quat 1 then randRot = quat 0
+										newRot = astRot + auxRot + randRot --calcula la nueva rotacion del asset
+										if incrementalRot then prevRot = auxRot
+										
+										randScale = (random varScale varScaleNeg)
+										if ckbVariationScaleLock.checked then randScale = [randScale.x,randScale.x,randScale.x]
+										newScale = astScale*offsetScale*randScale --calcula la nueva escala del asset
+										------------------------------------------------------------------------------------------------------
+										
+										newAssets += lb.asset.copyAsset d[1] dependentAssets:depAssets pos:newPos rot:newRot scale:newScale
+										
+										if keyboard.escPressed then stop = queryBox "Do you want to stop copy process?"
+									)
+								)--for
+								
+							)--undo off
+							
+							if newAssets.count != 0 then --si hay assets nuevos, los selecciona
+							(
+								clearSelection()
+								for ast in newAssets do
+								(
+									rNode = lb.asset.getAssetRootNode ast
+									if rNode != undefined then
+										selectMore rNode
+								)
+							)
+							
+							if (lb.assetList != undefined) and (lb.assetList.rollMain != undefined) and lb.assetList.isOpen() then
+							(
+								lb.assetList.rollMain.updateControls()
+								lb.assetList.rollMain.updateGridViewSelection()
+							)
+						)-------------------------------------------------------------------------------------------------------
+						else if ckbOperateOnSelection.checked then --si el modo de trabajo es por objeto
+						(
+							copyMode = if rdoCopyOptions.state == 3 then #copy else if rdoCopyOptions.state == 1 then #instance else #reference
+							sufix = edtSufix.text
+							
+							newNodes = #() --array donde ir almacenando los nuevos objetos copiados
+							nodes = getCurrentSelection() --obtiene la seleccion actual
+							
+							hierarchies = lb.rig.getHierarchiesFromNodes nodes --obtiene las jerarquías de los objetos  seleccionados
+							
+							--------------------------------------------------------------------------------------
+							with undo off --no almacena undos
+							(
+								--crea los objetos auxiliares de los que va a coger las transformaciones para cada jerarquia
+								--almacena tambien las transformaciones iniciales de cada jerarquia
+								for h in hierarchies do
+								(
+									auxDummy = dummy pos:[0,0,0]
+									append auxHierarchyParents auxDummy
+									
+									auxDummy.transform = h[1].transform
+									append initPositions h[1].transform.pos
+									append initRotations h[1].transform.rotation
+									append initScales h[1].transform.scale
+									
+									append copiesTransforms #()
+								)--for
+								
+								--si hay que hacer la copia por grupo, primero creamos una pieza auxiliar en la parte central
+								--del bounding box general de todos los objetos, después emparentamos cada auxHierarchyParent
+								--a dicha pieza para que sean una sola jerarquía y así copiarlos de una sola vez.
+								---------------------------------------------------------------------------------------
+								auxParent = undefined --pieza auxiliar a la que emparentar todas las jerarquías
+								if chkByGroup.checked and hierarchies.count > 1 then
+								(
+									auxBB = lb.geometry.getNodesBoundingBox nodes (matrix3 1) --bounding box de los nodos seleccionados
+									auxHierarchyParent = dummy pos:((auxBB[1] + auxBB[2])/2.0)
+									
+									initPosition = auxHierarchyParent.transform.pos
+									initRotation = auxHierarchyParent.transform.rotation
+									initScale = auxHierarchyParent.transform.scale
+									
+									for ah in auxHierarchyParents do ah.parent = auxHierarchyParent
+								)
+								---------------------------------------------------------------------------------------
+								
+								--ahora calculamos las matrices de transformacion de cada jerarquia, en funcion de los objetos axiliares creados para cada una de elloas
+								if auxHierarchyParent != undefined then --si hay que hacerlo en grupo
+								(
+									prevRot = quat 1 --rotacion previa de cada copia, necesario para hacer la roación incremental
+									seed (auxHierarchyParent.pivot.x + auxHierarchyParent.pivot.y + auxHierarchyParent.pivot.z)
+									
+									for i=1 to spnNumberCopies.value do --calcula la nueva posicion, rotacion y escala para cada numero de copia
+									(
+										--calculo de los offset y las variaciones de Posicion Rotacion y Escala-------------------------
+										newPos = initPosition + (i*offsetPos) + (random -varPos varPos) --calcula la nueva posicion del asset
+										
+										auxRot = prevRot + offsetRot --calcula la rotacion nueva, que puede ser incremental respecto a la anterior o no
+										randRot = ((random varRotNeg varRot) as quat)
+										newRot = initRotation + auxRot + randRot --calcula la nueva rotacion del asset
+										if incrementalRot then prevRot = auxRot
+										
+										randScale = (random varScale varScaleNeg)
+										if varScaleLock then randScale = [randScale.x,randScale.x,randScale.x]
+										newScale = initScale*offsetScale*randScale --calcula la nueva escala del asset
+										------------------------------------------------------------------------------------------------------
+										
+										--aplica la nueva posicion
+										auxHierarchyParent.pos = newPos
+										
+										--aplica la nueva rotacion
+										defRot = (initRotation - auxHierarchyParent.transform.rotation - newRot) as eulerangles
+										rotate auxHierarchyParent defRot
+										
+										--aplica la nueva escala a cada padre auxiliar de jerarquia,
+										--y almacena la transformación de cada uno de ellos en un array
+										--para aplicarla mas tarde a la copias
+										for j=1 to auxHierarchyParents.count do
+										(
+											auxHierarchyParents[j].scale = newScale
+											append copiesTransforms[j] auxHierarchyParents[j].transform
+										)--for j
+									)--for i
+								)
+								else --si hay que hacerlo individual para cada jerarquia-------------------------------
+								(
+									for j=1 to auxHierarchyParents.count do
+									(
+										prevRot = quat 1 --rotacion previa de cada copia, necesario para hacer la roación incremental
+										seed (auxHierarchyParents[j].pivot.x + auxHierarchyParents[j].pivot.y + auxHierarchyParents[j].pivot.z)
+										
+										for i=1 to spnNumberCopies.value do --calcula la nueva posicion, rotacion y escala para cada numero de copia
+										(
+											--calculo de los offset y las variaciones de Posicion Rotacion y Escala-------------------------
+											newPos = initPositions[j] + (i*offsetPos) + (random -varPos varPos) --calcula la nueva posicion del asset
+											
+											auxRot = prevRot + offsetRot --calcula la rotacion nueva, que puede ser incremental respecto a la anterior o no
+											randRot = ((random varRotNeg varRot) as quat)
+											newRot = initRotations[j] + auxRot + randRot --calcula la nueva rotacion del asset
+											if incrementalRot then prevRot = auxRot
+											
+											randScale = (random varScale varScaleNeg)
+											if ckbVariationScaleLock.checked then randScale = [randScale.x,randScale.x,randScale.x]
+											newScale = initScales[j]*offsetScale*randScale --calcula la nueva escala del asset
+											------------------------------------------------------------------------------------------------------
+											
+											--aplica la nueva posicion
+											auxHierarchyParents[j].pos = newPos
+											
+											--aplica la nueva rotacion
+											defRot = (initRotations[j] - auxHierarchyParents[j].transform.rotation - newRot) as eulerangles
+											rotate auxHierarchyParents[j] defRot
+											
+											--aplica la nueva escala
+											auxHierarchyParents[j].scale = newScale
+											
+											--almacena las transformaciones del auxHierarchyParents[j] para esa copia
+											append copiesTransforms[j] auxHierarchyParents[j].transform
+										)--for i	
+									)--for j										
+								)--------------------------------------------------------------------------------------
+								
+								delete auxHierarchyParents
+								if auxHierarchyParent != undefined do delete auxHierarchyParent
+							)--undo off
+							--------------------------------------------------------------------------------------
+							
+							--------------------------------------------------------------------------------------
+							undo "Copy Objects" on
+							(
+								stop = false --flag de parada
+								
+								--recorre las jerarquias haciendo tantas copies de cada una como se haya indicado
+								for i=1 to hierarchies.count where not stop do
+								(
+									copyLimit = spnNumberCopies.value
+									digitNumber = (copyLimit as string).count
+									
+									--hace tantas copias como se hayan pedido
+									for j=1 to copyLimit where not stop do
+									(
+										newIndex = j as string
+										while newIndex.count < digitNumber do newIndex = "0" + newIndex
+										
+										--realiza la copia
+										newNodes += lb.asset.copyObjects hierarchies[i] mode:copyMode sufix:sufix index:newIndex transform:copiesTransforms[i][j] --pos:newPos rot:newRot scale:newScale
+										
+										if keyboard.escPressed then stop = queryBox "Do you want to stop copy process?"
+									)
+								)
+								
+								--*** Si no metemos el cambio de seleccion en el undo, deja podrido el undo personalizado que estamos haciendo ***--
+								if newNodes.count != 0 then --si hay objetos nuevos, los selecciona
+									select newNodes
+							)--undo on
+							
+						)						
+						--------------------------------------------------------------------------------------------------------
+						
+						completeRedraw() --redibujado completo
+						setArrowCursor() --coloca el cursor en modo flecha
+						
+						lb.assetManager.rollMain.createSceneEvents()
+						lb.assetManager.rollMain.removeSceneEvents()
+
+						
+					)--modo make
+					
+				)--case rdoCopyModes
+				
+				--al final de la copia resetea el estado del boton
+				ckbStartCopy.checked = false
+			)
+			else
+			(
+				stopTool toolPlaceCopies
+			)
+		)
+		
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del checkbutton
+		--@control: checkbutton | chkOperateOnSelAssets | cambia las opciones en funcion de los checkbuttons inciales, para elegir con que assets trabaja
+		------------------------------------------------		
+		on chkOperateOnSelAssets changed state do
+		(
+			if state then
+			(
+				ckbOperateOnSelection.checked = ckbAssetsBySelObjects.checked = false
+				
+				--si no esta en modo selObjs entonces hay que ocultar las opciones de copia por referencia, instancia o copia normal.
+				if rdoCopyOptions.enabled then lastCopyOption = rdoCopyOptions.state
+				rdoCopyOptions.enabled = false
+				rdoCopyOptions.state = 3
+				------------------------------------------------------------------------------------------------
+			)
+			else
+				chkOperateOnSelAssets.checked = true
+			
+			-- 			chkDependents.enabled = chkOperateOnSelAssets.checked
+		)
+		
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del checkbutton
+		--@control: checkbutton | ckbAssetsBySelObjects | cambia las opciones en funcion de los checkbuttons inciales, para elegir con que assets trabaja
+		------------------------------------------------				
+		on ckbAssetsBySelObjects changed state do
+		(
+			if state then
+			(
+				ckbOperateOnSelection.checked = chkOperateOnSelAssets.checked = false
+				
+				--si no esta en modo selObjs entonces hay que ocultar las opciones de copia por referencia, instancia o copia normal.
+				if rdoCopyOptions.enabled then lastCopyOption = rdoCopyOptions.state
+				rdoCopyOptions.enabled = false
+				rdoCopyOptions.state = 3
+				------------------------------------------------------------------------------------------------
+			)
+			else
+				ckbAssetsBySelObjects.checked = true
+			
+			-- 			chkDependents.enabled = not chkOperateOnSelAssets.checked
+		)
+
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del checkbutton
+		--@control: checkbutton | ckbOperateOnSelection | cambia las opciones en funcion de los checkbuttons inciales, para elegir con que assets trabaja
+		------------------------------------------------		
+		on ckbOperateOnSelection changed state do
+		(
+			if state then
+			(
+				chkOperateOnSelAssets.checked = ckbAssetsBySelObjects.checked = false
+				
+				--si esta en modo selObjs entonces hay que mostar las opciones de copia por referencia, instancia o copia normal.
+				rdoCopyOptions.enabled = true
+				rdoCopyOptions.state = lastCopyOption
+				------------------------------------------------------------------------------------------------
+			)
+			else
+				ckbOperateOnSelection.checked = true
+			
+			-- 			chkDependents.enabled = chkOperateOnSelAssets.checked
+		)
+		
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del checkbutton
+		--@control: checkbutton | ckbOffsets | cambios en los botones de settings
+		------------------------------------------------		
+		on ckbOffsets changed state do
+		(
+			if state then
+			(
+				updateUI()
+			)
+			else
+				ckbOffsets.state = true
+		)
+
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del checkbutton
+		--@control: checkbutton | ckbVariations | Actualiza la Ui
+		------------------------------------------------			
+		on ckbVariations changed state do
+		(
+			if state then
+			(
+				updateUI()
+			)
+			else
+				ckbVariations.state = true
+		)
+
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del checkbutton
+		--@control: checkbutton | ckbBrush | Actualiza la Ui 
+		------------------------------------------------		
+		on ckbBrush changed state do
+		(
+			if state then
+			(
+				updateUI()
+			)
+			else
+				ckbBrush.state = true
+		)
+		
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del checkbutton
+		--@control: checkbutton | ckbPivot | Actualiza la Ui 
+		------------------------------------------------		
+		on ckbPivot changed state do
+		(
+			if state then
+			(
+				updateUI()
+			)
+			else
+				ckbPivot.state = true
+		)
+
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar la opción del radiobutton.
+		--@control: radioButton | rdoCopyModes | actualizacion de interface en funcion del modo de copia	
+		------------------------------------------------		
+		on rdoCopyModes changed state do
+		(		
+			ckbStartCopy.enabled = not (state == 1)
+			updateUI()
+		)
+		
+		------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del checkbutton
+		--@control: checkbutton | chkAutogrid | actualizacion de interface cuando se pulsa el check de autogrid
+		------------------------------------------------			
+		on chkAutogrid changed state do
+			updateUI()
+
+		------------------------------------------------
+		--@event: rolledUp | Evento que se lanza al redimensionar el rollout
+		--@control: rollout | rollCopiesDef | Se redimensiona el rollout principal para englobar los controles del mismo.
+		------------------------------------------------
+		on rollCopiesDef rolledUp state do 
+		(
+			parent.heightAdjust 4
+		)
+
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollCopiesDef | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollCopiesDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollCopiesDef | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollCopiesDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+
+			updateUI()
+
+			if parent.rollMain != undefined then resize [parent.rollMain.width, parent.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollCopiesDef | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollCopiesDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+		)
+	)--rollCopiesDef
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollMainDef | Contiene el rollout principal de la tool.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollMainDef "Asset Manager"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) 		--@var: string | parent | Herramienta o rolllout del que depende y/o contiene el rollout actual
+		
+		local minRollWidth = 220																--@var: integer | minRollWidth | Minimun tool width.
+		local minRollHeight = 192																--@var: integer | minRollHeight | Minimun tool height.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		local opening = false  		--@var: boolean | opening | Flag para que no salte el evento de cambio de tab y no pise el valor cargado del archivo .cfg
+		local iconpath = if (maxVersion())[1] >= 15000 then (getDir #maxRoot) + "UI_ln\\Icons\\" else (getDir #ui) + "/icons/"		--@var: string | iconpath | ruta de los iconos de Max.
+		local rMenu = dotnetobject "System.Windows.Forms.ContextMenuStrip" --pos:[115,265] width:40 height:14 visible:false   	--@var: dotnetobject | rMenu | menu botón derecho ratón
+		local menuAssetList = dotnetobject "System.Windows.Forms.ContextMenuStrip" --pos:[115,265] width:40 height:14 visible:false --@var: dotnetobject | menuAssetList | Contenedor de la Ui donde se almacenan los assets.
+
+		local _projectUnit = "z:\\" 	--@var: string | _projectUnit | Path a la unidad de proyecto.
+		local _assetOffset = 0			--@var: integer | _assetOffset | Solo hay 6 botones para representar los Assets de la escena. _assetOffset indica si se encuentra dentro de uno de los valores aceptados.
+		local numObjects = undefined  	--@var: integer | numObjects | numero de objetos de la escena
+		
+		--colors------------------------------------------------------------------------------
+		local backColor = (dotNetClass "System.Drawing.Color").beige		  			--@var: dotnetClass {Color} | backColor | fondo del listado
+		local meshColor = (dotNetClass "System.Drawing.Color").fromargb 200 190 105		--@var: dotnetClass {Color} | meshColor | layers Mesh
+		local hiddenColor = (dotNetClass "System.Drawing.Color").fromargb 100 100 100	--@var: dotnetClass {Color} | hiddenColor | layers Hidden
+		local animColor = (dotNetClass "System.Drawing.Color").fromargb 160 190 100		--@var: dotnetClass {Color} | animColor | layers Anim
+		local fxColor = (dotNetClass "System.Drawing.Color").blue						--@var: dotnetClass {Color} | fxColor | layers FX
+		
+		local beige = (color 245 245 220)												--@var: dotnetClass {Color} | beige |color beige
+		
+		local dgBackColor = (dotNetClass "System.Drawing.Color").beige					--@var: dotnetClass {Color} | dgBackColor | fondo
+		local dgForeColor = (dotNetClass "System.Drawing.Color").gray					--@var: dotnetClass {Color} | dgForeColor | texto
+		local dgSelBackColor = (dotNetClass "System.Drawing.Color").black	 			--@var: dotnetClass {Color} | dgSelBackColor | fondo de items seleccionados
+		local dgSelForeColor = (dotNetClass "System.Drawing.Color").white				--@var: dotnetClass {Color} | dgSelForeColor | texto de items seleccionados
+
+		local showLayers = true															--@var: boolean | showLayers | Indica si se están mostrando o no los controles de layers
+			
+		local updateAvailable = false													--@var: boolean | updateAvailable | flag para saber si se puede actualizar el listado de layers
+		
+		local clipboardObj = dotNetClass "System.Windows.Forms.Clipboard"  				--@var: dotnetClass {Clipboard} | clipboardObj | crea un clipboard de puntonet	
+
+		local affectedRollouts = #() 													--@var: array{Rollout} | affectedRollouts | Listado de rollouts dependientes, que seran afectados por redimensiones.
+
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+
+		dotNetControl tbTabs "DevExpress.XtraTab.XtraTabControl" pos:[0,320] width:350 height:21 --25
+
+		-- Controles de dotNet
+		dotNetControl dgAssetIcons "System.Windows.Forms.DataGridView" pos:[5,25] width:200 height:25
+		dotNetControl dgAssetIconsHscroll "System.Windows.Forms.HScrollBar" pos:[5,50] width:200 height:10
+
+		timer tmClock interval:500 active:true
+		
+		label lblSeparator01 "|" pos:[40,5] enabled:false
+		label lblSeparator02 "|" pos:[85,5] enabled:false
+		
+		button btnAddAsset "+" pos:[0,0] width:20 height:24 images:#(iconpath + "parameterCollector_i.bmp", undefined, 28, 7, 7, 7, 7,true) border:false toolTip:"Add asset"	
+		button btnDeleteAsset "X" pos:[20,0] width:20 height:24 images:#(iconpath + "MeditTools_i.bmp", undefined, 44, 7, 7, 8, 8,true) border:false toolTip:"Remove asset"	
+		
+		checkbutton ckbAssetList "list" pos:[44,0] width:23 height:24 images:#(iconsPath + "displayIcons001_24i.bmp", undefined, 50, 1,1,1,1,false) border:false toolTip:"Shows complete asset list"
+		button btnAssetsFromNodes "get" pos:[63,0] width:23 height:24 images:#(iconsPath + "displayIcons001_24i.bmp", undefined, 50, 4,4,4,4,false) border:false toolTip:"obtains assets from selected nodes, and select then in the list"
+		
+		checkbutton ckb_CHRs "chr" pos:[90,3] width:20 height:20 highlightcolor:(lb.asset.chrAssetColor) images:#(iconsPath + "displayIcons001_24i.bmp", undefined, 50, 5,5,5,5,false) border:false tooltip:"Filter Character assets" checked:true
+		checkbutton ckb_PRPs "prp" pos:[110,3] width:20 height:20 highlightcolor:(lb.asset.prpAssetColor) images:#(iconsPath + "displayIcons001_24i.bmp", undefined, 50, 6,6,6,6,false) border:false tooltip:"Filter Prop assets" checked:true
+		checkbutton ckb_SPRs "spr" pos:[130,3] width:20 height:20 highlightcolor:(lb.asset.sprAssetColor) images:#(iconsPath + "displayIcons001_24i.bmp", undefined, 50, 7,7,7,7,false) border:false tooltip:"Filter SetProp assets" checked:true
+		checkbutton ckb_SETs "set" pos:[150,3] width:20 height:20 highlightcolor:(lb.asset.setAssetColor) images:#(iconsPath + "displayIcons001_24i.bmp", undefined, 50, 8,8,8,8,false) border:false tooltip:"Filter Set assets" checked:true
+		checkbutton ckb_LITs "lit" pos:[170,3] width:20 height:20 highlightcolor:(lb.asset.litAssetColor) images:#(iconsPath + "displayIcons001_24i.bmp", undefined, 50, 10,10,10,10,false) border:false tooltip:"Filter Light assets" checked:true
+		checkbutton ckb_FXs "fx" pos:[190,3] width:20 height:20 highlightcolor:(lb.asset.fxAssetColor) images:#(iconsPath + "displayIcons001_24i.bmp", undefined, 50, 9,9,9,9,false) border:false tooltip:"Filter FX assets" checked:true
+
+		groupBox grpAffects "" pos:[5,58] width:202 height:85	
+		groupBox grpConnection "" pos:[104,58] width:103 height:85
+		
+		button btnHide "hide" pos:[6,65] width:25 height:20 toolTip:"Hide current asset" 
+		button btnShow "show" pos:[31,65] width:25 height:20 toolTip:"Shows current asset if it's not visible"
+		button btnUnhideAll "all" pos:[56,65] width:20 height:20 toolTip:"Unhide all assets"
+		button btnSolo "solo" pos:[76,65] width:25 height:20 toolTip:"Hide all assets except selected"
+		
+		button btnConnection "Con" pos:[105,65] width:24 height:20 toolTip:"Connect/Disconnect Rig"
+		
+		button btnVMpuppet "P" pos:[134,65] width:13 height:20 toolTip:"Puppet Mode"
+		button btnVMpuppetHead "PH" pos:[147,65] width:17 height:20 toolTip:"Puppet + Head Mode"
+		button btnVMhead "H" pos:[164,65] width:13 height:20 toolTip:"Head Mode"
+		button btnVMskin "S" pos:[177,65] width:13 height:20 toolTip:"Skin Mode"
+		button btnVMskinBox "SB" pos:[190,65] width:17 height:20 toolTip:"Skin + Box Mode"
+		
+		checkbox chkaffectAllAssets "all assets" pos:[10,90] toolTip:"affect all assets"
+		checkbox chkaffectDependentAssets "dependents" pos:[10,107] checked:true toolTip:"affect dependent assets"
+		checkbox chkEnableXrefs "Enable Xrefs" pos:[10,125] checked:true toolTip:"Enable/Disable selected assets xref"
+		
+		checkbox chkaffectFFDs "FFDs" pos:[110,90] checked:true toolTip:"Disable FFDs in HEAD and PUPPET+HEAD mode"
+		checkbox chkaffectHair "Hair" pos:[160,90] checked:true toolTip:"Hide HAIR and disable HAIR SKIN in HEAD and PUPPET+HEAD mode"
+		checkbox chkDisSecPuppets "SP" pos:[110,107] checked:true toolTip:"Enable/Disable Secondary Puppets in HEAD ans PUPPET+HEAD mode"
+		checkbox chkShowExtraControls "EC" pos:[160,107] width:43 height:15 checked:true toolTip:"Show/Hide extra animation controls in SKIN+BOX Mode"
+
+		------------------------------------------------------------------------------------------------
+		--SUBROLLOUTS
+		------------------------------------------------------------------------------------------------
+
+		subrollout subRollAdvanced "subRollAdvanced" pos:[0,150] width:minRollWidth height:175 --@control | subRollContainer | SubRollouts container.
+		subrollout subRollContainer "subRollouts" pos:[0,341] width:minRollWidth height:0 --@control | subRollContainer | SubRollouts container.
+
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		---------------------------------------------------------------------------
+		--@fn: undefined | initIconsDG | inicializa el gridview
+		---------------------------------------------------------------------------
+		fn initIconsDG =
+		(
+			dgAssetIcons.rows.clear()
+			dgAssetIcons.columns.clear()
+			
+			dgAssetIcons.allowUsertoaddRows = false
+			dgAssetIcons.allowUserToResizeRows = false
+			dgAssetIcons.allowUserToResizeColumns = false
+			
+			dgAssetIcons.ColumnHeadersVisible = false	--para que las colunas no tengan titulo
+			dgAssetIcons.rowheadersvisible = false		--para que las filas no tengan titulo
+			
+			dgAssetIcons.foreColor = (dotNetClass "System.Drawing.Color").black
+			dgAssetIcons.backgroundcolor = dgForeColor									-- color del fondo
+			--dgAssetIcons.rowsdefaultcellstyle.backcolor = dgForeColor				-- color por defecto de las celdas
+			dgAssetIcons.GridColor = dgForeColor
+			
+			dgAssetIcons.font = dotnetobject "system.drawing.font" (dotnetobject "System.Drawing.FontFamily" "Arial") 7.5					
+			
+			rollMainDef.dgAssetIcons.scrollBars = (dotNetClass "System.Windows.Forms.ScrollBars").none --hace que no tenga scroll
+			
+			dgAssetIcons.readonly = true
+		)
+
+		---------------------------------------------------------------------------
+		--@fn: undefined | fillIconsDG | rellena el gridView de iconos
+		---------------------------------------------------------------------------		
+		fn fillIconsDG =
+		(
+			_cellWidth = _cellHeight = 25
+			dgAssetIcons.rows.clear() --limpia las filas
+			dgAssetIcons.columns.clear() --limpia las columnas
+
+			--recorre los assets que pasan los filtros para mostrarlos en el listado
+			if lb.asset.listedAssets != undefined then --si la variable no esta indefinida
+			(
+				if lb.asset.listedAssets.count <= 8 then
+				(
+					dgAssetIconsHscroll.enabled = false
+				)
+				else
+				(
+					dgAssetIconsHscroll.enabled = true
+					_large = (100 - (lb.asset.listedAssets.count - 8)*25)
+					dgAssetIconsHscroll.LargeChange = if _large < 10 then 10 else _large
+					dgAssetIconsHscroll.SmallChange = 25
+				)
+				
+				for i=1 to lb.asset.listedAssets.count do
+				(
+					icon = lb.asset.getAssetIconFiles lb.asset.listedAssets[i] --obtiene los iconos del asset
+					
+					if icon.count != 0 then
+					(
+						dgAssetIcons.columns.add (dotnetobject "System.Windows.Forms.DataGridViewImageColumn")
+					)
+
+					else
+						dgAssetIcons.columns.add (dotnetobject "System.Windows.Forms.DataGridViewTextBoxColumn")
+					
+					dgAssetIcons.columns.item[dgAssetIcons.columns.count - 1].ToolTipText = lb.asset.listedAssets[i].fullname
+					dgAssetIcons.columns.item[dgAssetIcons.columns.count - 1].width = _cellWidth
+				)--for
+			)
+			
+			if dgAssetIcons.columns.count > 0 then
+			(
+				row = (dotnetobject "System.Windows.Forms.DataGridViewRow")
+				row.height = _cellWidth
+				dgAssetIcons.rows.add row --añade la fila
+			)
+			
+			if dgAssetIcons.rows.count == 1 then --si ha conseguido añadir la fila
+			(
+				for i=1 to lb.asset.listedAssets.count do
+				(
+					--elige el color de fondo de la linea
+					colDotnetColor = dgBackColor
+					colColor = dgBackColor
+					case lb.asset.listedAssets[i].type of
+					(
+						(lb.nc.NC_chrPrefix):
+						(
+							colDotnetColor = (dotNetClass "System.Drawing.Color").fromargb lb.asset.chrAssetColor.x lb.asset.chrAssetColor.y lb.asset.chrAssetColor.z
+							colColor = lb.asset.chrAssetColor as color
+						)
+						
+						(lb.nc.NC_prpPrefix):
+						(
+							colDotnetColor = (dotNetClass "System.Drawing.Color").fromargb lb.asset.prpAssetColor.x lb.asset.prpAssetColor.y lb.asset.prpAssetColor.z
+							colColor = lb.asset.prpAssetColor as color
+						)
+						
+						(lb.nc.NC_sprPrefix):
+						(
+							colDotnetColor = (dotNetClass "System.Drawing.Color").fromargb lb.asset.sprAssetColor.x lb.asset.sprAssetColor.y lb.asset.sprAssetColor.z
+							colColor = lb.asset.sprAssetColor as color
+						)
+						
+						(lb.nc.NC_setPrefix):
+						(
+							colDotnetColor = (dotNetClass "System.Drawing.Color").fromargb lb.asset.setAssetColor.x lb.asset.setAssetColor.y lb.asset.setAssetColor.z
+							colColor = lb.asset.setAssetColor as color
+						)
+						
+						(lb.nc.NC_litPrefix):
+						(
+							colDotnetColor = (dotNetClass "System.Drawing.Color").fromargb lb.asset.litAssetColor.x lb.asset.litAssetColor.y lb.asset.litAssetColor.z
+							colColor = lb.asset.litAssetColor as color
+						)
+						
+						(lb.nc.NC_fxPrefix):
+						(
+							colDotnetColor = (dotNetClass "System.Drawing.Color").fromargb lb.asset.fxAssetColor.x lb.asset.fxAssetColor.y lb.asset.fxAssetColor.z
+							colColor = lb.asset.fxAssetColor as color
+						)
+					)--case
+					
+					dgAssetIcons.columns.item[i-1].defaultCellStyle.BackColor = colDotnetColor
+					
+					_icon = lb.asset.getAssetIcon lb.asset.listedAssets[i] --obtiene los iconos del asset
+					
+					if _icon != undefined then
+					(
+						(dgAssetIcons.item (i-1) 0).ToolTipText = lb.asset.listedAssets[i].fullname
+						(dgAssetIcons.item (i-1) 0).value = _icon
+					)
+					else --no hay icono
+					(
+						(dgAssetIcons.item (i-1) 0).ToolTipText = lb.asset.listedAssets[i].fullname
+						(dgAssetIcons.item (i-1) 0).value = substring lb.asset.listedAssets[i].name 1 3
+					)
+				)--for
+				
+				if dgAssetIcons.columns.count != 0 and lb.asset.selAssets.count == 0 then
+					(dgAssetIcons.item 0 0).selected = false
+			)
+		)
+
+		---------------------------------------------------------------------------
+		--@fn: undefined | initControlsVariables | inicia las variables CHKs_V, CHKs_F y selLayerBtns
+		---------------------------------------------------------------------------				
+		fn initControlsVariables =
+		(
+			CHKs_V = #()	
+			CHKs_F = #()
+			selLayerBtns = #()
+			
+			for c in rollMainDef.controls do
+			(
+				if (findstring c.name "chk" != undefined) then
+				(
+					if (findstring c.name "_V" != undefined) then append CHKs_V c
+					if (findstring c.name "_F" != undefined) then append CHKs_F c
+				)
+				if (findstring c.name "btnSel_" != undefined) then append selLayerBtns c
+			)
+		)
+
+		---------------------------------------------------------------------------
+		--@fn: undefined | initControlsVariables | selecciona en el interface un Asset por su nombre
+		--@gets: string | assetName | El nombre del asset a consultar.
+		---------------------------------------------------------------------------		
+		fn selectAssetByName assetName =	
+		(
+			assetNum = lb.asset.findAssetByName lb.asset.listedAssets assetName
+			if assetNum != 0 then 
+			(
+				if (assetNum > _assetOffset + 7) or (assetNum <= _assetOffset - 7) then
+				(
+					_assetOffset = assetNum - 7 
+					if _assetOffset < 0 then _assetOffset = 0
+				)
+				--selAsset = assetNum
+				lb.asset.selAssets = #(assetNum)
+			)
+			else
+			(
+				--selAsset = 0
+				lb.asset.selAssets = #()
+			)
+			
+			rollMainDef.refreshControls()
+		)
+
+		---------------------------------------------------------------------------
+		--@fn: undefined | updateLayerControls | actualiza el listado de layers
+		---------------------------------------------------------------------------			
+		fn updateLayerControls =
+		(
+			updateAvailable = true
+		)
+
+		---------------------------------------------------------------------------
+		--@fn: undefined | setSelectedAssets | actualiza las variables de assets seleccionados
+		--@gets: boolean | pressed | Variable que controla si se ha presionado el botón.
+		--@gets: integer | newSelectedIndex | El numero del asset en la interfaz para configurarlo.
+		--@gets: (opt)boolean | ctrlPressed | si vale **TRUE** indica que se está presionando la tecla Control. \\ Por defecto false.
+		---------------------------------------------------------------------------			
+		fn setSelectedAssets pressed newSelectedIndex ctrlPressed:"false" =
+		(
+			if pressed then --si se ha presionado
+			(
+				if ctrlPressed then
+				(
+					appendIfUnique lb.asset.selAssets (newSelectedIndex + _assetOffset)
+				)
+				else
+				(
+					--selAsset = newSelectedIndex + _assetOffset
+					lb.asset.selAssets = #((newSelectedIndex + _assetOffset))
+				)
+			)
+			else if ctrlPressed and lb.asset.selAssets.count > 1 then --si se esta soltando con control
+			(
+				index = findItem lb.asset.selAssets (newSelectedIndex + _assetOffset)
+				if index != 0 then
+				(
+					deleteItem lb.asset.selAssets index
+					--selAsset = selAssets[1]
+				)
+			)
+			else --si se esta volviendo a pulsar solo uno de los assets ya seleccionados
+			(
+				--selAsset = newSelectedIndex + _assetOffset
+				lb.asset.selAssets = #((newSelectedIndex + _assetOffset))
+			)
+			
+			sort lb.asset.selAssets
+			
+			-- 			btnLeft.enabled = (selAssets[1] > 1)
+			-- 			btnRight.enabled = (selAssets[selAssets.count] < lb.asset.listedAssets.count)
+		)
+
+		---------------------------------------------------------------------------
+		--@fn: undefined | updateDGassetIconsSelection | actualiza el listado de assets con los seleccionados
+		---------------------------------------------------------------------------				
+		fn updateDGassetIconsSelection =
+		(
+			for i=1 to lb.asset.listedAssets.count do
+				(dgAssetIcons.item (i - 1) 0).selected = (findItem lb.asset.selAssets i != 0)	
+		)
+
+		----------------------------------------------------------------------------------
+		--@fn: undefined | updateDGassetIconsSelection | actualiza el estado de los controles del rollout
+		----------------------------------------------------------------------------------
+		fn updateRollMainControls =
+		(
+			chrModes = #("P", "P+H", "H", "S", "S+B")
+			chrWithNoMeshModes = #("P")
+			chrWithNoFacialModes = #("P", "S", "S+B")
+			prpModes = #("P", "S", "S+B")
+			sprModes = #("P", "S", "S+B")
+			setAnimModes = #("P", "S", "S+B")
+			setModes = #("S")
+			fxModes = #("S","S+B")
+			
+			selAssetsTypes = #()
+			hasPuppets = false
+			
+			for index in lb.asset.selAssets do --tipos de assets seleccionados
+			(
+				case lb.asset.listedAssets[index].type of
+				(
+					"chr":
+					(
+						if lb.asset.listedAssets[index].meshNodesAll.count == 0 then appendIfUnique selAssetsTypes "chrNoMesh"
+						else if lb.asset.listedAssets[index].facialNodesAll.count == 0 then appendIfUnique selAssetsTypes "chrNoFacial"
+						else appendIfUnique selAssetsTypes "chr"
+					)
+					
+					"set":
+					(
+						if lb.asset.listedAssets[index].animNodesAll.count != 0 then appendIfUnique selAssetsTypes "setAnim"
+						else appendIfUnique selAssetsTypes "set"
+					)
+					
+					default:
+					(
+						appendIfUnique selAssetsTypes lb.asset.listedAssets[index].type
+					)
+				)--case
+				
+				if lb.asset.listedAssets[index].type != "chr" then
+					appendIfUnique selAssetsTypes lb.asset.listedAssets[index].type
+				else
+				(
+					if lb.asset.listedAssets[index].meshNodesAll.count == 0 then
+						appendIfUnique selAssetsTypes "chrNoMesh"
+					else if lb.asset.listedAssets[index].facialNodesAll.count == 0 then
+						appendIfUnique selAssetsTypes "chrNoFacial"
+					else
+						appendIfUnique selAssetsTypes "chr"
+				)--if else
+				
+				if lb.asset.listedAssets[index].hasPuppets then hasPuppets = true
+			)--for
+			
+			modesToEnable = #()
+						
+			if findItem selAssetsTypes "chr" != 0 do modesToEnable += chrModes
+			if findItem selAssetsTypes "chrNoMesh" != 0 do modesToEnable += chrWithNoMeshModes
+			if findItem selAssetsTypes "chrNoFacial" != 0 do modesToEnable += chrWithNoFacialModes
+			if findItem selAssetsTypes "prp" != 0 do modesToEnable += prpModes
+			if findItem selAssetsTypes "spr" != 0 do modesToEnable += sprModes
+			if findItem selAssetsTypes "set" != 0 do modesToEnable += setModes
+			if findItem selAssetsTypes "setAnim" != 0 do modesToEnable += setAnimModes
+			if findItem selAssetsTypes "fx" != 0 do modesToEnable += fxModes
+				
+			modesToEnable = makeUniqueArray modesToEnable
+			
+			btnVMpuppet.enabled = (findItem modesToEnable "P" != 0) and (hasPuppets or (findItem selAssetsTypes "chr" != 0))
+			btnVMpuppetHead.enabled = (findItem modesToEnable "P+H" != 0) and (hasPuppets or (findItem selAssetsTypes "chr" != 0))
+			btnVMhead.enabled = (findItem modesToEnable "H" != 0)	
+			btnVMskin.enabled = (findItem modesToEnable "S" != 0)	
+			btnVMskinBox.enabled = (findItem modesToEnable "S+B" != 0)
+			
+			chkaffectFFDs.enabled = btnVMhead.enabled or btnVMpuppetHead.enabled
+			chkaffectHair.enabled = btnVMhead.enabled or btnVMpuppetHead.enabled
+			chkDisSecPuppets.enabled = btnVMpuppet.enabled or btnVMpuppetHead.enabled
+			
+			
+			--	calculamos el estado del tick chkShowExtraControls en función de la visibilidad
+			--	de los controles de animación extra.
+			animExtraNodes = #()
+			
+			for a in (lb.assetManager.getSelectedAssets()) do
+				join animExtraNodes (lb.asset.getAssetNodesByType a #(lb.nc.NC_classAnim, lb.nc.NC_classFacial) flags:#(lb.nc.NC_controlFlag,lb.nc.NC_extraFlag))
+			
+			/*--ESTO SE HA QUITADO PORQUE SE FUERZA QUE ESTE ACTIVO SEGUN EL MODO DE VISUALIZACION
+			--	solo habilitamos el tick si alguno de los assets seleccionados tiene controles de animación extra
+			chkShowExtraControls.enabled = btnVMskinBox.enabled and (animExtraNodes.count > 0)
+			
+			if chkShowExtraControls.enabled then
+			(				
+				if animExtraNodes.count > 0 then
+				(
+					chkShowExtraControls.checked = not animExtraNodes[1].isHidden
+					for o in animExtraNodes where (chkShowExtraControls.checked != (not o.isHidden)) do 
+						chkShowExtraControls.tristate = 2
+				)					
+			)
+			else
+				chkShowExtraControls.checked = false
+			*/
+		)
+
+		----------------------------------------------------------------------------------
+		--@fn: undefined | refreshControls | actualiza el estado de los controles para el manejo de los Assets
+		--@gets: (opt)true | updateLayers | Si vale **TRUE** actualiza los controles según el Asset seleccionado.\\ Por defecto True
+		----------------------------------------------------------------------------------		
+		fn refreshControls updateLayers:true =
+		(
+			updateDGassetIconsSelection()						-- actualiza el listado de assets con los seleccionadoso
+ 			if updateLayers then lb.assetManager.rollAdvanced.fillLayerControls()			-- rellenamos todos los controles para el Asset seleccionado.
+			updateRollMainControls()										-- actualiza el setado de habilitado o no de los controles de modos de visualizacion de assets
+			try rollMiscDef.updateMiscControls() catch()		--Actualizamos los controles del rollout de miscellaneous con un try por si está cerrado.
+			
+			if lb.assetList != undefined and lb.assetList.isOpen() then
+				lb.assetList.rollMain.updateGridViewSelection()
+		)
+
+		----------------------------------------------------------------------------------
+		--@fn: undefined | resetSceneAssets | reinicia el listado de Assets
+		----------------------------------------------------------------------------------			
+		fn resetSceneAssets = 
+		(
+			--limpia las variables antes de nada
+			lb.asset.sceneAssets = #()	
+			lb.asset.listedAssets = #()
+			lb.asset.selAssets = #()
+			lb.asset.selAsset = undefined
+			lb.asset.assetFilters = #()
+
+			--Miramos la ruta del archivo y rellenamos la variable de la unidad.
+			if maxFilePath != "" then _projectUnit = (filterString maxFilePath "\\")[1] + "\\"
+			else _projectUnit = "z:\\"
+
+			if lb.asset.selAssets == undefined then lb.asset.selAssets = #()
+			if lb.asset.listedAssets == undefined then lb.asset.listedAssets = #()
+			if lb.asset.selAssets.count != 0 then selAssetName = lb.asset.listedAssets[lb.asset.selAssets[1]].fullName
+			--selAsset = 0
+			
+			_assetOffset = 0
+			lb.asset.sceneAssets = lb.asset.getSceneAssets()										-- miramos qué Assets hay en la escena
+			
+			-- rellenamos el array de filtros de assets
+			if ckb_CHRs.checked then append lb.asset.assetFilters lb.nc.NC_chrPrefix
+			if ckb_PRPs.checked then append lb.asset.assetFilters lb.nc.NC_prpPrefix
+			if ckb_SPRs.checked then append lb.asset.assetFilters lb.nc.NC_sprPrefix
+			if ckb_SETs.checked then append lb.asset.assetFilters lb.nc.NC_setPrefix
+			if ckb_FXs.checked then append lb.asset.assetFilters lb.nc.NC_fxPrefix
+			if ckb_LITs.checked then append lb.asset.assetFilters lb.nc.NC_litPrefix
+
+			-- iniciamos los assets que se van a lb.asset.listedLayersObjs
+			for ast in lb.asset.sceneAssets do
+			(
+				tp = ast.type
+				if ckb_CHRs.checked and tp == lb.nc.NC_chrPrefix then append lb.asset.listedAssets ast
+				if ckb_PRPs.checked and tp == lb.nc.NC_prpPrefix then append lb.asset.listedAssets ast
+				if ckb_SPRs.checked and tp == lb.nc.NC_sprPrefix then append lb.asset.listedAssets ast
+				if ckb_SETs.checked and tp == lb.nc.NC_setPrefix then append lb.asset.listedAssets ast
+				if ckb_FXs.checked and tp == lb.nc.NC_fxPrefix then append lb.asset.listedAssets ast
+				if ckb_LITs.checked and tp == lb.nc.NC_litPrefix then append lb.asset.listedAssets ast
+			)
+			
+			-- Si hay lb.asset.listedAssets seleccionamos el primero
+			if lb.asset.listedAssets.count > 0 then lb.asset.selAssets = #(1) else lb.asset.selAssets = #()
+			fillIconsDG() --rellena el listado de asssets
+			refreshControls()
+							
+			--si el rollout global de assets esta abierto, hay que actualizarlo
+			if lb.assetList != undefined and lb.assetList.isOpen() then
+			(
+				lb.assetList.rollMain.updateControls()
+				lb.assetList.rollMain.updateGridViewSelection()
+			)
+			-----------------------------------------------------------------------
+		)
+
+		----------------------------------------------------------------------------------
+		--@fn: undefined | createRMenu | función que crea el menú del botón derecho del ratón
+		--@gets: integer | x | Posición en horizontal del pixel donde crear el menú.
+		--@gets: integer | y | Posición en vertical del pixel donde crear el menú.
+		----------------------------------------------------------------------------------		
+		fn createRMenu x y =
+		(
+			rMenu.items.clear()
+			rMenuItems = #()
+			rMenuConfigureItems = #()
+			
+			rmenu.rendermode = (dotnetclass "System.Windows.Forms.ToolStripRenderMode").professional
+			rMenu.showImageMargin = false
+			
+			append rMenuItems "Select objects"
+			append rMenuItems "Select all objects in asset" 
+			
+			for i = 1 to rMenuItems.count do rMenu.items.add rMenuItems[i]
+			
+			-- si no hay ningún asset seleccionado desactivamos las opciones
+			for i = 0 to (rMenu.items.count - 1)  do
+				rMenu.items.item[i].enabled = (lb.asset.selAssets.count != 0) 
+			
+			rMenu.font = dotnetobject "system.drawing.font" (dotnetobject "System.Drawing.FontFamily" "Microsoft Sans Serif") 7.5
+			
+			rMenu.show this.rollAdvanced.lvLayers x y
+		)
+
+		----------------------------------------------------------------------------------
+		--@fn: undefined | showAsseListMenu | cera el listado de assets de la escena en un menu
+		----------------------------------------------------------------------------------
+		fn showAsseListMenu =
+		(
+			menuItems = #() --elementos del listado
+				
+			menuAssetList.items.clear() --vacia el menu
+			
+			--propiedades de visualizacion del menu
+			menuAssetList.rendermode = (dotnetclass "System.Windows.Forms.ToolStripRenderMode").professional
+			menuAssetList.showImageMargin = false
+			menuAssetList.font = dotnetobject "system.drawing.font" (dotnetobject "System.Drawing.FontFamily" "Microsoft Sans Serif") 7.5
+			
+			for ast in lb.asset.listedAssets do --obtiene los nombres de los assets listados
+				append menuItems ast.fullName
+			
+			for item in menuItems do --añade los nombres al menu
+				menuAssetList.items.add item
+			
+			menuAssetList.Show (rollFltAssetManager.pos.x + 145) (rollFltAssetManager.pos.y + 40)
+		)
+
+		----------------------------------------------------------------------------------
+		--@fn: undefined | selectPiecesByFlag | selecciona las piezas del asset que tengan los flags pasados por parametro 
+		--@gets: array{chars} | flags | Array que contiene los flags. 
+		--@gets: (opt)name | flagsMode | Comprobaciónes que se pueden hacer; **#and** comprueba que se cumplan todos los flags en las piezas, mientras que **or** comprueba que solo se cumpla una. \\ Por defecto #and
+		--@gets: (opt)boolean | allLayers | Si vale **TRUE** comprueba los objetos de todas las capas, incluyendo auxiliares. \\ Por defecto false.
+		----------------------------------------------------------------------------------		
+		fn selectPiecesByFlag flags flagsMode:#and allLayers:false =
+		(
+			if flags.count != 0 then
+			(
+				clearSelection()
+				selObjs = #()
+				types = #()
+				
+				if allLayers then
+					for i = 1 to this.rollAdvanced.lvLayers.rows.count do
+						append types (this.rollAdvanced.lvLayers.item 0 (i-1)).value
+				else
+					for i = 1 to lvSelItems.count do
+						append types (lvSelItems.item[i-1].value as string)
+				
+				selObjs =#()
+				
+				for s in lb.asset.selAssets do
+					selObjs += lb.asset.getAssetNodesByType lb.asset.listedAssets[s] types flags:flags flagsMode:flagsMode
+				
+				select selObjs
+			)
+		)
+
+		----------------------------------------------------------------------------------
+		--@fn: undefined | showAvailableFlags | muestra un rollout con los Flags disponibles
+		----------------------------------------------------------------------------------			
+		fn showAvailableFlags =
+		(
+			rolloutDef = "rollout rollAssetManagerFlags \"Select by Flag\" width:380\n"
+			rolloutDef = rolloutDef + "(\n"
+			rolloutDef = rolloutDef + "	radiobuttons rdoFlagsMode pos:[5,5] labels:#(\"and\", \"or\")\n"
+			rolloutDef = rolloutDef + "	radiobuttons rdoLayersMode pos:[105,5] labels:#(\"selected layers\", \"all layers\")\n"
+			
+			for i=2 to lb.nc.NC_flags.count do
+			(	
+				rolloutDef = rolloutDef + "checkbox chkFlag" + ((i-1) as string) + " \"" + (lb.nc.NC_flags[i]) + ": " + (lb.nc.NC_flagsDesc[i]) + "\" pos:[5," + ((35 + 20*(i-2)) as string) + "] width:400 height:15 tooltip:\"" + (lb.nc.NC_flagsDesc[i]) + "\"\n"
+			)
+			
+			rolloutDef = rolloutDef + "button btnOk \"OK\" pos:[5," + ((45 + 20*(lb.nc.NC_flags.count-1)) as string) + "] width:50 height:20\n"
+			
+			rolloutDef = rolloutDef + "\n"
+			rolloutDef = rolloutDef + "on btnOk pressed do (\n"
+			rolloutDef = rolloutDef + "		flags = #()"
+			
+			for i=2 to lb.nc.NC_flags.count do
+			(
+				rolloutDef = rolloutDef + "	if chkFlag" + ((i-1) as string) + ".checked then\n"
+				rolloutDef = rolloutDef + "	append flags \"" + (lb.nc.NC_flags[i]) + "\"\n"
+			)
+			
+			rolloutDef = rolloutDef + "		sort flags\n"
+			rolloutDef = rolloutDef + "		rollMainDef.selectPiecesByFlag flags flagsMode:(if rdoFlagsMode.state == 1 then #and else #or) allLayers:(if rdoLayersMode.state == 1 then false else true)\n"
+			rolloutDef = rolloutDef + "		destroydialog rollAssetManagerFlags\n"
+			rolloutDef = rolloutDef + ")\n"
+			rolloutDef = rolloutDef + ")\n"
+			
+			execute rolloutDef
+			
+			try
+				createDialog rollAssetManagerFlags lockWidth:true style:#(#style_border,#style_resizing,#style_toolwindow,#style_sysmenu) modal:true			
+			catch()
+		)
+
+		----------------------------------------------------------------------------------
+		--@fn: undefined | updateFromAssetList | funcion de actualizacion llamada desde ASSETLIST
+		--@gets: (opt)boolean | sceneAstsUpdated | **No** Se usa en la función, obviar.
+		--@gets: (opt)boolean | listedAstsUpdated | **No** Se usa en la función, obviar.
+		--@gets: (opt)boolean | selAstsUpdated | Si vale **TRUE** se recarga también los iconos de los assets del dataGridView. \\ Por defecto false.
+		----------------------------------------------------------------------------------			
+		fn updateFromAssetList sceneAstsUpdated:false listedAstsUpdated:false selAstsUpdated:false =
+		(
+			if lb.assetList != undefined and lb.assetList.isOpen() then
+			(
+				
+				--actualiza el estado de los filtros de asset
+				ckb_CHRs.checked = lb.assetList.rollMain.ckb_CHRs.checked
+				ckb_PRPs.checked = lb.assetList.rollMain.ckb_PRPs.checked
+				ckb_SPRs.checked = lb.assetList.rollMain.ckb_SPRs.checked
+				ckb_SETs.checked = lb.assetList.rollMain.ckb_SETs.checked
+				ckb_FXs.checked = lb.assetList.rollMain.ckb_FXs.checked
+				ckb_LITs.checked = lb.assetList.rollMain.ckb_LITs.checked
+				
+				if selAstsUpdated then
+				(
+					fillIconsDG()
+					refreshControls()
+				)
+			)				
+			else
+			(
+				ckbAssetList.checked = false
+				updateToolbarButtons()
+			)--if rollAssetList.opened
+		)
+
+		------------------------------------------------
+		--@fn: undefined | updateDepententRollouts | actualiza los rollouts dependientes de este (otras herramientas)
+		--@gets: (opt)boolean | sceneAstsUpdated | **TRUE** indica que la información del los scene assets se encuentra actualizada. \\ **FALSE** fuerza la actualización de la información. \\ Por defecto false
+		--@gets: (opt)boolean | listedAstsUpdated | Si vale **TRUE** indica que la información del los assets en lista se encuentra actualizada. \\ **FALSE** fuerza la actualización de la información. \\ Por defecto false
+		--@gets: (opt)boolean | selAstsUpdated | Si vale **TRUE** indica que la información de la array selAssets se encuentra actualizada. \\ **FALSE** fuerza la actualización de la información. \\ Por defecto false
+		------------------------------------------------	
+		fn updateDepententRollouts sceneAstsUpdated:false listedAstsUpdated:false selAstsUpdated:false =
+		(
+			for roll in affectedRollouts where roll.open do
+				roll.updateFromAssetManager sceneAstsUpdated:sceneAstsUpdated listedAstsUpdated:listedAstsUpdated selAstsUpdated:selAstsUpdated
+		)
+
+		-----------------------------------------------------------------------------
+		--@fn: undefined | addAdvancedControls | añade el subrollout advanzed del interfaz
+		-----------------------------------------------------------------------------										
+		fn addAdvancedControls = 
+		(
+			AddSubRollout subRollAdvanced parent.rollAdvanced rolledUp:false 
+			parent.rollAdvanced.resize [parent.rollMain.width, parent.rollMain.height]
+		)
+
+		------------------------------------------------
+		--@fn: undefined | initUI | Inicializa los controles del UI.
+		------------------------------------------------
+		fn initUI =
+		(	
+			tbTabs.paintstylename = "PropertyView"
+			tbTabs.borderStyle = (dotnetclass "DevExpress.XtraEditors.Controls.BorderStyles").noBorder
+			tbTabs.TabPageWidth = 100			
+			
+			tbTabs.Appearance.BackColor = (dotnetclass "system.drawing.color").fromArgb 68 68 68
+			tbTabs.Appearance.BackColor2 = (dotnetclass "system.drawing.color").fromArgb 68 68 68
+			tbTabs.Appearance.BorderColor = (dotnetclass "system.drawing.color").fromArgb 100 100 100
+
+			_imageList = dotnetObject "DevExpress.Utils.ImageCollection"
+			_tabIconFiles = getFiles ((lb.config.getToolsIconsPath()) + "assetManager\\*.png")
+			_imageDraw = dotnetClass "System.Drawing.Image"
+
+			for icon in _tabIconFiles do
+			(
+				_putImage = _imageDraw.FromFile icon
+				_imageList.addImage _putImage
+			)
+
+			tbTabs.Images = _imageList
+
+
+
+			--LEER IMAGENES I METERLAS
+		)
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			_width = (lb.xml.getAttribute parent.cfgFile ("rollMain/size") "width") as integer
+			_height = (lb.xml.getAttribute parent.cfgFile ("rollMain/size") "height") as integer
+				
+			--posicion
+			_posX = (lb.xml.getAttribute parent.cfgFile ("rollMain/pos") "x") as integer
+			_posY = (lb.xml.getAttribute parent.cfgFile ("rollMain/pos") "y") as integer
+
+			lb.xml.setAttribute parent.cfgFile ("rollMain/options") "buttonCHRstate" (ckb_CHRs.checked as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/options") "buttonPRPstate" (ckb_PRPs.checked as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/options") "buttonSETstate" (ckb_SETs.checked as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/options") "buttonSPRstate" (ckb_SPRs.checked as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/options") "buttonFXstate" (ckb_FXs.checked as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/options") "buttonLITstate" (ckb_LITs.checked as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/options") "buttonPRPstate" (ckb_PRPs.checked as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/options") "buttonSETstate" (ckb_SETs.checked as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/options") "buttonSPRstate" (ckb_SPRs.checked as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/options") "buttonFXstate" (ckb_FXs.checked as string)
+			
+			lb.xml.setAttribute parent.cfgFile ("rollMain/options") "subRollLayersOpen" (showLayers as string)
+				
+			--establece minimos
+			if _width < minRollWidth then _width = minRollWidth
+			if _height < minRollHeight then _height = minRollHeight
+			if _posX < 0 then _posX = 0
+			if _posY < 0 then _posY = 0
+				
+			--aplica los valores
+			rollMainDef.width = _width
+			rollMainDef.height = _height
+			setDialogPos rollMainDef [_posX,_posY]
+
+			--aplica el tab seleccionado
+			parent.selectedTabIndex = (lb.xml.getAttribute parent.cfgFile "rollMain/options" "selectedTabIndex") as integer
+			if parent.selectedTabIndex == 0 then parent.selectedTabIndex = 1
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--almacena posicion
+			lb.xml.setAttribute parent.cfgFile ("rollMain/pos") "x" (((getDialogPos rollMainDef).x) as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/pos") "y" (((getDialogPos rollMainDef).y) as string)
+			
+			--almacena tamaño
+			lb.xml.setAttribute parent.cfgFile ("rollMain/size") "width" (rollMainDef.width as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/size") "height" (rollMainDef.height as string)
+
+			--almacena las opciones de UI
+			lb.xml.setAttribute parent.cfgFile ("rollMain/options") "selectedTabIndex" (parent.selectedTabIndex as string)
+
+			lb.xml.setAttribute parent.cfgFile ("rollMain/options") "buttonCHRstate" (ckb_CHRs.checked as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/options") "buttonPRPstate" (ckb_PRPs.checked as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/options") "buttonSETstate" (ckb_SETs.checked as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/options") "buttonSPRstate" (ckb_SPRs.checked as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/options") "buttonFXstate" (ckb_FXs.checked as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/options") "buttonLITstate" (ckb_LITs.checked as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/options") "buttonPRPstate" (ckb_PRPs.checked as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/options") "buttonSETstate" (ckb_SETs.checked as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/options") "buttonSPRstate" (ckb_SPRs.checked as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/options") "buttonFXstate" (ckb_FXs.checked as string)
+
+			lb.xml.setAttribute parent.cfgFile ("rollMain/options") "subRollLayersOpen" (showLayers as string)
+		)
+
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks de este rollout.
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+			_id = ((parent.className + "_" + (substituteString parent.rollMain.name "Def" "")) as name)
+
+			callbacks.addscript #filePostOpenProcess 	"lb.assetManager.rollMain.resetSceneAssets()" id:_id
+			callbacks.addscript #filePostMerge 			"lb.assetManager.rollMain.resetSceneAssets()" id:_id
+			callbacks.addscript #systemPostReset 		"lb.assetManager.rollMain.resetSceneAssets()" id:_id
+			callbacks.addscript #layerCreated 			"lb.assetManager.rollMain.resetSceneAssets()" id:_id
+			callbacks.addscript #layerDeleted 			"lb.assetManager.rollMain.resetSceneAssets()" id:_id
+			
+			callbacks.addscript #nodeFreeze				"lb.assetManager.rollMain.updateLayerControls()" id:_id
+			callbacks.addscript #nodeUnfreeze 			"lb.assetManager.rollMain.updateLayerControls()" id:_id
+			callbacks.addscript #nodeHide	 			"lb.assetManager.rollMain.updateLayerControls()" id:_id
+			callbacks.addscript #nodeUnhide 			"lb.assetManager.rollMain.updateLayerControls()" id:_id
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Elimina los callbacks de este rollout.
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+			_id = ((parent.className + "_" + (substituteString parent.rollMain.name "Def" "")) as name)
+			callbacks.removescripts id:_id
+		)
+
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si el tamaño es menor que el minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollMainDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollMainDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento de tamaño
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				--zona de subRollouts
+				--subRollContainer.height = 574 + _increment.y				
+			)--if
+			------------------------------------------------------------------------------
+
+			------------------------------------------------------------------------------
+			--redimension en horizonal
+			if _increment.x != 0 then --si hay incremento
+			(				
+				tbTabs.width = 350 + _increment.x
+				if tbTabs.tabPages.count != 0 then tbTabs.TabPageWidth = (minRollWidth + _increment.x)/(tbTabs.tabPages.count) - 12
+				subRollContainer.width = size.x
+
+				parent.addTabRollouts()
+			)--if
+			------------------------------------------------------------------------------						
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+
+		------------------------------------------------------------------------------						
+		--@event: tick | Evento que se lanza al pasar una una unidad de tiempo del timer.
+		--@control: timer | tmClock | Actualiza la lista de assets y los controles del UI
+		------------------------------------------------------------------------------						
+		on tmClock tick do
+		(
+			if objects.count != numObjects do
+			(
+				
+				if lb.asset.sceneAssets == undefined then
+				(
+					lb.asset.sceneAssets = lb.asset.getSceneAssets()
+					lb.asset.selAssets = #()
+				)
+				
+				selAssetsFullNames = #()
+				for s in lb.asset.selAssets do
+					append selAssetsFullNames lb.asset.sceneAssets[s].fullname
+				
+				rollMainDef.resetSceneAssets()
+				
+				lb.asset.selAssets = #()
+				for i=1 to lb.asset.sceneAssets.count do
+					for s in selAssetsFullNames do
+						if lb.asset.sceneAssets[i].fullname == s then
+							append lb.asset.selAssets i
+				rollMainDef.refreshControls()
+					
+				numObjects = objects.count
+			)
+		)
+
+		------------------------------------------------
+		--EVENTS
+		------------------------------------------------
+
+		------------------------------------------------------------------------------						
+		--@event: ValueChanged | Evento que se lanza al realizar un cambio en el valor de posición del scroll (horizontal).
+		--@control: DataGridView | dgAssetIconsHscroll | actualiza el listado en funcion del valor del scroll
+		------------------------------------------------------------------------------		
+		on dgAssetIconsHscroll ValueChanged e do
+		(
+			newVal = (dgAssetIconsHscroll.value * 100.0)/(100 - dgAssetIconsHscroll.LargeChange)
+			newVal = ((dgAssetIcons.columns.count * 25) - (200))/100.0*newVal
+			if newVal >= 0 then dgAssetIcons.HorizontalScrollingOffset = newVal
+		)
+		
+		------------------------------------------------------------------------------						
+		--@event: MouseUp | Evento que se lanza al dejar de pulsar un botón sobre un icono del DataGrid.
+		--@control: DotNet Icon | dgAssetIcons | actualiza la seleccion de assets
+		------------------------------------------------------------------------------			
+		on dgAssetIcons MouseUp e do
+		(
+			lb.asset.selAssets = #()
+			for i=1 to dgAssetIcons.columns.count where (dgAssetIcons.item (i-1) 0).selected do
+				append lb.asset.selAssets i
+			
+			--Actgualizaremos la casilla de enable xrefs con el valor de enable o disable de lo que tenga el primer asset seleccionado.
+			_xrefs = lb.xref.getXrefSceneRootRecords()
+
+			_stop = false
+			for _xref in _xrefs where (not _stop) do 
+			(
+				_objects = #()
+				_xref.getItems #(#XRefObjectType) &_objects
+				for _object in _objects do 
+				(
+					_astName = (FilterString (((lb.assetManager.getSelectedAssets())[1]).fullname) "{")[1]
+					if matchpattern _object.objectName pattern:(_astName+"*") then 
+					(
+						chkEnableXrefs.checked = _xref.enabled
+						_stop = true
+					)
+				)
+			)
+
+			
+			refreshControls()
+		)
+
+		------------------------------------------------------------------------------						
+		--@event: CellMouseDoubleClick | Evento que se lanza al hacer doble click sobre un elemento del DataGridView.
+		--@control: DotNet Icon | dgAssetIcons | selecciona todas las piezas del asset sobre el que se ha hecho doble click.
+		------------------------------------------------------------------------------				
+		on dgAssetIcons CellMouseDoubleClick e do
+		(
+			if not keyboard.controlPressed do clearSelection() --primero limpiamos la seleccion si no estamos pulsando ctrl
+			
+			for index in lb.asset.selAssets do --recorre los assets seleccionados para seleccionar sus piezas
+			(
+				depGroup = #(lb.asset.listedAssets[index])
+					
+				if chkaffectDependentAssets.checked and (not lb.asset.listedAssets[index].isDependent) then
+					depGroup = (lb.asset.getDependencyGroup lb.asset.listedAssets[index] lb.asset.listedAssets)
+				
+				nodesToSelect = #()
+				for a in depGroup do nodesToSelect += a.nodes --selectMore a.nodes
+					
+				selectMore nodesToSelect
+			)
+		)
+
+		------------------------------------------------------------------------------						
+		--@event: changed | Evento que se lanza al cambiar el estado del checkbutton.
+		--@control: checkButton | ckb_CHRs | Actualiza el UI en función del estado del checkbutton.
+		------------------------------------------------------------------------------		
+		on ckb_CHRs changed val do
+		(
+			resetSceneAssets()
+			updateDepententRollouts listedAstsUpdated:true selAstsUpdated:true
+		)
+		
+		------------------------------------------------------------------------------						
+		--@event: changed | Evento que se lanza al cambiar el estado del checkbutton.
+		--@control: checkButton | ckb_PRPs | Actualiza el UI en función del estado del checkbutton.
+		------------------------------------------------------------------------------
+		on ckb_PRPs changed val do
+		(
+			resetSceneAssets()
+			updateDepententRollouts listedAstsUpdated:true selAstsUpdated:true
+		)
+		
+		------------------------------------------------------------------------------						
+		--@event: changed | Evento que se lanza al cambiar el estado del checkbutton.
+		--@control: checkButton | ckb_SETs | Actualiza el UI en función del estado del checkbutton.
+		------------------------------------------------------------------------------
+		on ckb_SETs changed val do
+		(
+			resetSceneAssets()
+			updateDepententRollouts listedAstsUpdated:true selAstsUpdated:true
+		)
+		
+		------------------------------------------------------------------------------						
+		--@event: changed | Evento que se lanza al cambiar el estado del checkbutton.
+		--@control: checkButton | ckb_SPRs | Actualiza el UI en función del estado del checkbutton.
+		------------------------------------------------------------------------------
+		on ckb_SPRs changed val do
+		(
+			resetSceneAssets()
+			updateDepententRollouts listedAstsUpdated:true selAstsUpdated:true
+		)
+		
+		------------------------------------------------------------------------------						
+		--@event: changed | Evento que se lanza al cambiar el estado del checkbutton.
+		--@control: checkButton | ckb_FXs | Actualiza el UI en función del estado del checkbutton.
+		------------------------------------------------------------------------------
+		on ckb_FXs changed val do
+		(
+			resetSceneAssets()
+			updateDepententRollouts listedAstsUpdated:true selAstsUpdated:true
+		)
+		
+		------------------------------------------------------------------------------						
+		--@event: changed | Evento que se lanza al cambiar el estado del checkbutton.
+		--@control: checkButton | ckb_LITs | Actualiza el UI en función del estado del checkbutton.
+		------------------------------------------------------------------------------
+		on ckb_LITs changed val do
+		(
+			resetSceneAssets()
+			updateDepententRollouts listedAstsUpdated:true selAstsUpdated:true
+		)
+
+
+		------------------------------------------------------------------------------						
+		--@event: pressed | Evento que se lanza al pulsar el botón.
+		--@control: button | btnAddAsset | Se lanza la herramienta assetBrowser
+		------------------------------------------------------------------------------
+		on btnAddAsset pressed do
+		(
+			if keyboard.controlPressed do lb.assetBrowser.run()
+		)			
+
+		------------------------------------------------------------------------------						
+		--@event: pressed | Evento que se lanza al pulsar el botón.
+		--@control: button | btnDeleteAsset | Borra los assets seleccionados en el DataGridView.
+		------------------------------------------------------------------------------
+		on btnDeleteAsset pressed do
+		(
+			if lb.asset.selAssets.count != 0 then
+			(
+				assetsToDelete = #()
+				
+				assetsToDelete = parent.getSelectedAssets()
+				deleteMessage = ""
+				
+				if chkaffectAllAssets.checked then
+					deleteMessage = "Delete ALL scene assets?"
+				else if chkaffectDependentAssets.checked then
+					deleteMessage = "Delete SELECTED and DEPENDENT assets?"
+				else
+					deleteMessage = "Delete SELECTED assets?"
+				
+				if queryBox deleteMessage then
+				(			
+					--pasa los assets a borrar al modo Puppet para evitar fallos de dependencias.
+					--asi no falla porque las conexiones y modificadores estan desactivados
+					for ast in assetsToDelete do
+						lb.asset.setAssetPuppetMode ast
+					
+					setWaitCursor()
+					
+					undo "Delete Assets" on
+						for ast in assetsToDelete do
+							lb.asset.deleteAsset ast includeDependents:false
+					
+					resetSceneAssets()
+						
+					setArrowCursor()
+				)
+			)
+		)
+		
+		------------------------------------------------------------------------------						
+		--@event: mouseDown | Evento que se lanza al presionar con el mouse.
+		--@control: mouse | btnShowHideLayers | Muestra/Oculta capas en el visor.
+		------------------------------------------------------------------------------
+		on btnShowHideLayers mouseDown events do
+		(
+			showLayers = not ShowLayers
+			btnShowHideLayers.text = if showLayers then "- Advanced" else "+ Advanced"
+			rollMainDef.height += if showLayers then layersHeight else (-layersHeight)
+			autoAdjustFloaterHeight()
+		)
+
+		------------------------------------------------------------------------------						
+		--@event: changed | Evento que se lanza al cambiar el estado del checkbutton
+		--@control: checkbutton | ckbAssetList | Abre/Cierra la tool del assetList.
+		------------------------------------------------------------------------------
+		on ckbAssetList changed val do
+		(
+			if val then
+			(
+				lb.assetList.run()
+			)
+			else
+			(
+				lb.assetList.close()
+			)
+		)
+		
+		------------------------------------------------------------------------------						
+		--@event: pressed | Evento que se lanza al presionar el botón.
+		--@control: button | btnAssetsFromNodes | Obtiene los assets de los nodos seleccionados en escena.
+		------------------------------------------------------------------------------
+		on btnAssetsFromNodes pressed do
+		(
+			sceneSelectedAssets = lb.asset.getAssetsFromNodes (getCurrentSelection()) --obtine los assets seleccionados en la escena
+				
+			if sceneSelectedAssets.count != 0 then --si ha obtenido algun asset seleccionado en la escena
+			(
+				lb.asset.selAssets = #()
+				
+				for ast in sceneSelectedAssets do
+				(
+					depGroup = #(ast)
+					
+					if chkaffectDependentAssets.checked then
+						depGroup = (lb.asset.getDependencyGroup ast lb.asset.sceneAssets)
+					
+					for a in depGroup do
+						for i=1 to lb.asset.listedAssets.count do
+							if a.fullname == lb.asset.listedAssets[i].fullname then
+								appendIfUnique lb.asset.selAssets i
+				)
+				
+				refreshControls()
+			)--if
+		)
+
+		------------------------------------------------------------------------------						
+		--@event: pressed | Evento que se lanza al presionar el botón.
+		--@control: button | btnUnhideAll | Desoculta todos los assets
+		------------------------------------------------------------------------------
+		on btnUnhideAll pressed do 
+		(
+			--Activamos la pestaña de crear para que vaya más fluido
+			max create mode
+			
+			with undo off
+				for ast in lb.asset.listedAssets do
+					if lb.asset.getAssetvismode ast == "" then
+						lb.asset.resetAsset ast
+			
+			lb.assetManager.rollAdvanced.fillLayerControls()
+		)
+		
+		------------------------------------------------------------------------------						
+		--@event: pressed | Evento que se lanza al presionar el botón.
+		--@control: button | btnShow | Muestra los assets seleccionados.
+		------------------------------------------------------------------------------
+		on btnShow pressed do
+		(
+			--Activamos la pestaña de crear para que vaya más fluido
+			max create mode
+			
+			assetsToChangeVis = parent.getSelectedAssets()
+			
+			with undo off
+			(
+				for a in assetsToChangeVis do
+					if lb.asset.getAssetvismode a == "" then
+						lb.asset.resetAsset a
+			)
+			
+			lb.assetManager.rollAdvanced.fillLayerControls()
+		)
+		
+		------------------------------------------------------------------------------						
+		--@event: pressed | Evento que se lanza al presionar el botón.
+		--@control: button | btnHide | Oculta los assets seleccionados.
+		------------------------------------------------------------------------------
+		on btnHide pressed do
+		(
+			--Activamos la pestaña de crear para que vaya más fluido
+			max create mode
+			
+			assetsToChangeVis = parent.getSelectedAssets()
+			
+			with undo off
+			(
+				for a in assetsToChangeVis do
+					lb.asset.hideAsset a
+			)
+			
+			lb.assetManager.rollAdvanced.fillLayerControls()
+		)
+		
+		------------------------------------------------------------------------------						
+		--@event: pressed | Evento que se lanza al presionar el botón.
+		--@control: button | btnSolo | Isola los assets seleccionados.
+		------------------------------------------------------------------------------
+		on btnSolo pressed do
+		(
+			--Activamos la pestaña de crear para que vaya más fluido
+			max create mode
+			
+			assetsToChangeVis = parent.getSelectedAssets()
+			
+			with undo off
+			(
+				for a in assetsToChangeVis do
+					if (lb.asset.getAssetvismode a) == "" then
+						lb.asset.resetAsset a	
+				
+				if assetsToChangeVis.count != 0 then
+					lb.asset.isolateAssets assetsToChangeVis lb.asset.sceneAssets
+			)
+				
+			lb.assetManager.rollAdvanced.fillLayerControls()
+		)
+
+		------------------------------------------------------------------------------						
+		--@event: pressed | Evento que se lanza al presionar el botón.
+		--@control: button | btnVMpuppet | actualiza el modo de visualizacion del asset seleccionado a puppet
+		------------------------------------------------------------------------------		
+		on btnVMpuppet pressed do
+		(
+			-- 			_bkpCP = getCommandPanelTaskMode()
+			
+			--Activamos la pestaña de crear para que vaya más fluido
+			max create mode
+			
+			assetsToChangeVis = parent.getSelectedAssets()
+			
+			with undo off
+				for a in assetsToChangeVis do
+				(
+					lb.asset.setAssetPuppetMode a disableSecPuppets:(not chkDisSecPuppets.checked)
+			-- 					showExtraControls a #all _hide:(not chkShowExtraControls.checked)
+			-- 					showExtraControls a #connect _hide:(not chkShowExtraControls.checked)
+				)
+				
+			setCommandPanelTaskMode #modify
+
+			completeRedraw()
+				
+			lb.assetManager.rollAdvanced.fillLayerControls()
+				
+			-- 			chkShowExtraControls.enabled = true --false
+			-- 			chkShowExtraControls.checked = false
+		)
+		
+		------------------------------------------------------------------------------						
+		--@event: pressed | Evento que se lanza al presionar el botón.
+		--@control: button | btnVMpuppetHead | actualiza el modo de visualizacion del asset seleccionado a puppet + head
+		------------------------------------------------------------------------------			
+		on btnVMpuppetHead pressed do
+		(
+			-- 			_bkpCP = getCommandPanelTaskMode()
+			
+			--Activamos la pestaña de crear para que vaya más fluido
+			max create mode
+			
+			assetsToChangeVis = parent.getSelectedAssets()
+			
+			with undo off
+				for a in assetsToChangeVis do
+				(
+					lb.asset.setAssetPuppetHeadMode a disableFFDs:(not chkaffectFFDs.checked) disableHair:(not chkaffectHair.checked) disableSecPuppets:(not chkDisSecPuppets.checked)
+					lb.asset.showExtraControls a #facial _hide:(not chkShowExtraControls.checked)
+					lb.asset.showExtraControls a #connect _hide:(not chkShowExtraControls.checked)
+				)
+			
+			setCommandPanelTaskMode #modify
+
+			completeRedraw()
+			
+			lb.assetManager.rollAdvanced.fillLayerControls()
+				
+			-- 			chkShowExtraControls.enabled = true
+			-- 			chkShowExtraControls.checked = true
+		)
+		
+		------------------------------------------------------------------------------						
+		--@event: pressed | Evento que se lanza al presionar el botón.
+		--@control: button | btnVMhead | actualiza el modo de visualizacion del asset seleccionado a head
+		------------------------------------------------------------------------------			
+		on btnVMhead pressed do
+		(
+			-- 			_bkpCP = getCommandPanelTaskMode()
+			
+			--Activamos la pestaña de crear para que vaya más fluido
+			max create mode
+			
+			assetsToChangeVis = parent.getSelectedAssets()
+			
+			with undo off
+				for a in assetsToChangeVis do
+				(
+					lb.asset.setAssetHeadMode a disableFFDs:(not chkaffectFFDs.checked) disableHair:(not chkaffectHair.checked)
+					lb.asset.showExtraControls a #facial _hide:(not chkShowExtraControls.checked)
+				)
+			
+			setCommandPanelTaskMode #modify
+
+			completeRedraw()
+				
+			lb.assetManager.rollAdvanced.fillLayerControls()
+				
+			-- 			chkShowExtraControls.enabled = true
+			-- 			chkShowExtraControls.checked = true
+		)
+
+		------------------------------------------------------------------------------						
+		--@event: pressed | Evento que se lanza al presionar el botón.
+		--@control: button | btnVMskin | actualiza el modo de visualizacion del asset seleccionado a skin
+		------------------------------------------------------------------------------			
+		on btnVMskin pressed do
+		(
+			-- 			_bkpCP = getCommandPanelTaskMode()
+
+			--Activamos la pestaña de crear para que vaya más fluido
+			max create mode
+			
+			assetsToChangeVis = parent.getSelectedAssets()
+			
+			with undo off
+				for a in assetsToChangeVis do
+				(
+					lb.asset.setAssetSkinMode a
+					lb.asset.showExtraControls a #all _hide:(not chkShowExtraControls.checked)
+				)
+			
+			setCommandPanelTaskMode #modify
+			
+			completeRedraw()
+				
+			lb.assetManager.rollAdvanced.fillLayerControls()
+				
+			-- 			chkShowExtraControls.enabled = true --false
+			-- 			chkShowExtraControls.checked = false
+		)
+		
+		------------------------------------------------------------------------------						
+		--@event: pressed | Evento que se lanza al presionar el botón.
+		--@control: button | btnVMskinBox | actualiza el modo de visualizacion del asset seleccionado a skin + box
+		------------------------------------------------------------------------------				
+		on btnVMskinBox pressed do
+		(
+			-- 			_bkpCP = getCommandPanelTaskMode()
+			
+			--Activamos la pestaña de crear para que vaya más fluido
+			max create mode
+			suspendEditing()
+			
+			assetsToChangeVis = parent.getSelectedAssets()
+			
+			with undo off
+				for a in assetsToChangeVis do
+				(
+					lb.asset.setAssetSkinBoxMode a disableSecPuppets:(not chkDisSecPuppets.checked)
+					lb.asset.showExtraControls a #anim _hide:(not chkShowExtraControls.checked)
+					lb.asset.showExtraControls a #connect _hide:(not chkShowExtraControls.checked)
+				)
+			
+			setCommandPanelTaskMode #modify
+			
+			resumeEditing()
+			completeRedraw()
+			
+			lb.assetManager.rollAdvanced.fillLayerControls()
+			updateRollMainControls()
+				
+			-- 			chkShowExtraControls.enabled = true
+			-- 			chkShowExtraControls.checked = true
+		)	
+
+		------------------------------------------------------------------------------						
+		--@event: pressed | Evento que se lanza al presionar el botón.
+		--@control: button | btnConnection | Conecta / Desconecta el rig de skin del personaje.
+		------------------------------------------------------------------------------				
+ 		on btnConnection pressed do
+		(
+			-- 			_bkpCP = getCommandPanelTaskMode()
+			
+			--Activamos la pestaña de crear para que vaya más fluido
+			max create mode
+			suspendEditing()
+			
+			assetsToChangeVis = parent.getSelectedAssets()
+			
+			with undo off
+				for a in assetsToChangeVis do
+					lb.asset.setAssetSkinConnectionMode a
+			
+			setCommandPanelTaskMode #modify
+
+			resumeEditing()
+			completeRedraw()
+			
+			lb.assetManager.rollAdvanced.fillLayerControls()
+		)
+
+		------------------------------------------------------------------------------						
+		--@event: changed | Evento que se lanza al cambiar el estado del checkButton
+		--@control: checkButton | chkaffectAllAssets | Botón NO usado en el codigo. actualizaba la seleccion de assets
+		------------------------------------------------------------------------------			
+		on chkaffectAllAssets changed state do
+		(
+			
+			-- 			selAssets = #()
+			-- 			for i=1 to lb.asset.listedAssets.count do
+			-- 				append selAssets (i + _assetOffset)
+			-- 			
+			-- 			refreshControls()
+			-- 			lb.assetManager.rollAdvanced.fillLayerControls()
+		)
+
+		------------------------------------------------------------------------------						
+		--@event: changed | Evento que se lanza al cambiar el estado del checkButton
+		--@control: checkButton | chkaffectDependentAssets | Botón NO usado en el codigo. actualizaba la seleccion de assets
+		------------------------------------------------------------------------------			
+		on chkaffectDependentAssets changed state do
+		(
+			-- 			lb.assetManager.rollAdvanced.fillLayerControls()
+		)
+
+		------------------------------------------------------------------------------						
+		--@event: changed | Evento que se lanza al cambiar el estado del checkButton
+		--@control: checkButton | chkEnableXrefs | Habilita / Desabilita las referencias de los assets seleccionados en escenea.
+		------------------------------------------------------------------------------			
+		on chkEnableXrefs changed state do 
+		(
+			_xrefs = lb.xref.getXrefSceneRootRecords()
+
+			_selAssets = lb.assetManager.getSelectedAssets()
+			for _asset in _selAssets do 
+			(
+				for _xref in _xrefs do 
+				(
+					_objects = #()
+					_xref.getItems #(#XRefObjectType) &_objects
+					for _object in _objects do 
+					(
+						_astName = (FilterString _asset.fullname "{")[1]
+						if matchpattern _object.objectName pattern:(_astName+"*") then 
+						(
+							_xref.enabled = state
+						)
+					)
+				)
+			)
+		)
+
+		------------------------------------------------------------------------------						
+		--@event: changed | Evento que se lanza al cambiar el estado del checkButton
+		--@control: checkButton | chkDisSecPuppets | oculta/muestra los puppets secundarios
+		------------------------------------------------------------------------------			
+		on chkDisSecPuppets changed state do
+		(
+			--Activamos la pestaña de crear para que vaya más fluido
+			max create mode
+			
+			assetsToChangeVis = parent.getSelectedAssets()
+			
+			with undo off
+			(
+				for a in assetsToChangeVis do
+					if not state then
+						lb.asset.hideSecPuppets a
+					else
+						lb.asset.showSecPuppets a	
+			)
+		)
+		
+		------------------------------------------------------------------------------						
+		--@event: changed | Evento que se lanza al cambiar el estado del checkButton
+		--@control: checkButton | chkShowExtraControls | Se muestran / ocultan los controles extras del facial.
+		------------------------------------------------------------------------------	
+		on chkShowExtraControls changed state do
+		(
+			/*animExtraObjs = #() 
+			
+			for a in (parent.getSelectedAssets()) do
+				join animExtraObjs (lb.asset.getAssetNodesByType a #(lb.nc.NC_classAnim, lb.nc.NC_classFacial) flags:#(lb.nc.NC_controlFlag,lb.nc.NC_extraFlag))
+					
+			animExtraObjs.isHidden = not state*/
+			
+			for a in (parent.getSelectedAssets()) do
+			(
+				_visMode = lb.asset.getAssetvismode a
+				
+				case _visMode of
+				(
+					"P":
+					(					
+						lb.asset.showExtraControls a #connect _hide:(not state)
+			-- 						lb.asset.showExtraControls a #facial _hide:(not state)
+						
+					)
+
+					"P+H": 
+					(
+						lb.asset.showExtraControls a #facial _hide:(not state)
+						lb.asset.showExtraControls a #connect _hide:(not state)
+					)
+					"H": lb.asset.showExtraControls a #facial _hide:(not state)
+					"S+B":
+					(
+						
+						lb.asset.showExtraControls a #connect _hide:(not state)
+					)
+					default: lb.asset.showExtraControls a #all _hide:(not state)
+				)--case
+			)
+		)	
+
+		------------------------------------------------------------------------------						
+		--@event: itemclicked | Evento que se lanza al pulsar un item 
+		--@control: ContextMenuStrip | rMenu | Se seleccionan los objetos del asset sobre el que clickamos.
+		------------------------------------------------------------------------------	
+		on rMenu itemclicked events do
+		(
+			item = (events.clickeditem.tostring())
+			
+			case item of
+			(
+				"Select objects":	btnSel.pressed()
+				"Select all objects in asset": btnSelAll.pressed()
+			)
+		)
+		
+		------------------------------------------------------------------------------						
+		--@event: itemclicked | Evento que se lanza al pulsar un item 
+		--@control: ContextMenuStrip | menuAssetList | Se obtiene una referencia de los assets que se estan clickando en el menu superior.
+		------------------------------------------------------------------------------
+		on menuAssetList itemclicked events do
+		(
+			item = (events.clickeditem.tostring())
+			
+			stop = false
+			cont = 1
+				
+			while not stop and cont <= lb.asset.listedAssets.count do
+			(
+				if lb.asset.listedAssets[cont].fullName == item then
+				(
+					stop = true
+					
+					--selAsset = cont + _assetOffset
+					lb.asset.selAssets = #(cont + _assetOffset)
+					refreshControls()
+				)
+				
+				cont += 1
+			)
+		)
+
+		------------------------------------------------
+		--@event: selectedPageChanged | Evento que se lanza al cambiar de tab.
+		--@control: DevExpress.XtraTab.XtraTabControl | tbTabs | Tabs.
+		------------------------------------------------
+		on tbTabs selectedPageChanged events do
+		(
+			if not opening then
+			(
+				parent.selectedTabIndex = tbTabs.selectedTabPageIndex + 1
+				parent.addTabRollouts()
+				parent.heightAdjust (tbTabs.selectedTabPageIndex + 1)
+			)--if
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollMainDef | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollMainDef resized size do
+		(
+			--SE DEJA COMENTADO PORQUE NO HACE FALTA Y ADEMAS HACE QUE SE RELLENEN DE NUEVO TODOS LOS TABS, CREANDO INCOHERENCIAS EN EL ROLLEDUP DE LOS SUBROLLOUTS
+			--resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollMainDef | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollMainDef open do
+		(
+			initUI()
+			loadSettings()
+
+			affectedRollouts = #(lb.assetList.rollMain) --rellena los rollouts relacionados
+
+			addAdvancedControls()
+
+			--Miramos la ruta del archivo y rellenamos la variable de la unidad.
+			if maxFilePath != "" then _projectUnit = (filterString maxFilePath "\\")[1] + "\\"
+			else _projectUnit = "z:\\"
+
+			opening = true --flag para que no salte el evento de cambio de tab y no pise el valor cargado del archivo .cfg
+			numObjects = objects.count
+			
+			lb.asset.selAssets = #()
+			initIconsDG()
+			initControlsVariables()
+			resetSceneAssets() --esto se ha pueto aqui porue hay veces que al abrir el asset manager no se rellena bien
+
+			--------------------------------------------------	
+			--averigua el estado en el que tiene que estar el checkbox EC			
+			_state = false
+			if lb.asset.sceneAssets.count != 0 then
+			(
+				_visMode = lb.asset.getAssetvismode lb.asset.sceneAssets[1]
+				
+				_class = lb.nc.NC_classAnim
+				
+				case _visMode of
+				(
+					"P+H": _class = lb.nc.NC_classFacial
+					"H": _class = lb.nc.NC_classFacial
+				)
+				
+				_extraControls = lb.asset.getAssetNodesByType lb.asset.sceneAssets[1] _class flags:#(lb.nc.NC_controlFlag, lb.nc.NC_extraFlag) flagsMode:#and excludeHidden:true excludeFrozen:true
+				if _extraControls.count != 0 then _state = not _extraControls[1].ishidden
+			)
+			chkShowExtraControls.checked = _state
+			--------------------------------------------------
+
+			parent.fillTabsRolloutsDefs()
+			parent.addTabs()
+			parent.heightAdjust (tbTabs.selectedTabPageIndex + 1)
+
+			createSceneEvents()
+			if parent.rollMain != undefined then resize [parent.rollMain.width, parent.rollMain.height]
+
+			opening = false --flag para que no salte el evento de cambio de tab y no pise el valor cargado del archivo .cfg
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollMainDef | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollMainDef close do
+		(				
+			removeSceneEvents()
+			saveSettings()
+
+			parent.opened = false
+			updateToolbarButtons()		
+		)	
+	)--rollMainDef
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: assetManager | Contiene la herramienta assetManager.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct tl_assetManager
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),													--@var: string | def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),										--@var: string | defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,														--@var: name | category | Categoria de la tool.
+		className = lb.getFileToolName (getThisScriptFilename() as string),		--@var: string | className | Nombre de la tool.
+		description = "Asset Manager",											--@var: string | description | Descripcion de la tool.
+		
+		cfgFile = (lb.config.getToolsIniPath()) + (lb.getFileToolName (getThisScriptFilename() as string)) + ".cfg",	--@var: string | cfgFile | Archivo de configuracion de la tool.
+			
+		opened = false,															--@var: boolean | opened | Indica si la herramienta está abierta.
+		
+		minWidth = 225,															--@var: integer | minWidth | Ancho mínimo de la herramienta.
+		minHeight = 600,														--@var: integer | minHeight | Alto mínimo de la herramienta.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		tabForeColor = (dotnetclass "system.drawing.color").fromArgb 189 189 189, 		--@var: dotnet Class | tabForeColor | Definición del color del primer plano, o plano de control
+		tabBorderColor = (dotnetclass "system.drawing.color").fromArgb 30 30 30, 		--@var: dotnet Class | tabBorderColor | Definición del color de los bordes.
+		tabBackColor = (dotnetclass "system.drawing.color").fromArgb 60 60 60, 			--@var: dotnet Class | tabBackColor | Definición del color de fondo.
+		tabBackColorActive = (dotnetclass "system.drawing.color").fromArgb 90 90 90, 	--@var: dotnet Class | tabBackColorActive | Definición del color de la columna activa.
+		tabBackColor2 = (dotnetclass "system.drawing.color").fromArgb 55 55 55, 		--@var: dotnet Class | tabBackColor2 | Definición de un color secundario para el color de fondo.
+		tabBackColorActive2 = (dotnetclass "system.drawing.color").fromArgb 60 60 60,	--@var: dotnet Class | tabBackColorActive2 | Definición de un color secundario para el color de la columna activa.	
+
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--ROLLOUTS
+		------------------------------------------------------------------------------------------------
+
+		rollCopies = rollCopiesDef, 										--@var: rollout | rollCopies | Contiene el rollout Asset copies.
+		rollAdvanced = rollAdvancedDef, 									--@var: rollout | rollAdvanced | Contiene el rollout advanced.
+		rollCloth = rollClothDef, 											--@var: rollout | rollCloth | Contiene el rollout Cloth
+		rollClothOverride = rollClothOverrideDef, 							--@var: rollout | rollClothOverride | Contiene el rollout Cloth Override, en cloth.
+		rollpreCamFrames = rollpreCamFramesDef, 							--@var: rollout | rollpreCamFrames | Contiene el rollout Set start time, en hair.
+		rollPrepareAnim = rollPrepareAnimDef, 								--@var: rollout | rollPrepareAnim | Contiene el rollout Prepare animation, en hair.
+		rollClothGeneral = rollClothGeneralDef, 							--@var: rollout | rollClothGeneral | Contiene el rollout cloth import, en cloth.
+		rollClothImportExport = rollClothImportExportDef, 					--@var: rollout | rollout | rollClothImportExport | Contiene el rollout Cloth visualization, en cloth.
+		rollMain = rollMainDef,												--@var: rollout | rollMain | Main tool rollout.
+		rollFX = rollFXDef, 												--@var: rollout | rollFX | Contiene el rollout FX.
+		rollLoadFx = rollLoadFxDef, 										--@var: rollout | rollLoadFx | Contiene el rollout Load Specific FX, en FX.
+		rollFxDetail = rollFxDetailDef, 									--@var: rollout | rollFxDetail | Contiene el rollout FX detail level, en FX.
+		rollHair = rollHairDef, 											--@var: rollout | rollHair | Contiene el rollout Hair
+		rollHairImport = rollHairImportDef, 								--@var: rollout | rollHairImport | Contiene el rollout Hair Import Anim, en Hair.
+		rollHairCacheImport = rollHairCacheImportDef, 						--@var: rollout | rollHairCacheImport | Contiene el rollout Hair Import Cache, en hair.
+		rollHairExportSim = rollHairExportSimDef, 							--@var: rollout | rollHairExportSim | Contiene el rollout Hair Export Simulation, en hair.
+		rollAnimLoopBreaker = rollAnimLoopBreakerDef, 						--@var: rollout | rollAnimLoopBreaker | Contiene el rollout total anim loop breaker, en Cloth.
+		rollMisc = rollMiscDef, 											--@var: rollout | rollMisc | Contiene el rollout Misc
+		rollCameraAssets = rollCameraAssetsDef, 							--@var: rollout | rollCameraAssets | Contiene el rollout Asset Camera Variations, en Misc.
+		rollCacheScene = rollCacheSceneDef, 								--@var: rollout | rollCacheScene | Contiene el rollout Cache Scene, en cache.
+		rollCacheExtras = rollCacheExtrasDef, 								--@var: rollout | rollCacheExtras | Contiene el rollout Cache Manager, en cache.
+		rollCacheReloadAsset = rollCacheReloadAssetDef, 					--@var: rollout | rollCacheReloadAsset | Contiene el rollout Cache Fixes, en cache.
+		rollAnimation = rollAnimationDef, 									--@var: rollout | rollAnimation | Contiene el rollout Hair
+		rollSecondaryAnimation = rollSecondaryAnimationDef, 				--@var: rollout | rollSecondaryAnimation | Contiene el rollout Animation.
+		rollCopiesVariations = rollCopiesVariationsDef, 					--@var: rollout | rollCopiesVariations | Contiene el copy Variations.
+
+		subRolloutsContainer = this.rollMain.subRollContainer, 				--@var: array{rollout} | subRolloutsContainer | contenedor de subrollouts secundarios, organizados por categorias. *Animación \\ *Cache \\ *Asset Copies \\ *Cloth \\ *FX \\ *Hair \\ *Misc.
+		subRollAdvancedContainer = this.rollMain.subRollAdvanced, 			--@var: array{rollout} | subRollAdvancedContainer | contenedor del subrollout Advanced.
+
+		--estos arrays se rellenan en la funcion fillTabsRolloutsDefs, que se llama al abrir la herramienta.
+		--esto es solo la defincion de las variables y una ejemplo de estructura que luego se sobrescribe.
+		tabNames = #("", "", "", "", "", "", "", ""), 						--@var: array{string} | tambNames | Nombres de los tabs.
+		tabRollouts = #(#(undefined), #(undefined), #(undefined), #(undefined), #(undefined), #(undefined), #(undefined), #(undefined)), 	--@var: array{array{rollout}} | tabRollouts | Rollots de cada tab.
+		tabRolloutsRolledUp = #(#(true), #(true), #(true), #(true), #(true), #(true), #(true), #(true)), 									--@var: array{array{boolean}} | tabRolloutsRolledUp | Estado de desplegado/plegado de cada rollout de cada tab.
+
+		selectedTabIndex = 1,  												--@var: integer | selectedTabIndex | Tab seleccionado. Para usar al abrir y cerrar la herramienta
+
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		----------------------------------------------------------------------------------
+		--@fn: array{struct} | getSelectedAssets | Consulta los assets seleccionados. Tiene en cuenta las opciones All Assets y Dependents. Esta función se utiliza en los subpaneles de animación, caché y copies.
+		--@returns: array{struct} | asts | Los assets consultados. Si no hay nada seleccionado devuelve un array vacío.
+		----------------------------------------------------------------------------------		
+		fn getSelectedAssets =
+		(
+			asts = #()
+			
+			if rollMainDef.chkaffectAllAssets.checked then
+			(
+				asts = lb.asset.sceneAssets
+			)
+			else if rollMainDef.chkaffectDependentAssets.checked then
+			(
+				for i in lb.asset.selAssets do
+				(
+					depGroup = (lb.asset.getDependencyGroup lb.asset.listedAssets[i] lb.asset.sceneAssets) --sceneAssets[i] sceneAssets)
+					for a in depGroup do appendIfUnique asts a
+				)
+			)
+			else
+			(
+				asts = for i in lb.asset.selAssets collect lb.asset.listedAssets[i] --selAssets collect sceneAssets[i]
+			)
+			
+			asts			
+		),
+
+		------------------------------------------------
+		--@fn: undefined | updateTabsColor | Actualiza el color de los tabs.
+		------------------------------------------------
+		fn updateTabsColor =
+		(
+			--actualiza los tabs
+			for i=1 to this.tabNames.count do
+			(
+				--configura los colores de los tabs
+				this.rollMain.tbTabs.tabPages.item[i-1].Appearance.Header.Font = dotnetobject "system.drawing.font" (dotnetobject "System.Drawing.FontFamily" "Arial") 7
+				this.rollMain.tbTabs.tabPages.item[i-1].Appearance.Header.ForeColor = this.tabForeColor
+				this.rollMain.tbTabs.tabPages.item[i-1].Appearance.Header.BackColor = this.tabBackColor
+				this.rollMain.tbTabs.tabPages.item[i-1].Appearance.Header.BackColor2 = this.tabBackColor2
+				this.rollMain.tbTabs.tabPages.item[i-1].Appearance.Header.BorderColor = this.tabBorderColor
+				
+				this.rollMain.tbTabs.tabPages.item[i-1].Appearance.HeaderActive.Font = dotnetobject "system.drawing.font" (dotnetobject "System.Drawing.FontFamily" "Arial") 8
+				this.rollMain.tbTabs.tabPages.item[i-1].Appearance.HeaderActive.ForeColor = this.tabForeColor
+				this.rollMain.tbTabs.tabPages.item[i-1].Appearance.HeaderActive.BackColor = this.tabBackColorActive
+				this.rollMain.tbTabs.tabPages.item[i-1].Appearance.HeaderActive.BackColor2 = this.tabBackColorActive2
+				this.rollMain.tbTabs.tabPages.item[i-1].Appearance.HeaderActive.BorderColor = this.tabBorderColor
+			)--for
+		),
+
+		------------------------------------------------
+		--@fn: undefined | fillTabsRolloutsDefs | Añade los tabs y las definiciones de los rollouts a los arrays correspondientes para que la herremienta sepa donde están.
+		------------------------------------------------
+		fn fillTabsRolloutsDefs =
+		(
+			this.tabNames = #("X", "Anim", "Cache", "Copy", "Cloth", "FX", "Hair", "Misc")
+			this.tabRollouts = #(#(), #(lb.assetManager.rollAnimation,lb.assetManager.rollSecondaryAnimation), #(lb.assetManager.rollCacheScene, lb.assetManager.rollCacheExtras, lb.assetManager.rollCacheReloadAsset), #(lb.assetManager.rollCopies), #(lb.assetManager.rollClothGeneral, lb.assetManager.rollClothImportExport, lb.assetManager.rollCloth, lb.AssetManager.rollAnimLoopBreaker, lb.assetManager.rollPrepareAnim, lb.assetManager.rollClothOverride,lb.assetManager.rollpreCamFrames), #(lb.assetManager.rollFX, lb.assetManager.rollLoadFx, lb.assetManager.rollFxDetail), #(lb.assetManager.rollHair, lb.assetManager.rollHairImport, lb.assetManager.rollHairCacheImport, lb.assetManager.rollHairExportSim, lb.assetManager.rollPrepareAnim,lb.assetManager.rollpreCamFrames), #(lb.assetManager.rollMisc, lb.assetManager.rollCameraAssets))
+			this.tabRolloutsRolledUp = #(#(), #(false,false), #(false, true,false), #(false), #(false,false,true,true,true,true,true), #(false, true, true), #(false, false , false, true, true, true), #(false,false))
+		),
+
+		------------------------------------------------
+		--@fn: undefined | addTabs | Añade los tabs.
+		------------------------------------------------
+		fn addTabs =
+		(
+			--elimina los tabs actuales
+			this.rollMain.tbTabs.tabPages.clear()
+
+			--añade los tabs
+			for i=1 to this.tabNames.count do
+			(
+				this.rollMain.tbTabs.tabPages.add this.tabNames[i] --añade el tab
+				--Cojer el indice de imagen que le toca 
+				if i > 1 then this.rollMain.tbTabs.tabPages.item[i-1].ImageIndex = (i-1)
+			)
+			
+			if this.rollMain.tbTabs.tabPages.count != 0 then this.rollMain.tbTabs.TabPageWidth = (this.rollMain.width)/(this.rollMain.tbTabs.tabPages.count) - 12
+
+			--selecciona el tab que estaba seleccionado la ultima vez que se abrio el override
+			if this.rollMain.tbTabs.tabPages.count >= this.selectedTabIndex then
+				this.rollMain.tbTabs.SelectedTabPage = this.rollMain.tbTabs.tabPages.item[this.selectedTabIndex - 1]
+			
+			this.updateTabsColor() --actualiza los colores de los tabs
+			
+			this.addTabRollouts()			
+		),
+
+		------------------------------------------------
+		--@fn: undefined | removeAllTabRollouts | Elimina todos los subrollouts actuales
+		------------------------------------------------
+		fn removeAllTabRollouts =
+		(
+			--elimina los subRollouts actuales
+			while this.subRolloutsContainer.rollouts.count != 0 do RemoveSubRollout this.subRolloutsContainer this.subRolloutsContainer.rollouts[1]
+		),
+
+		------------------------------------------------
+		--@fn: undefined | addTabRollouts | Añade los rollouts del tab actual.
+		------------------------------------------------
+		fn addTabRollouts =
+		(
+			--elimina los subRollouts actuales
+			this.removeAllTabRollouts()
+
+			--añade los subRollouts
+			for i=1 to this.tabRollouts[this.selectedTabIndex].count where this.tabRollouts[this.selectedTabIndex][i] != undefined do
+			(
+				AddSubRollout this.subRolloutsContainer this.tabRollouts[this.selectedTabIndex][i] rolledUp:this.tabRolloutsRolledUp[this.selectedTabIndex][i]
+				this.tabRollouts[this.selectedTabIndex][i].resize [this.rollMain.width, this.rollMain.height]
+			)
+		),
+
+		------------------------------------------------
+		--@fn: undefined | heightAdjust | Ajusta las medidas del interfaz.
+		--@gets: integer | senderIndex | El indice de la pestaña seleccionada actualmente.
+		------------------------------------------------
+		fn heightAdjust senderIndex = 
+		(
+			_advancedIncrement = 150
+			_toolHeight = 192
+			if senderIndex == 0 then
+			(
+				if not this.rollAdvanced.open then _advancedIncrement = 0 - _advancedIncrement
+
+				this.rollMain.tbTabs.pos.y += _advancedIncrement
+				this.subRolloutsContainer.pos.y += _advancedIncrement
+				this.subRollAdvancedContainer.height += _advancedIncrement
+			)
+			
+			if this.rollAdvanced.open then _toolHeight += _advancedIncrement
+
+			_rollHeight = 0
+			_rollGap = 35
+			_subRollouts = this.rollMain.subRollContainer.rollouts 
+
+			for roll in _subRollouts do 
+			(	
+				--print roll.name
+				--print roll.open
+				
+				if roll.open then 
+				(
+					_rollHeight += roll.height + 12
+				)
+				else 
+				(
+					_rollHeight += 15 --_rollGap
+				)	
+			)
+			--print _rollHeight
+			--print "-------------"
+			--this.rollMain.subRollContainer.height = _rollHeight --+ _rollGap
+			_rollHeightTotal = _rollHeight + _toolHeight + _rollGap
+			
+			this.rollMain.subRollContainer.height = _rollHeightTotal - _toolHeight
+			this.rollMain.height = _rollHeightTotal
+		),
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: boolean | isOpen | Consulta si la herramienta está abierta o cerrada.
+		--@returns: boolean | isOpen | Devuelve **true** si la herramienta está abierta. \\ **FALSE** si está cerrada.
+		------------------------------------------------
+		fn isOpen =
+		(
+			this.opened
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | refreshInterface | Refresca el interface inicial de la herramienta
+		------------------------------------------------
+		fn refreshInterface =
+		(
+			--refresca el interface de la herramienta
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | createInterface | Crea el interface inicial de la herramienta
+		------------------------------------------------
+		fn createInterface =
+		(
+			--crea el interface, lo redimensiona y lo reposiciona
+			createDialog this.rollMain lockwidth:true lockheight:true pos:[-10000,0] style:#(#style_toolwindow, #style_titlebar, #style_sysmenu, #style_resizing)
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | destroyInterface | Destruye el interface de la herramienta.
+		------------------------------------------------
+		fn destroyInterface =
+		(
+			destroyDialog this.rollMain --cierra la herramienta.			
+		),--destroyInterface
+		
+		------------------------------------------------
+		--@fn: undefined | run | Lanza la herramienta.
+		------------------------------------------------
+		fn run =
+		(
+			this.createInterface() --crea el interface.
+			this.opened = true --indica que la herramienta está abierta
+		),--execute
+		
+		------------------------------------------------
+		--@fn: undefined | close | Cierra la herramienta.
+		------------------------------------------------
+		fn close =
+		(
+			this.destroyInterface() --destruye el interface.
+			this.opened = false --indica que la herramienta está cerrada.
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(
+			--this.rollMain.affectedRollouts = #(lb.assetList.rollMain)		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addTool this --añade la tool a la libreria principal	
+		)			
+	)--tl_assetManager
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------	
+	
+	tl_assetManager() --crea la herramienta
+)

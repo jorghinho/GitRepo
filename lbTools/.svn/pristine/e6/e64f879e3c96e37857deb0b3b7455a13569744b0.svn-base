@@ -1,0 +1,1389 @@
+--------------------------
+-- CAMBIOS HECHOS
+-------------------------
+-- Como guardamos un array de arrays para los target que puedan llevar un controlador. Si hacemos un array de tipos de conexión, pos, rot...
+
+-- Como guardamos un nombre de un objeto que no existe, y luego lo capturamos. Ej: root en la solución de spine, lo añadimos en el rootSpine, pero se va a guardar como undefined, y aunque guardemos el string,
+-- el nombre de la pieza va a cambiar porque el nombre del asset cada vez que se cree la solución es distinto.
+
+-- No podemos hacer varias conexiones distintas en un mismo objeto.
+-- Añadir alternateNodes como array de arrays?
+-- Ignorar los flags de cache para conectarse en la funcion connect
+
+--------------------------
+-- CAMBIOS PENDIENTES
+-------------------------
+
+-- Que la función CONNECT tenga un parametro opcional que sea showRollSelection, para que en el custAttribute no se tenga que llamar a la función showRollSelection y lo haga la de connect
+-- Generar copias en la seleccion del target.
+
+------------------------------------------------------------------------------------------------------------------------------------------------
+--Descripcion: libreria de dynConnect
+------------------------------------------------------------------------------------------------------------------------------------------------
+(	
+	rollout rollSelectTargetsManager "DynConnect Manager: Select Targets" width:280 height:220
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		local _selectionParentPointRoll = #()
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		--@control | controlName | Plantilla de comentario para controles
+		GroupBox grpMainTarget "Target in Scene" pos:[5,5] width:270 height:210
+		checkBox chkRenameAsset "Rename Asset" pos:[10,160] checked:true
+		button btnSelect "Select" pos:[10,190] width:80 height:20
+		button btnCancelSelection "Cancel Selection" pos:[96,190] width:94 height:20 enabled:true
+		multilistBox mltBoxItems "" pos:[10,20] width:260 height:10
+		
+		
+		------------------------------------------------------------------------------------------------
+		-- Evento para cancelar.
+		------------------------------------------------------------------------------------------------
+		on btnCancelSelection pressed do
+		(
+			destroyDialog rollSelectTargetsManager
+		)
+				
+		------------------------------------------------------------------------------------------------
+		-- Evento para seleccionar el target y que se nos conecte.
+		------------------------------------------------------------------------------------------------
+		on btnSelect pressed do
+		(
+			for obj in _selectionParentPointRoll where isValidNode obj do 
+			(
+				_objTargetName = lb.nc.convertAnyTagToPattern obj.dynConnectInfo.targetNodesNames[1]
+				--print (obj.dynConnectInfo.targetNodesNames)
+				-- Revisamos que exista
+				if _objTargetName != undefined then
+				(
+					-- Obtenemos el nombre de los targets alamacenados
+					_targetNames = lb.dynConnect.getTargetNodesLightRig obj
+					for i=1 to _targetNames.count where _targetNames[i] != undefined do
+					(
+						if (mltBoxItems.selection as array).count > 0 then
+						(		
+							for _item in (mltBoxItems.selection as array) do
+							(
+								-- Sobreescribimos el target interno del objeto con el que seleccionamos.
+								obj.dynConnectInfo.targetNodesNames[1] = _targetNames[_item as integer].name
+								lb.dynConnect.connect obj connectionType:#all	
+
+								-- Para que se añada misma capa del asset que se conecta.
+								if chkRenameAsset.checked then
+								(
+									-- Obtenemos el asset y lo renombramos para que se quede en la misma capa del objeto que queremos que se enganche
+									_ast = (lb.asset.getAssetsFromNodes obj)[1]
+									_nodeToConnect = getNodeByName (obj.dynConnectInfo.targetNodesNames[1])
+									_astToConnect = (lb.asset.getAssetsFromNodes _nodeToConnect)[1]
+									
+									lb.asset.renameAsset _ast _astToConnect.name
+									lb.assetManager.rollMain.resetSceneAssets()
+								)
+								
+								destroyDialog rollSelectTargetsManager	
+							)
+						)		
+					)
+				)
+			)
+		)
+
+		on rollSelectTargetsManager open do
+		(
+			lb.assetManager.run()
+			_selectionParentPointRoll = lb.dynConnect._selectionParentPoint 
+			lb.dynConnect._selectionParentPoint = #()
+		)	
+	)
+	
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@custAttribute: undefined | dynConnect | Custom Attribute que se añadirá a los nodos que necesiten conexión en tiempo de carga en la escena
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	CA_dynConnectInfo = attributes dynConnectInfo
+	(		
+		parameters main
+		(
+			--guarda la descripcion del CA y su version
+			CA_description					type:#string	animatable:false	default:"Datos de configuración del Dynamic Connection"
+			CA_version						type:#float		animatable:false	default:1.2
+			
+			connectOnLoad					type:#boolTab			default:true tabSizeVariable:true
+			types							type:#stringTab			default:"link" tabSizeVariable:true		--	tipo de conexión. Puede valer link, linkConstraint, positionConstraint, orientationConstraint, scaleConstraint
+			targetNodesNames				type:#stringTab			tabSizeVariable:true
+			alternateTargetNodesNames		type:#stringTab			tabSizeVariable:true
+			targetControllers				type:#maxObjectTab		tabSizeVariable:true
+			mods							type:#maxObjectTab		tabSizeVariable:true
+			keepInitialOffset				type:#boolTab			tabSizeVariable:true default:false
+			initialTransform				type:#matrix3			animatable:false
+			showRollSelection				type:#boolean			animatable:false default:false
+			
+		)
+		
+		--------------------------------------------------
+		fn getTargetNodes =
+		(
+			_targetNodes = lb.dynConnect.getTargetNodes this			
+		)
+		
+		--------------------------------------------------
+		fn getAlternateTargetNodes =
+		(
+			_alternateTargetNodes = lb.dynConnect.getAlternateTargetNodes this
+		)
+		
+		--------------------------------------------------
+		fn getSelfNode =
+		(
+			_selfNode = (refs.dependentNodes this)[1]
+		)
+		
+		--------------------------------------------------
+		fn connect connectionType:#all =
+		(
+			_selfNode = (getSelfNode())
+			if _selfNode.dynConnectInfo.showRollSelection then
+			(				
+				lb.dynConnect.showRollSelectTarget _selfNode	
+			)
+			else
+				lb.dynConnect.connect _selfNode connectionType:connectionType 
+		)
+		
+		--------------------------------------------------
+		fn disconnect connectionType:#all =
+		(
+			lb.dynConnect.disconnect (getSelfNode()) connectionType:connectionType
+		)
+		
+		--------------------------------------------------
+		fn isConnected connectionType:#all =
+		(
+			lb.dynConnect.isConnected (getSelfNode()) connectionType
+		)
+		
+		--------------------------------------------------
+		on load do
+		(
+			-- Revisamos el array de conexiones de onload y si hay alguno que se haya indicado que se conecte al inicio, se conecta.
+			for i = 1 to connectOnLoad.count where (connectOnLoad[i] and not (lb.dynConnect.isConnected (getSelfNode()) #all)) do lb.dynConnect.connect (getSelfNode()) connectionType:(((getSelfNode()).types[i] as name))	
+		)
+		
+		--------------------------------------------------
+		on create do
+		(
+			
+		)
+	)
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: dynConnect | Contiene la libreria de dynConnect.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct lib_dynConnect
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,					--@var: category | Categoria de la libreria.
+		className = lb.getFileLibName (getThisScriptFilename() as string),	--@var: className | Nombre de la libreria.
+		description = "Librería dynConnect",	--@var: description | Descripcion de la libreria.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		dynConnectAttributeDef = CA_dynConnectInfo,
+		connectionTypes = #("link", "binding", "pointconstraint", "linkconstraint", "positionconstraint", "orientationconstraint"),
+
+		
+		rollSelectTargets = rollSelectTargetsManager,
+
+		_selectionParentPoint = #(),
+
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		------------------------------------------------
+		--@fn: undefined | showRollSelectTarget | Muestra el listado de targets
+		--@gets: obj | node | Objeto para obtener los dynConnect
+		------------------------------------------------
+		fn showRollSelectTarget obj =
+		(
+			_success = false
+			_targetNodes = #()
+			--for i=1 to obj.dynConnectInfo.targetNodesNames.count do print obj.dynConnectInfo.targetNodesNames[i]
+			-- Comprobamos que exista el target
+			if obj.dynConnectInfo.targetNodesNames[1] != undefined then
+			(			
+				_targetNodes = (lb.dynConnect.getTargetNodesLightRig obj)
+
+				if _targetNodes.count > 0 then
+				(	
+					appendIfUnique _selectionParentPoint obj
+
+					_targetNodesNames = for o in _targetNodes where o != undefined collect o.name
+					createDialog rollSelectTargets lockHeight:false lockWidth:false modal:false
+					
+					rollSelectTargets.mltBoxItems.items = _targetNodesNames
+					
+					_success = true
+				)
+			)
+			
+			_success
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | hasDynConnectInfo | Indica si el fichero especificado tiene dynConnectInfo
+		--@gets: obj | node | Nombre del fichero al que añadir el dynConnectInfo
+		------------------------------------------------
+		fn hasDynConnectInfo node = 
+		(
+			lb.customAttributes.hasAttribute node #dynConnectInfo
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | collapseDynConnect | Renombramos los controladores y borramos el attributoñ
+		--@gets: obj | node | Nodo al que colapsar el dynConnectInfo
+		------------------------------------------------
+		fn collapseDynConnect node = 
+		(
+			for i = 1 to node.dynConnectInfo.types.count do
+			(				
+				case node.dynConnectInfo.types[i] of
+				(					
+					"pointconstraint":
+					(
+						lb.controller.freezeTransform node #all
+						lb.links.pointConstraint.remove node
+						
+					)
+					
+					"linkconstraint":
+					(
+						lb.controller.freezeTransform node #all
+						lb.links.linkconstraint.remove node
+					)
+					
+					"positionconstraint":
+					(
+						_contName = lb.controller.getControllerName node.dynConnectInfo.types[i]
+						_cont = undefined
+						
+						for j = 1 to node.position.controller.count where node.position.controller[j].name == _contName do _cont 
+							
+						_cont.name = "position_contraint"
+					)
+					
+					"orientationconstraint":
+					(
+						_contName = lb.controller.getControllerName node.dynConnectInfo.types[i]
+						_cont = undefined
+						
+						for j = 1 to node.position.controller.count where node.rotation.controller[j].name == _contName do _cont 
+							
+						_cont.name = "orientation_contraint"
+						
+					)
+				)
+			)
+			
+			this.removeAttribute node
+			
+			
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | add | Añade el dynConnectInfo al nodo pasado por parámetro
+		--@gets: string | obj | Objeto al que añadir el dynConnectInfo
+		--@gets: array | connectionTypes | Tipo de conexión. Puede valer link, linkConstraint, pointConstraint, positionConstraint, orientationConstraint, scaleConstraint. Es un array de strings.
+		--@opt: controller | targetControllerss | Si queremos utilizar un controlador que ya existe para controlar la conexión, se lo pasamos. Tiene que ser del mismo tipo que el conexión type.
+		--@opt: boolean | keepInitialOffset | Parametro para indicar si queremos que el objeto se alinee con el target o que mantenga su transform inicial.
+		------------------------------------------------
+		mapped fn addAttribute obj =
+		(
+			if this.hasdynConnectInfo obj then
+				this.removeAttribute obj
+					
+			custAttributes.add obj CA_dynConnectInfo #unique baseobject:false	
+		),
+		
+		------------------------------------------------
+		-- @fn: boolean | remove | Borra el dynConnectInfo al nodo pasado por parámetro
+		-- @gets: string | node | Objeto al que borrar el dynConnectInfo
+		------------------------------------------------
+		mapped fn removeAttribute obj =
+		(
+			if this.hasdynConnectInfo obj then
+				custAttributes.delete obj (custattributes.getdef obj.dynConnectInfo) baseobject:false
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | add | Añade el dynConnectInfo al nodo pasado por parámetro
+		--@gets: string | obj | Objeto al que añadir el dynConnectInfo
+		--@gets: array | connectionTypes | Tipo de conexión. Puede valer link, linkConstraint, pointConstraint, positionConstraint, orientationConstraint, scaleConstraint. Es un array de strings.
+		--@opt: controller | targetControllerss | Si queremos utilizar un controlador que ya existe para controlar la conexión, se lo pasamos. Tiene que ser del mismo tipo que el conexión type.
+		--@opt: boolean | keepInitialOffset | Parametro para indicar si queremos que el objeto se alinee con el target o que mantenga su transform inicial.
+		------------------------------------------------
+		mapped fn addTarget obj connectionType target alternateTargetNodes:#() connectOnLoad:false keepInitialOffset:true showRollSelection:false =
+		(
+			_tempAlternateNodes = #()	
+		-- 			if (classOf target) == array then target = target[1].name
+				
+			if (classOf alternateTargetNodes) != array then alternateTargetNodes = #(alternateTargetNodes)
+			
+			connectionType = (toLower (connectionType as string))
+			
+			_found = false
+				
+			-- Revisamos si tenemos en el array de conexiones la misma conexión que le estamos pasando y si vemos que la encontramos más adelante no 
+			-- se la añadiremos.
+			for _i = 1 to obj.dynConnectInfo.types.count where obj.dynConnectInfo.types[_i] == connectionType do
+				_found = true
+				
+			-- Añadimos la información de que nos muestre el rollout de selección de multiples targets.
+			obj.dynConnectInfo.showRollSelection = showRollSelection
+			
+			--	 Iniciamos los parametros con las parms opciones que le pasamos.
+			if not _found then
+			(
+				-- Si no hay tipo de conexiones las añadimos.
+				append obj.dynConnectInfo.targetNodesNames target
+				append obj.dynConnectInfo.types connectionType
+		-- 				append obj.dynConnectInfo.targetNodesNames (substitutestring target lb.nc.NC_anyTag "*")
+				
+				
+				-- Guardamos los nombres en string en un array y lo convertimos en un string y lo almacenamos en un array.
+				for _o in alternateTargetNodes do
+				(					
+					if (classOf _o) != string then _o = _o.name
+					
+					append _tempAlternateNodes (substitutestring _o lb.nc.NC_anyTag "*")
+				)				
+				
+				append obj.dynConnectInfo.alternateTargetNodesNames (_tempAlternateNodes as string)
+				
+				append obj.dynConnectInfo.connectOnLoad connectOnLoad
+				append obj.dynConnectInfo.keepInitialOffset keepInitialOffset
+			)
+			else
+			(
+				_index = 0
+				
+				for i = 1 to obj.dynConnectInfo.types.count where obj.dynConnectInfo.types[i] == connectionType do _index = i
+				
+				-- Añadimos el tipo de conexión y sobreescribiendola si existe ya
+				obj.dynConnectInfo.targetNodesNames[_index] = target
+				obj.dynConnectInfo.types[_index] = connectionType
+				
+				obj.dynConnectInfo.types[_index]
+				
+				-- Guardamos los nombres en string en un array y lo convertimos en un string y lo almacenamos en un array.
+				for _o in alternateTargetNodes do				
+					if (classOf _o) != string then _o = _o.name
+			
+				obj.dynConnectInfo.alternateTargetNodesNames[_index] = (_tempAlternateNodes as string)
+					
+				obj.dynConnectInfo.connectOnLoad[_index] = connectOnLoad
+				obj.dynConnectInfo.keepInitialOffset[_index] = keepInitialOffset				
+			)
+			
+			-- Alamacenamos la transformación inicial del frozen de la pieza para recuperarla para cuando desconectamos el constraint o lincaje.
+			_matrixTemp = matrix3 1
+			_matrixAux = matrix3 1
+
+			if obj.rotation.controller[#Frozen_rotation] != undefined then 
+				_matrixTemp.rotation = obj.rotation.controller[#Frozen_rotation].value 
+			else 
+				_matrixTemp.rotation = obj.rotation.controller.value
+			
+			if obj.scale.controller[#Frozen_scale] != undefined then
+				_matrixAux.scale = obj.scale.controller[#Frozen_scale].value
+			else 
+				_matrixAux.scale = obj.scale.controller.value
+			
+			_matrixTemp = _matrixTemp * _matrixAux
+			
+			if obj.position.controller[#Frozen_position] != undefined then
+				_matrixTemp.position = obj.position.controller[#Frozen_position].value
+			else
+				_matrixTemp.position = obj.position.controller.value
+
+			obj.dynConnectInfo.initialTransform = _matrixTemp
+		),	
+		
+		------------------------------------------------
+		--@fn: boolean | getTargetNodes | Obtenemos los nodos del custAttribute respecto al nombre guardado en el parametro targetNodesNames
+		--@gets: node | obj | Objeto que queremos obteneer los nodos de conexión
+		------------------------------------------------
+		mapped fn getTargetNodes obj =
+		(
+			_targetNodes = #()
+					
+			-- Recorremos lo targets 
+			for i = 1 to obj.targetNodesNames.count do
+			(
+				_nodeName = obj.targetNodesNames[i]
+				-- Buscamos el patrón anyTag para determianar si tenemos que sustituir esa parte por asterisco y convertirlo.
+				if (findString obj.targetNodesNames[i] lb.nc.NC_anyTag) != undefined then
+					_nodeName = lb.nc.convertAnyTagToPattern _nodeName
+				
+				-- Obtenemos el nombre simple del objeto para ignorar los flags.
+				_nodeName = lb.nc.getSimpleObjectName _nodeName
+				append _targetNodes (execute ("$'" + _nodeName  + "_*_*'"))[1]
+			)					
+			_targetNodes 
+		),
+
+		------------------------------------------------
+		--@fn: boolean | getTargetNodes | Obtenemos los nodos del custAttribute respecto al nombre guardado en el parametro targetNodesNames
+		--@gets: node | obj | Objeto que queremos obteneer los nodos de conexión
+		------------------------------------------------
+		mapped fn getTargetNodesLightRig obj =
+		(
+			_targetNodes = #()
+			_nodeNames = #()
+
+			-- Recorremos lo targets 
+			for i = 1 to obj.targetNodesNames.count do
+			(
+				_nodeNames = obj.targetNodesNames[i]
+				-- Buscamos el patrón anyTag para determianar si tenemos que sustituir esa parte por asterisco y convertirlo.
+				if (findString obj.targetNodesNames[i] lb.nc.NC_anyTag) != undefined then
+					_nodeNames = lb.nc.convertAnyTagToPattern _nodeNames
+				
+				-- Obtenemos el nombre simple del objeto para ignorar los flags.
+				_nodeNames = lb.nc.getSimpleObjectName _nodeNames	
+				--append _targetNodes (execute ("$'" + _nodeNames  + "_*_*'"))[1]
+			)	
+
+			for j=1 to _nodeNames.count do
+			(
+				appendIfUnique _targetNodes (execute ("$'" + _nodeNames  + "_*_*'"))[j]
+			)		
+			_targetNodes 
+		),	
+		
+		------------------------------------------------
+		--@fn: boolean | getTargetNodes | Obtenemos los nodos del custAttribute respecto al nombre guardado en el parametro targetNodesNames
+		--@gets: node | obj | Objeto que queremos obteneer los nodos de conexión
+		------------------------------------------------
+		mapped fn getTargetNodes obj =
+		(
+			_targetNodes = #()
+			
+			if obj.targetNodesNames.count > 0 then
+			(
+				if (findString obj.targetNodesNames[1] lb.nc.NC_anyTag) != undefined then
+				(
+					for _nodeName in obj.targetNodesNames do
+					(
+						_nodeName = lb.nc.convertAnyTagToPattern _nodeName	
+						append _targetNodes ((execute ("$'" + _nodeName  + "'"))[1])
+					)					
+				)
+				else
+					_targetNodes = for _nodeName in obj.targetNodesNames collect (execute ("$'" + _nodeName + "'"))
+			)			
+						
+			_targetNodes 
+		),	
+		
+		------------------------------------------------
+		--@fn: boolean | getAlternateTargetNodes | Obtenemos los nodos alternativos del custAttribute respecto al nombre guardado en el parametro targetNodesNames
+		--@gets: node | obj | Objeto que queremos obteneer los nodos de conexión
+		------------------------------------------------
+		mapped fn getAlternateTargetNodes obj =
+		(
+			_alternateTargetNodes = #()
+			
+			-- Recorremos el array de arrays onvertidos en string y los vamos convitiendo, y a su vez vamos convirtiendo 
+			-- los nodos y montando un array nuevo, para almacenar al final un array de arrays de nodos.
+			for i = 1 to obj.alternateTargetNodesNames.count where obj.alternateTargetNodesNames[i].count > 0 do
+			(
+				_tempNodes = execute obj.alternateTargetNodesNames[i]
+
+				_nodesToCollect = for _nodeName in _tempNodes collect (execute ("$'" + (_nodeName) + "'"))
+			
+				append _alternateTargetNodes _nodesToCollect
+			)
+				
+			_alternateTargetNodes
+		),
+			
+		------------------------------------------------
+		--@fn: boolean | connect | Conecta el objecto con su target  y con el tipo de conexión establecida. Si no existe 
+		--@gets: string | node | Objeto que queremos que se conecte
+		------------------------------------------------
+		mapped fn connect node connectionType:#all =
+		(
+			_success = false
+			_targetNodes = this.getTargetNodes node
+			
+			_alternateTargetNodes = this.getAlternateTargetNodes node
+			_mainTargetNode = _targetNodes[1] 
+			_existsTargetNodes = false
+			_connectionTypeString = (toLower (connectionType as string))
+				
+			for _node in _targetNodes where _node != undefined do _existsTargetNodes = true
+				
+			if not _existsTargetNodes then
+				for _node in _alternateTargetNodes where _node != undefined do _existsTargetNodes = true
+				
+			if _existsTargetNodes then
+			(
+				_activePosController = if classOf node.position.controller == position_list then node.position.controller.active else undefined
+				_activeRotController = if classOf node.rotation.controller == rotation_list then node.rotation.controller.active else undefined
+				_activeScaleController = if classOf node.scale.controller == scale_list then node.scale.controller.active else undefined
+		-- 				
+				with animate off
+				(
+					with undo off
+					(						
+						--	Según el tipo de lincaje ejecutamos sus operaciones de alineación
+						for _i = 1 to node.dynConnectInfo.types.count where (node.dynConnectInfo.types[_i] == _connectionTypeString or _connectionTypeString == "all") do
+						(
+							_targetNode = undefined 
+							
+							-- 	Establecemos el peso del controlador, ponemos el valor opcional que le hemos pasado o por defecto 100
+							if not (isValidNode _targetNodes[_i]) then
+							(
+								for _j = 1 to _alternateTargetNodes[_i].count do
+								(
+									_nodeFound = false
+									_alternateNode = undefined
+									
+									_k = 1
+									
+									-- Recorremos los nodos alternativos revisando que en cuanto encontremos uno que sea válido lo guardamos.
+									while _k <= _alternateTargetNodes[_i].count and not _nodeFound do
+									(
+										if isValidNode _alternateTargetNodes[_i][_k] then
+										(
+											_alternateNode = _alternateTargetNodes[_i][_k]
+											_nodeFound = true
+										)
+										
+										_k += 1
+									)
+									
+									if _alternateNode != undefined then
+										_targetNode = _alternateNode
+								)
+							)
+							else
+								_targetNode = _targetNodes[_i]
+							
+							--	Añadimos el caso de default para que siempre haga este proceso, ya que si lo sacamos fuera del case y el tipo de conexión no es correcto, entraría en el for.
+							--	primero alineamos el objeto  si se ha indicado
+							for _k in node.dynConnectInfo.keepInitialOffset where not _k do
+							(
+								--	Activamos los controladores frozen si existen
+								lb.controller.setActiveController node #all #frozen
+								
+								--	Alineamos el objeto
+								if _targetNode != undefined then 
+									node.transform = _targetNode.transform
+								
+								--	activamos los controladores que estaban previamente activos
+								if _activePosController != undefined then node.position.controller.active = _activePosController
+								if _activeRotController != undefined then node.rotation.controller.active = _activeRotController
+								if _activeScaleController != undefined then node.scale.controller.active = _activeScaleController
+									
+							)
+							
+							-----------------------------
+							-- Tipos de conexión -- 
+							-----------------------------
+							
+							if node.dynConnectInfo.types[_i] == "link" and ((this.isConnected node node.dynConnectInfo.types[_i]) != #indeterminate) and not (this.isConnected node node.dynConnectInfo.types[_i]) then
+							(
+								--	Activamos los controladores frozen si existen
+								lb.controller.setActiveController node #all #frozen
+								
+								--	Lincamos el objeto al targetNode principal
+								node.parent = _targetNode
+								
+								--	activamos los controladores que estaban previamente activos
+								if _activePosController != undefined then node.position.controller.active = _activePosController
+								if _activeRotController != undefined then node.rotation.controller.active = _activeRotController
+								if _activeScaleController != undefined then node.scale.controller.active = _activeScaleController
+									
+								_success = true
+							)
+							
+							if node.dynConnectInfo.types[_i] == "binding" and ((this.isConnected node node.dynConnectInfo.types[_i]) != #indeterminate) and not (this.isConnected node node.dynConnectInfo.types[_i]) then
+							(
+								--	Activamos los controladores frozen si existen
+								lb.controller.setActiveController node #all #frozen
+								
+								--	Lincamos el objeto al targetNode principal
+								bindSpaceWarp node _targetNode
+													
+								-- Almacenamos el modificador
+								append node.dynConnectInfo.mods node.modifiers[node.modifiers.count]
+								
+								_success = true
+							)
+							
+							if node.dynConnectInfo.types[_i] == "pointconstraint" and ((this.isConnected node node.dynConnectInfo.types[_i]) != #indeterminate) and not (this.isConnected node node.dynConnectInfo.types[_i]) then
+							(
+								if _targetNode != undefined then
+								(
+									-- Activamos los controladores frozen si existen
+		-- 									lb.controller.setActiveController node #all #frozen
+									
+									--	Nos aseguramos primero de que la pieza tiene el CA
+									if node.modifiers[1] != undefined then
+									(
+										if not (lb.links.pointConstraint.hasOCattribute node.modifiers[1]) then
+											lb.links.pointConstraint.add node
+									)
+									else
+										lb.links.pointConstraint.add node
+										
+									lb.links.addTarget node _targetNode
+									
+									-- Alinemaos de nuevo el objeto por desfase que puede provocarse al alinear el objeto
+									if node.dynConnectInfo.keepInitialOffset[_i] then
+										node.transform = _targetNode.transform	
+									
+									_targetCont = undefined 
+									
+									for i = 1 to node.position.controller.count where node.position.controller[i].name == "PC_pointConstraint" do _targetCont = node.position.controller[i]
+									
+									-- Almacenamos el controlador de conexión en el CA del objeto, para hacer comprobaciones de si está conectado.
+									append node.dynConnectInfo.targetControllers _targetCont
+									
+									--	activamos los controladores que estaban previamente activos
+									if _activePosController != undefined then node.position.controller.active = _activePosController
+									if _activeRotController != undefined then node.rotation.controller.active = _activeRotController
+									if _activeScaleController != undefined then node.scale.controller.active = _activeScaleController
+										
+									_success = true								
+								)
+							)
+	
+							if node.dynConnectInfo.types[_i] == "linkconstraint" and ((this.isConnected node node.dynConnectInfo.types[_i]) != #indeterminate) and not (this.isConnected node node.dynConnectInfo.types[_i]) then		
+							(
+								if _targetNode != undefined then
+								(
+									-- Activamos los controladores frozen si existen
+		-- 									lb.controller.setActiveController node #all #frozen
+									
+									--	Nos aseguramos primero de que la pieza tiene un PositionList
+									if node.modifiers[1] != undefined then
+									(
+										if not (lb.links.linkConstraint.hasLCattribute node.modifiers[1]) then
+											lb.links.linkConstraint.add node
+									)
+									else
+										lb.links.linkConstraint.add node
+										
+									lb.links.addTarget node _targetNode
+									
+									-- Alinemaos de nuevo el objeto por desfase que puede provocarse al alinear el objeto
+									if node.dynConnectInfo.keepInitialOffset[_i] then
+										node.transform = _targetNode.transform	
+									
+									-- Almacenamos el controlador de conexión en el CA del objeto, para hacer comprobaciones de si está conectado.
+									append node.dynConnectInfo.targetControllers node.transform.controller
+									
+									--	activamos los controladores que estaban previamente activos
+									if _activePosController != undefined then node.position.controller.active = _activePosController
+									if _activeRotController != undefined then node.rotation.controller.active = _activeRotController
+									if _activeScaleController != undefined then node.scale.controller.active = _activeScaleController
+										
+									for j = 1 to node.position.controller.count where (node.position.controller[j] == _targetCont) do _indexCont = j
+
+		-- 									node.position.controller.setName _indexCont "PC_dynConnection"
+									
+									_success = true								
+								)
+							)
+							
+							if node.dynConnectInfo.types[_i] == "positionconstraint" and ((this.isConnected node node.dynConnectInfo.types[_i]) != #indeterminate) and not (this.isConnected node node.dynConnectInfo.types[_i]) then
+							(
+								if _targetNode != undefined then
+								(
+									-- Nos aseguramos de que tenemos un controlador positionConstraint con el que trabajar.
+									-- Si no se ha especificado ninguno en targetControllerss lo generamos en un PositionList
+									_targetCont = undefined
+									
+									--	Nos aseguramos primero de que la pieza tiene un PositionList
+									if classOf node.position.controller != position_list then
+										node.position.controller = position_list()
+									
+									-- Comprobamos que no se haya quedado un controlador almacenado sin target anteriormente y lo borramos, ya que el isConnect no lo detecta.
+									if node.position.controller[#PC_dynConnection] != undefined then
+										for i = 1 to node.position.controller.count where node.position.controller[i].name == "PC_dynConnection" do
+											if (node.position.controller[i].controller.getNumTargets()) > 0 then
+											(	
+												if not ((node.position.controller[i].getNode 1).name == _targetNode.name) then node.position.controller.delete i
+											)
+											else
+												node.position.controller.delete i	
+									
+									_newController = position_constraint()
+									node.position.controller.available.controller = _newController
+									_targetCont = _newController
+
+									_targetCont.appendTarget _targetNode 100
+									
+									-- 	Activamos la opción de keepInitialOffset si se le ha indicado en el param opt al añadir.
+									_targetCont.relative = node.dynConnectInfo.keepInitialOffset[_i]
+									
+									-- 	Recorremos los controladores para obtener el indice del controlador de conexión y nombrarlo.
+									_indexCont = 0
+									
+									for j = 1 to node.position.controller.count where (node.position.controller[j] == _targetCont) do _indexCont = j
+
+									node.position.controller.setName _indexCont "PC_dynConnection"
+									
+									-- Almacenamos el controlador de conexión en el CA del objeto, para hacer comprobaciones de si está conectado.
+									append node.dynConnectInfo.targetControllers _targetCont
+									
+									_success = true
+								)
+							)
+
+							if node.dynConnectInfo.types[_i] == "orientationconstraint" and ((this.isConnected node node.dynConnectInfo.types[_i]) != #indeterminate) and not (this.isConnected node node.dynConnectInfo.types[_i]) then
+							(		
+								if _targetNode != undefined then
+								(								
+									--	Nos aseguramos de que tenemos un controlador orientation constraint con el que trabajar.
+									--	Si no se ha especificado ninguno en targetControllers lo generamos en un RotationList
+									_targetCont = undefined
+									
+									--	Nos aseguramos primero de que la pieza tiene un RotationList
+									if classOf node.rotation.controller != rotation_list then
+										node.rotation.controller = rotation_list()
+									
+									-- Comprobamos que no se haya quedado un controlador almacenado sin target anteriormente y lo borramos, ya que el isConnect no lo detecta.
+									if node.rotation.controller[#OC_dynConnection] != undefined then
+										for i = 1 to node.rotation.controller.count where node.rotation.controller[i].name == "OC_dynConnection" do
+											if (node.rotation.controller[i].controller.getNumTargets()) > 0 then
+											(	
+												if not ((node.rotation.controller[i].getNode 1).name == _targetNode.name) then node.rotation.controller.delete i
+											)
+											else
+												node.rotation.controller.delete i												
+										
+									_newController = orientation_constraint()
+									node.rotation.controller.available.controller = _newController
+									_targetCont = _newController
+								
+									-- 	Establecemos el peso del controlador, ponemos el valor opcional que le hemos pasado o por defecto 100
+									_targetCont.appendTarget _targetNode 100									
+									
+									--	 Activamos la opción de keepInitialOffset si se le ha indicado en el param opt al añadir.
+									_targetCont.relative = node.dynConnectInfo.keepInitialOffset[_i]
+									
+									-- 	Recorremos los controladores para obtener el indice del controlador de conexión y nombrarlo.
+									_indexCont = 0
+									
+									for j = 1 to node.rotation.controller.count where (node.rotation.controller[j] == _targetCont) do _indexCont = j
+
+									node.rotation.controller.setName _indexCont "OC_dynConnection"
+									
+									-- Almacenamos el controlador de conexión en el CA del objeto, para hacer comprobaciones de si está conectado.
+									append node.dynConnectInfo.targetControllers _targetCont
+									
+									_success = true
+								)
+							)
+						)
+					)-- with undo off
+				)-- with animate off
+			)
+			
+			_success
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | disconnect | Desconecta el objecto de su target según el tipo de conexión.
+		--@gets: string | node | Objeto que queremos que se desconecte.
+		------------------------------------------------
+		mapped fn disconnect node connectionType:#all =
+		(
+			_success = false
+			_targetNodes = node.dynConnectInfo.getTargetNodes()
+			_alternateTargetNodes = node.dynConnectInfo.getAlternateTargetNodes()
+			_mainTargetNode = _targetNodes[1]
+			_existsTargetNodes = false
+			_connectionTypeString = (toLower (connectionType as string))
+			
+			for _node in _targetNodes where _node != undefined do _existsTargetNodes = true
+				
+			if not _existsTargetNodes then
+				for _node in _alternateTargetNodes where _node != undefined do _existsTargetNodes = true
+				
+			if _existsTargetNodes then
+			(
+				_activePosController = if classOf node.position.controller == position_list then node.position.controller.active else undefined
+				_activeRotController = if classOf node.rotation.controller == rotation_list then node.rotation.controller.active else undefined
+				_activeScaleController = if classOf node.scale.controller == scale_list then node.scale.controller.active else undefined
+				
+				with animate off
+				(
+					with undo off
+					(					
+						--	Según el tipo de lincaje ejecutamos sus operaciones de alineación
+						for _i = 1 to node.dynConnectInfo.types.count where (node.dynConnectInfo.types[_i] == _connectionTypeString or _connectionTypeString == "all") do
+						(
+							if node.dynConnectInfo.types[_i] == "link" and (this.isConnected node node.dynConnectInfo.types[_i]) then
+							(
+								--	Activamos los controladores frozen si existen
+								lb.controller.setActiveController node #all #frozen
+								
+								--	Deslincamos el objeto al targetNode principal
+								node.parent = undefined
+								node.transform = node.dynConnectInfo.initialTransform
+
+								lb.controller.setActiveController node #all #zero
+									
+									
+								--	activamos los controladores que estaban previamente activos
+								if _activePosController != undefined then node.position.controller.active = _activePosController
+								if _activeRotController != undefined then node.rotation.controller.active = _activeRotController
+								if _activeScaleController != undefined then node.scale.controller.active = _activeScaleController
+									
+								_success = true
+							)	
+							
+							if node.dynConnectInfo.types[_i] == "binding" and (this.isConnected node node.dynConnectInfo.types[_i]) then
+							(
+								for j = node.modifiers.count to 1 by -1 where node.modifiers[j] == node.dynConnectInfo.mods[_i] do
+									deletemodifier node node.modifiers[j]
+							
+								if node.dynConnectInfo.mods.count > 0 then 
+									deleteItem node.dynConnectInfo.mods _i
+								else
+									node.dynConnectInfo.mods = #()
+								
+								_success = true
+							)	
+
+							if node.dynConnectInfo.types[_i] == "pointconstraint" and (this.isConnected node node.dynConnectInfo.types[_i]) then
+							(
+								--	Activamos los controladores frozen si existen
+								lb.controller.setActiveController node #all #frozen
+								
+								lb.links.pointConstraint.remove node 
+								
+								-- 	Obtenemos el controlador que cuelga del linkconstraint para restaurarlo
+								node.transform = node.dynConnectInfo.initialTransform
+								
+								-- 	Activamos los controladores que estaban previamente activos
+								if _activePosController != undefined then node.position.controller.active = _activePosController
+								if _activeRotController != undefined then node.rotation.controller.active = _activeRotController
+								if _activeScaleController != undefined then node.scale.controller.active = _activeScaleController
+								
+								if node.dynConnectInfo.targetControllers.count > 0 then 
+									deleteItem node.dynConnectInfo.targetControllers _i
+								else
+									node.dynConnectInfo.targetControllers = #()
+									
+								_success = true
+							)
+
+
+							if node.dynConnectInfo.types[_i] == "linkconstraint" and (this.isConnected node node.dynConnectInfo.types[_i]) then
+							(
+								--	Activamos los controladores frozen si existen
+								lb.controller.setActiveController node #all #frozen
+								
+								lb.links.linkConstraint.remove node 
+								
+								-- 	Obtenemos el controlador que cuelga del linkconstraint para restaurarlo
+								node.transform = node.dynConnectInfo.initialTransform
+								
+								-- 	Activamos los controladores que estaban previamente activos
+								if _activePosController != undefined then node.position.controller.active = _activePosController
+								if _activeRotController != undefined then node.rotation.controller.active = _activeRotController
+								if _activeScaleController != undefined then node.scale.controller.active = _activeScaleController
+								
+								if node.dynConnectInfo.targetControllers.count > 0 then 
+									deleteItem node.dynConnectInfo.targetControllers _i
+								else
+									node.dynConnectInfo.targetControllers = #()
+									
+								_success = true
+							)
+
+							if node.dynConnectInfo.types[_i] == "positionconstraint" and (this.isConnected node node.dynConnectInfo.types[_i]) then
+							(
+								_indexCont = 0
+								
+								-- 	Recorremos los controladores buscando el de conexión para borrarlo.
+								for i = 1 to node.position.controller.count where (node.position.controller[i].name == "PC_dynConnection") do _indexCont = i
+								
+								if _indexCont != undefined then node.position.controller.delete _indexCont
+								
+								--	Activamos los controladores frozen si existen
+								lb.controller.setActiveController node #all #frozen
+								
+								--	Deslincamos el objeto al targetNode principal
+								node.transform = node.dynConnectInfo.initialTransform
+								
+								if node.dynConnectInfo.targetControllers.count > 0 then 
+									deleteItem node.dynConnectInfo.targetControllers _i
+								else
+									node.dynConnectInfo.targetControllers = #()
+								
+								
+								-- 	Activamos los controladores que estaban previamente activos
+								if _activePosController != undefined then node.position.controller.active = _activePosController
+								if _activeRotController != undefined then node.rotation.controller.active = _activeRotController
+								if _activeScaleController != undefined then node.scale.controller.active = _activeScaleController
+							)
+
+							if node.dynConnectInfo.types[_i] == "orientationconstraint" and (this.isConnected node node.dynConnectInfo.types[_i]) then
+							(
+								--	Activamos los controladores frozen si existen
+								lb.controller.setActiveController node #all #frozen
+								
+								--	Deslincamos el objeto al targetNode principal
+								node.transform = node.dynConnectInfo.initialTransform
+								
+								-- 	Recorremos los controladores buscando el de conexión para borrarlo.
+								for i = 1 to node.rotation.controller.count where (node.rotation.controller[i].name == "OC_dynConnection") do _indexCont = i
+
+								if _indexCont != undefined then node.rotation.controller.delete _indexCont
+								
+								--	Activamos los controladores frozen si existen
+								lb.controller.setActiveController node #all #frozen
+								
+								--	Deslincamos el objeto al targetNode principal
+								node.transform = node.dynConnectInfo.initialTransform
+								
+								-- 	Activamos los controladores que estaban previamente activos
+								if _activePosController != undefined then node.position.controller.active = _activePosController
+								if _activeRotController != undefined then node.rotation.controller.active = _activeRotController
+								if _activeScaleController != undefined then node.scale.controller.active = _activeScaleController
+									
+								if node.dynConnectInfo.targetControllers.count > 1 then 
+									deleteItem node.dynConnectInfo.targetControllers _i
+								else
+									node.dynConnectInfo.targetControllers = #()
+								
+								_success = true
+							)
+						)
+					)-- with undo off
+				)-- with animate off
+			)
+									
+			_success
+		),
+			
+		------------------------------------------------
+		--@fn: boolean | isConnected | Desconecta el objecto de su target según el tipo de conexión.
+		--@gets: string | node | Objeto que queremos que se desconecte.
+		------------------------------------------------
+		fn isConnected node connectionType =
+		(
+			_connectedNodes = #()
+			_connected = undefined
+			_targetNodes = this.getTargetNodes node
+			_alternateTargetNodes = this.getAlternateTargetNodes node
+			
+			_mainTargetNode = _targetNodes[1]
+			_existsTargetNodes = true
+			_connectionTypeString = (toLower (connectionType as string))
+			
+				
+			for _node in _targetNodes where _node != undefined do _existsTargetNodes = true
+				
+			if not _existsTargetNodes then
+				for _node in _alternateTargetNodes where _node != undefined do _existsTargetNodes = true
+			
+			if _existsTargetNodes then
+			(			
+				with animate off
+				(
+					with undo off
+					(					
+						--	Según el tipo de lincaje ejecutamos sus operaciones de alineación
+						for _i = 1 to node.dynConnectInfo.types.count where (node.dynConnectInfo.types[_i] == _connectionTypeString or _connectionTypeString == "all") do
+						(	
+							_targetNode = undefined 
+							
+							-- 	Establecemos el peso del controlador, ponemos el valor opcional que le hemos pasado o por defecto 100
+							if not (isValidNode _targetNodes[_i]) then
+							(
+								for _j = 1 to _alternateTargetNodes[_i].count do
+								(
+									_nodeFound = false
+									_alternateNode = undefined
+									
+									_k = 1
+									
+									-- Recorremos los nodos alternativos revisando que en cuanto encontremos uno que sea válido lo guardamos.
+									while _k <= _alternateTargetNodes[_i].count and not _nodeFound do
+									(
+										if isValidNode _alternateTargetNodes[_i][_k] then
+										(
+											_alternateNode = _alternateTargetNodes[_i][_k]
+											_nodeFound = true
+										)
+										
+										_k += 1
+									)
+									
+									if _alternateNode != undefined then
+										_targetNode = _alternateNode
+								)
+							)
+							else
+								_targetNode = _targetNodes[_i]
+							
+							
+							if node.dynConnectInfo.types[_i] == "link" then
+							(
+								_connected = false	
+								
+								if _targetNode != undefined then								
+									if node.parent != undefined then _connected = node.parent.name == _targetNode.name
+								--if _targetNode != undefined then
+									
+								appendIfUnique _connectedNodes _connected
+							)
+							
+							if node.dynConnectInfo.types[_i] == "binding" then
+							(
+								_connected = false	
+								
+								if _targetNode != undefined then								
+									if node.dynConnectInfo.mods[_i] != undefined then
+										for i = 1 to node.modifiers.count where node.modifiers[i] == node.dynConnectInfo.mods[_i] do
+											_connected = true
+								
+								appendIfUnique _connectedNodes _connected
+							)
+							
+							
+							if node.dynConnectInfo.types[_i] == "pointconstraint" then 
+							(
+								_connected = false
+								
+								
+								--	Comprobamos que el target del linkconstraint sea el mismo que tenemos almacenado
+								if _targetNode != undefined then
+									if node.dynConnectInfo.targetControllers[_i] != undefined then
+									(
+										_contName = (lb.controller.getControllerName node.dynConnectInfo.targetControllers[_i])
+										
+										if _contName == undefined then 
+											_contName = (lb.controller.getControllerName node.dynConnectInfo.targetControllers[1])
+										
+										_connected = (_contName == "PC_pointConstraint")
+									)
+									
+								appendIfUnique _connectedNodes _connected
+							)
+
+							
+							if node.dynConnectInfo.types[_i] == "linkconstraint" then 
+							(
+								_connected = false
+								
+								--	Comprobamos que el target del linkconstraint sea el mismo que tenemos almacenado
+								if _targetNode != undefined then
+								(
+									_connected = (classOf node.dynConnectInfo.targetControllers[_i] == Link_Constraint)
+									if not _connected then (classOf node.dynConnectInfo.targetControllers[1] == Link_Constraint)
+								)
+								
+								appendIfUnique _connectedNodes _connected
+							)
+
+							
+							if node.dynConnectInfo.types[_i] == "positionconstraint" then 
+							(	
+								_dynCont = undefined
+								_connected = false
+								
+								if _targetNode != undefined then
+								(
+									_targCont = undefined
+									
+									-- Comprobamos si el controlador existe
+									if (classOf node.dynConnectInfo.targetControllers[_i] == Position_constraint) then
+										_targCont = node.dynConnectInfo.targetControllers[_i] 
+									else
+										_targCont = node.dynConnectInfo.targetControllers[1]
+									
+									-- Comprobamos si tiene targets dentro.
+									if _targCont != undefined then
+										if node.position.controller[#PC_dynConnection] != undefined then
+											for i = 1 to node.position.controller.count where node.position.controller[i].name == "PC_dynConnection" do
+												if (node.position.controller[i].controller.getNumTargets()) > 0 then	 									
+													if (node.position.controller[i].getNode 1).name == _targetNode.name then
+														_connected = true
+								)
+														
+								-- comprobar nombre del target interno.
+								appendIfUnique _connectedNodes _connected
+							)
+							
+							
+							if node.dynConnectInfo.types[_i] == "orientationconstraint" then
+							(
+								_dynCont = undefined
+								_connected = false
+								
+								if _targetNode != undefined then
+								(
+									_targCont = undefined
+									
+									-- Comprobamos si el controlador existe
+									if (classOf node.dynConnectInfo.targetControllers[_i] == Orientation_constraint) then
+										_targCont = node.dynConnectInfo.targetControllers[_i] 
+									else
+										_targCont = node.dynConnectInfo.targetControllers[1]
+									
+									-- Comprobamos si tiene targets dentro.
+									if _targCont != undefined then
+										if node.rotation.controller[#OC_dynConnection] != undefined then
+											for i = 1 to node.rotation.controller.count where node.rotation.controller[i].name == "OC_dynConnection" do
+												if (node.rotation.controller[i].controller.getNumTargets()) > 0 then	 									
+													if (node.rotation.controller[i].getNode 1).name == _targetNode.name then
+														_connected = true
+								)
+								
+								-- comprobar nombre del target interno.
+								appendIfUnique _connectedNodes _connected
+							)
+						)
+					)-- with undo off
+				)-- with animate off
+			)
+			
+			-- Recopilamos todos los resultados de conexión y si encontramos dos distintos 
+			-- asumimos que hay una conexión de un tipo conectada y otra no
+			if _connectedNodes.count < 2 then
+				_connected	= _connectedNodes[1]
+			else if _connectedNodes.count > 1 then
+				_connected = #indeterminate
+			
+			_connected
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | unLinkAndAdd | Deslinca el emparentamiento y guarda su padre en el dynConnect.
+		--@gets: string | node | Objeto que queremos que se desconecte.
+		------------------------------------------------
+		mapped fn unLinkAndAdd node =
+		(
+			_success = false
+		
+			this.addAttribute node
+				
+			this.addTarget node #link node.parent.name alternateTargetNodes:#()
+			
+			lb.controller.setActiveController node #all #frozen
+			node.parent = undefined
+			lb.controller.setActiveController node #all #zero
+			
+			_success = true
+			
+			_success
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | save | Gurdamos la información de dynConnect en un archivo.
+		------------------------------------------------
+		fn save obj fileName =
+		(
+			_success = false
+			
+			_xmlDoc = lb.xml.newXmlDoc()	--	documento xml con el contenido que se añadirá al fichero .max
+			
+			--	Cabecera
+			_rootNode = _xmlDoc.root		--	nodo root del documento
+			_dynConnectNode = _rootNode.newChild "dynConnect"
+			_dynConnectNode.setProperty "version" "1.0"
+			_dynConnectNode.setProperty "numTargets" obj.dynConnectInfo.targetNodesNames.count
+			_dynConnectNode.SetProperty "initialTransform" (obj.dynConnectInfo.initialTransform as string)				
+
+			--	Files
+			for i = 1 to obj.dynConnectInfo.targetNodesNames.count do
+			(
+				_targetNode = _dynConnectNode.newChild "target"
+				_targetNode.SetProperty "type" obj.dynConnectInfo.types[i]
+				_targetNode.SetProperty "targetNodeName" obj.dynConnectInfo.targetNodesNames[i]
+				_targetNode.SetProperty "alternateTargetNodesNames" obj.dynConnectInfo.alternateTargetNodesNames[i]
+				_targetNode.SetProperty "connectOnLoad" obj.dynConnectInfo.connectOnLoad[i]
+				_targetNode.SetProperty "keepInitialOffset" obj.dynConnectInfo.keepInitialOffset[i]
+			)
+
+			_xmlDoc.setPath fileName
+			_xmlDoc.save()
+			
+			_success = true
+			
+			_success
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | load | Cargaremos la información de dynConnect en un archivo.
+		------------------------------------------------
+		fn load obj fileName =
+		(
+			_success = false
+			
+			if lb.dynConnect.hasDynConnectInfo obj then
+			(
+				_xmlDoc = lb.xml.load fileName				
+
+				if _xmlDoc != undefined then
+				(
+					_assetName = lb.nc.getNamePart obj.name 2
+
+					_rootNode = _xmlDoc.getRoot()
+					_targetNodes = _rootNode.getNodes "dynConnect/target"
+					
+					_dynConnectNode = (_rootNode.getNode "dynConnect")
+					obj.dynConnectInfo.initialTransform = execute (_dynConnectNode.getProperty "initialTransform")
+					
+					for tn in _targetNodes do
+					(
+						_targetNodeName = (tn.getProperty "targetNodeName")
+						_targetNodeAssetName = lb.nc.getNamePart _targetNodeName 2
+						_targetNode = undefined
+						
+		-- 						print obj.name
+						--print _targetNodeName
+						--print _assetName
+						--print _targetNodeAssetName
+						--print "-----------------------------"
+
+						-------------------------------------------------------
+						-------------------------------------------------------
+						--Con el target node pueden ocurrir muchas cosas, por eso vamos a ir explicandoles una a una
+						--si en la escena hay un objeto que se llama exactamente igual que el target node, debe usar ese objeto como target de la conexion
+						_targetNode = (execute ("$'" + (lb.nc.getSimpleObjectName _targetNodeName) + "_*_*'"))[1] -- montamos un execute para ignorar los flags finales.
+
+						--si el nombre del asset al que pertenece el objeto sin tener en cuenta el indice #001, etc. y el del target obtenido del archivo son el mismo,
+						--el primer target a tener en cuenta deberia ser el del mismo asset teniendo en cuenta el indice #001, etc.
+						--esto es para que cuando carguemos varias veces el mismo preset/asset no conecte todo al primero
+						_assetNameParts = filterString _assetName "#"
+							
+						if _targetNode != undefined and _assetNameParts.count == 2 then
+							if _assetNameParts[1] == _targetNodeAssetName then _targetNode = undefined
+
+						--si no lo ha encontrado lo que debe hacer es buscar ese mismo nodo, pero que la parte 2 del nombre sea la de asset tal cual se va a nombrar ahora
+						--por si es un #001, #002... etc
+						if _targetNode == undefined then
+						(
+							if lb.nc.ncOk _targetNodeName then
+							(
+								_targetNodeName = lb.nc.replaceNamePart _targetNodeName 2 _assetName
+								_targetNode = (execute ("$'" + (lb.nc.getSimpleObjectName _targetNodeName) + "_*_*'"))[1] -- montamos un execute para ignorar los flags finales.
+							)
+						)--if
+
+						--si no lo ha encontrado lo que debe hacer es buscar por patron los de la escena si contiene en el nombre guardado algun <any>
+						--IMPORTANTE. EN UN FUTURO HABRA QUE CAMBIAR ESTO POR QUE SALGA UN LISTADO DE LOS TARGETS POSIBLES
+						if _targetNode == undefined then
+						(
+							_targetNodePattern = (tn.getProperty "targetNodeName")
+							if lb.nc.ncOk _targetNodeName then
+							(
+								_targetNodePattern = "$'" + (lb.nc.getSimpleObjectName (substitutestring _targetNodePattern lb.nc.NC_anyTag "*")) + "_*_*"
+								_targetNodes = execute _targetNodePattern
+
+								--CAMBIAR ESTO POR UN LISTADO EN UN FUTURO A MODO DE POPUP PARA ELEGIR
+								if _targetNodes.count != 0 then _targetNode = _targetNodes[1]
+							)
+						)
+
+						--si no lo ha encontrado lo que debe hacer es buscar por patron en la segunda parte del nombre. Ejemplo: chr_*_...
+						--IMPORTANTE. EN UN FUTURO HABRA QUE CAMBIAR ESTO POR QUE SALGA UN LISTADO DE LOS TARGETS POSIBLES
+						if _targetNode == undefined then
+						(
+							_targetNodePattern = (tn.getProperty "targetNodeName")
+							if lb.nc.ncOk _targetNodeName then
+							(
+								_targetNodePattern = _targetNodeName = lb.nc.replaceNamePart _targetNodeName 2 "*"
+								_targetNodePattern = "$'" + (lb.nc.getSimpleObjectName _targetNodePattern) + "_*_*"
+								_targetNodes = execute _targetNodePattern
+
+								--CAMBIAR ESTO POR UN LISTADO EN UN FUTURO A MODO DE POPUP PARA ELEGIR
+								if _targetNodes.count != 0 then _targetNode = _targetNodes[1]
+							)
+						)
+
+						-------------------------------------------------------
+						-------------------------------------------------------
+
+						if _targetNode != undefined then _targetNodeName = _targetNode.name
+						append obj.dynConnectInfo.targetNodesNames _targetNodeName
+
+						append obj.dynConnectInfo.alternateTargetNodesNames ((filterString (tn.getProperty "alternateTargetNodesNames") "#()\" ,") as string)
+						append obj.dynConnectInfo.types (tn.getProperty "type")
+						append obj.dynConnectInfo.connectOnLoad ((tn.getProperty "connectOnLoad") == "true")
+						append obj.dynConnectInfo.keepInitialOffset ((tn.getProperty "keepInitialOffset") == "true")
+					)
+				)
+				
+				_success = true
+			)
+			
+			_success
+		),
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicializa las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addLibrary this --añade la libreria a la principal
+		)
+		
+	)--lib_dynConnect
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	
+	lib_dynConnect() --crea la libreria
+)

@@ -1,0 +1,689 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--Descripcion: Herramienta anim_deform.
+------------------------------------------------------------------------------------------------------------------------------------------------
+(
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollMain | Contiene la herramienta anim_deform.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollMainDef "anim deform"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) --@var : parent | Herramienta o rolllout del que depende y/o contiene el rollout actual
+		
+		local minRollWidth = 210		--@var: minRollWidth | Ancho mínimo de la herramienta.
+		local minRollHeight = 190		--@var: minRollHeight | Alto mínimo de la herramienta.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		local _meshCopies = #()
+		local _baseMeshes = #()
+		local _selection = #()
+		local _internalIndex = 1
+		local _auxLayer = undefined 
+
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		
+		checkbutton chbrun "Edit pose" pos:[5,5] width:200 height:50 align:#center enabled:false
+		button btnPrev "<< Prev Mesh" pos:[10,60] width:95 enabled:false
+		button btnNext "Next Mesh >>" pos:[110,60] width:95 enabled:false
+		button btnMoveTool "Toggle Move Tool" pos:[10,85] width:195 enabled:false
+		spinner spnRange "Modification Range" width:200 height:100 range:[1,1000,1] align:#center type:#integer
+		button btnCommit "Commit" width:200 height:50 align:#center pos:[5,130] enabled:false
+
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+
+
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		------------------------------------------------
+		--@fn: undefined | renameObj | Funcion para renombrar el objeto siguiendo unos patrones de naming.
+		--@gets: node | _obj | el objeto a renombrar 
+		--@gets: node | _ref | la referencia del objeto base.
+		------------------------------------------------
+		fn renameObj _obj _ref =
+		(
+			_tmpName = _ref.name
+			_tmpNameParts = FilterString _tmpName "_"
+			 _tmpNameParts[5] = substituteString _tmpNameParts[5] _tmpNameParts[5] ("fix-"+_tmpNameParts[5])
+			_tmpName = lb.str.join _tmpNameParts "_"
+			
+			_auxNodes = lb.layer.getLayerNodes _auxLayer
+
+			_topIndex = -1
+			for _auxNode in _auxNodes do 
+			(
+				if matchpattern _auxNode.name pattern:("*"+_tmpNameParts[5]+"*") do 
+				(
+					_tmpPart5 = (filterString _auxNode.name "_")[5]
+					_tmpIndex = (filterString _tmpPart5 "#")
+					if _tmpIndex.count == 1 then 
+					(
+						if (_topIndex as integer ) < 1 do _topIndex = 0 
+					)
+					else 
+					(
+						if (_topIndex as integer ) < (_tmpIndex[2] as integer) do _topIndex = (_tmpIndex[2] as integer )
+					)
+				)
+			)
+			_finalNameParts = filterString _tmpName "_"
+
+			if _topIndex != -1 then
+			(
+				_topIndex += 1
+				if _topIndex <= 9 then
+				(
+					_topIndex = "#00" + (_topIndex as string)
+				)
+				else if  _topIndex <= 99 then
+				(
+					_topIndex = "#0" + (_topIndex as string)
+				)
+				else _topIndex ="#" + (_topIndex as string)
+
+				_finalNameParts[5] = _finalNameParts[5] + _topIndex
+			)
+			_finalName = lb.str.join _finalNameParts "_"
+
+			_obj.name = _finalName
+		)
+
+		------------------------------------------------
+		--@fn: undefined | layerInit | Funcion para inicializar las layers auxiliares donde se guardan los objetos
+		------------------------------------------------
+		fn layerInit =
+		(
+			_tmp = lb.layer.getLayerbyName "_auxAnimFix_"
+			if _tmp == undefined then 
+			(
+				_tmp = lb.layer.newLayer name:"_auxAnimFix_"
+			)
+			_auxLayer = _tmp
+		)
+
+		------------------------------------------------
+		--@fn: undefined | enableRunButton | Función usada en callback de cambió de selseccion para activar o desactivar el boton de edit pose si hay algun objeto usable en la seleccion
+		------------------------------------------------
+		fn enableRunButton = 
+		(
+			chbrun.enabled = false
+			if selection.count > 0 do 
+			(
+				for _obj in selection do
+				(
+					if (filterString _obj.name "_")[3] == lb.nc.NC_classMesh do 
+					(
+						chbrun.enabled = true
+					)	
+				)
+			)
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | clearMeshCopies | Limpia las arrays de uso interno de la tool y borra todos los objetos auxiliares
+		------------------------------------------------
+
+		fn clearMeshCopies = 
+		(
+			for i = _meshCopies.count to 1 by -1 do 
+			(
+				if isValidNode _meshCopies[i] do delete _meshCopies[i]
+			) 
+			_meshCopies = #()
+			_baseMeshes = #()
+			IsolateSelection.ExitIsolateSelectionMode()
+		)
+
+		------------------------------------------------
+		--@fn: undefined | updateButtonsUI | Actualiza la interfaz grafica con el prev y siguiente, desabilitandolos cuando la seleccion interna esta a 1 o al max.
+		--@gets integer | _internalIndex | indice del controlador interno de las mallas isoladas
+		--@gets array | _meshCopies | las mallas isoladas
+		------------------------------------------------
+		fn updateButtonsUI _internalIndex _meshCopies = 
+		(
+			if chbrun.enabled == true then 
+			(
+				btnPrev.enabled = true 
+				btnNext.enabled = true
+				
+
+				if _internalIndex == 1 then 
+				(
+					btnPrev.enabled = false 
+				)
+				if _internalIndex == _meshCopies.count then 
+				(
+					btnNext.enabled = false 
+				)
+			)
+			else 
+			(
+				btnPrev.enabled = false 
+				btnNext.enabled = false 
+			)
+		)
+
+		------------------------------------------------
+		
+		--@fn: undefined | getObjToPaint | Refresca en el visor el ciclo entre objetos de deformación.
+		--@gets integer | _internalIndex | indice del controlador interno de las mallas isoladas
+		--@gets array | _meshCopies | las mallas isoladas
+		------------------------------------------------
+
+		fn getObjToPaint _internalIndex _meshCopies = 
+		(
+			for _meshCopy in _meshCopies do 
+			(
+				_meshCopy.ishidden = false 
+			)
+			setArrowCursor()
+			select _meshCopies[_internalIndex]
+			modPanel.setCurrentObject _meshCopies[_internalIndex].modifiers[#Edit_P_Anim_Fix]
+			subobjectLevel = 1
+			macros.run "PolyTools" "PolyDrawDrag"
+			macros.run "PolyTools" "PolyShiftMove"
+		)
+
+		------------------------------------------------
+		--@fn: undefined | addEditPolyBeforeTurbos | Añade un modificador edit poly o morpher antes del modificador turbosmooth
+		--@gets array | _meshes | las meshes a las que añadir el modificador.
+		--@gets _mode | string | #Edit_Poly ó #Morpher
+		------------------------------------------------
+
+		fn addEditPolyBeforeTurbos _meshes _mode = 
+		(
+			_lowestTurbo = 0 
+			for _mesh in _meshes do 
+			(
+				_mymod = undefined 
+				case _mode of
+				(
+					#Edit_Poly: _mymod = Edit_poly name:"Edit_P_Anim_Fix"
+					#Morpher: _mymod = Morpher name:"Morph_Anim_Fix"
+				)
+				
+				for i = 1 to _mesh.modifiers.count do 
+				(
+					if classOf _mesh.modifiers[i] == TurboSmooth do _lowestTurbo = i
+				)
+				if _lowestTurbo == 0 then 
+				(
+					addModifier _mesh _mymod
+				)
+				else 
+				(
+					addModifier _mesh _mymod before:_lowestTurbo 
+				)
+			)
+		)
+
+		------------------------------------------------
+		--@fn: undefined | createIsolateObjects | Crea una copia de edición de los objetos seleccionados y las isola.
+		------------------------------------------------
+
+		fn createIsolateObjects = 
+		(
+			_selection = #()
+			for _obj in selection where (filterString _obj.name "_")[3] == lb.nc.NC_classMesh do 
+			(
+				_copy = copy _obj
+				_auxLayer.addNode _copy
+				renameObj _copy _obj
+				for i = _copy.modifiers.count to 1 by -1 do 
+				(
+					if _copy.modifiers[i].name == "Morph_Anim_Fix" do deletemodifier _copy _copy.modifiers[i]
+				)
+				append 	_meshCopies _copy
+				append _baseMeshes _obj
+				append _selection _copy
+			)
+			select _selection
+			IsolateSelection.EnterIsolateSelectionMode()
+		)	
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+			callbacks.addscript #selectionSetChanged "lb.animDeform.rollMain.enableRunButton()" id:#buttonListener
+			layerInit()
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+			callbacks.removescripts id:#buttonListener
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollMainDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollMainDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--almacena posicion
+			lb.xml.setAttribute parent.cfgFile ("rollMain/pos") "x" (((getDialogPos rollMainDef).x) as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/pos") "y" (((getDialogPos rollMainDef).y) as string)
+			
+			--almacena tamaño
+			lb.xml.setAttribute parent.cfgFile ("rollMain/size") "width" (rollMainDef.width as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/size") "height" (rollMainDef.height as string)
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			_width = (lb.xml.getAttribute parent.cfgFile ("rollMain/size") "width") as integer
+			_height = (lb.xml.getAttribute parent.cfgFile ("rollMain/size") "height") as integer
+				
+			--posicion
+			_posX = (lb.xml.getAttribute parent.cfgFile ("rollMain/pos") "x") as integer
+			_posY = (lb.xml.getAttribute parent.cfgFile ("rollMain/pos") "y") as integer
+				
+			--establece minimos
+			if _width < minRollWidth then _width = minRollWidth
+			if _height < minRollHeight then _height = minRollHeight
+			if _posX < 0 then _posX = 0
+			if _posY < 0 then _posY = 0
+				
+			--aplica los valores
+			rollMainDef.width = _width
+			rollMainDef.height = _height
+			setDialogPos rollMainDef [_posX,_posY]
+		)
+
+	
+
+	
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollMain | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		--@gets: point2 | size | tamaño al que se ha redimensionado el rollout
+		------------------------------------------------
+		on rollMainDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollMain | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollMainDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+			if parent.rollMain != undefined then resize [parent.rollMain.width, parent.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollMain | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollMainDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+			
+			parent.opened = false --indica que la herramienta está cerrada.
+			updateToolbarButtons()
+		)
+
+		-----------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del boton.
+		--@control: checkbutton | chbrun | El elemento que dispara el evento.
+		------------------------------------------------
+		on chbrun changed state do 
+		(
+			if state then 
+			(
+				btnPrev.enabled = true 
+				btnNext.enabled = true
+				btnMoveTool.enabled = true 
+				btnCommit.enabled = true
+				createIsolateObjects()
+				addEditPolyBeforeTurbos _selection #Edit_poly
+				updateButtonsUI _internalIndex _selection
+				getObjToPaint _internalIndex _selection 
+			)
+			else 
+			(
+
+				_internalIndex = 1
+				btnPrev.enabled = false 
+				btnNext.enabled = false
+				btnMoveTool.enabled = false 
+				btnCommit.enabled = false 
+			)
+		)
+
+		-----------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton.
+		--@control: button | btnMoveTool | El elemento que dispara el evento.
+		------------------------------------------------
+
+		on btnMoveTool pressed do 
+		(
+			macros.run "PolyTools" "PolyShiftMove"
+		)
+
+		-----------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton.
+		--@control: button | btnPrev | El elemento que dispara el evento.
+		------------------------------------------------
+
+		on btnPrev pressed do 
+		(
+			_internalIndex -=1
+			updateButtonsUI _internalIndex _selection
+			getObjToPaint _internalIndex _selection 
+		)
+
+		-----------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton.
+		--@control: button | btnNext | El elemento que dispara el evento.
+		------------------------------------------------
+	
+		on btnNext pressed do 
+		(
+			_internalIndex +=1
+			updateButtonsUI _internalIndex _selection
+			getObjToPaint _internalIndex _selection 
+		)
+		-----------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton.
+		--@control: button | btnCommit | El elemento que dispara el evento.
+		------------------------------------------------
+	
+		on btnCommit pressed do 
+		(
+			
+			for i = 1 to _baseMeshes.count  do 
+			(
+				_theIndex = undefined
+				for j = _baseMeshes[i].modifiers.count to 1 by -1 do 
+				(
+					if _baseMeshes[i].modifiers[j].name == "Morph_Anim_Fix" do _theIndex = j
+				)
+				if _theIndex == undefined do  
+				(
+					addEditPolyBeforeTurbos _baseMeshes[i] #Morpher
+					for j = _baseMeshes[i].modifiers.count to 1 by -1 do 
+					(
+						if _baseMeshes[i].modifiers[j].name == "Morph_Anim_Fix" do _theIndex = j
+					)
+				)
+
+				_keep = true
+				_index = 1
+
+				select _baseMeshes[i]
+
+				for n=1 to 100 do
+				(
+					keep = WM3_MC_HasData _baseMeshes[i].modifiers[_theIndex] n
+					if keep do _index = n + 1	
+				)
+
+
+				_morphChannelNames = #()
+				for j = 1 to _index do 
+				(
+					append _morphChannelNames (wm3_mc_getname _baseMeshes[i].modifiers[_theIndex] j)
+				)
+
+				_baseMeshes[i].modifiers[_theIndex].Autoload_of_targets = 1
+
+				_addToMorph = true 
+				for j = 1 to _morphChannelNames.count do 
+				(
+					if _meshCopies[i].name == _morphChannelNames[j] do _addtoMorph = false
+				)
+
+				if _addToMorph == true do 
+				(
+					WM3_MC_BuildFromNode _baseMeshes[i].modifiers[_theIndex] _index _meshCopies[i]
+					WM3_MC_Rebuild _baseMeshes[i].modifiers[_theIndex] _index
+
+					with animate on 
+					(
+						t = currentTime
+						_baseMeshes[i].modifiers[_theIndex][_index].value = 100
+						sliderTime = (t-spnRange.value)
+						_baseMeshes[i].modifiers[_theIndex][_index].value = 0
+						sliderTime = (t+spnRange.value)
+						_baseMeshes[i].modifiers[_theIndex][_index].value = 0
+						sliderTime = t
+
+					)
+				)
+				animButtonState = false
+				_meshCopies[i].ishidden = true
+			)
+			IsolateSelection.ExitIsolateSelectionMode()
+			chbrun.checked = false
+			_internalIndex = 1
+			btnPrev.enabled = false 
+			btnNext.enabled = false
+			btnMoveTool.enabled = false 
+			btnCommit.enabled = false 
+		)
+
+	)--rollMainDef
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: templateTool | Contiene la herramienta anim_deform.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct tl_animDeform
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,					--@var: category | Categoria de la tool.
+		className = lb.getFileToolName (getThisScriptFilename() as string),	--@var: className | Nombre de la tool.
+		description = "Tool anim_deform",		--@var: description | Descripcion de la tool.
+		
+		cfgFile = (lb.config.getToolsIniPath()) + (lb.getFileToolName (getThisScriptFilename() as string)) + ".cfg",	--@var: cfgFile | Archivo de configuracion de la tool.
+			
+		opened = false,			--@var: opened | Indica si la herramienta está abierta.
+			
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+
+		
+			
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--ROLLOUTS
+		------------------------------------------------------------------------------------------------
+		
+		rollMain = rollMainDef,	--@var: rollMain | Almacena el rollout principal de la herramienta.
+			
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+
+		
+		------------------------------------------------
+		--@fn: boolean | isOpen | Devuelve información true o false, si la herramienta está abierta o cerrada.
+		------------------------------------------------
+		fn isOpen =
+		(
+			this.opened
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | refreshInterface | Refresca el interface inicial de la herramienta
+		------------------------------------------------
+		fn refreshInterface =
+		(
+			--refresca el interface de la herramienta
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | createInterface | Crea el interface inicial de la herramienta
+		------------------------------------------------
+		fn createInterface =
+		(
+			--crea el interface, lo redimensiona y lo reposiciona
+			createDialog this.rollMain lockwidth:true lockheight:true pos:[-10000,0] style:#(#style_toolwindow, #style_titlebar, #style_sysmenu, #style_resizing)
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | destroyInterface | Destruye el interface de la herramienta.
+		------------------------------------------------
+		fn destroyInterface =
+		(
+			destroyDialog this.rollMain --cierra la herramienta.			
+		),--destroyInterface
+		
+		------------------------------------------------
+		--@fn: undefined | run | Lanza la herramienta.
+		------------------------------------------------
+		fn run =
+		(
+			this.createInterface() --crea el interface.
+			this.opened = true --indica que la herramienta está abierta
+		),--execute
+		
+		------------------------------------------------
+		--@fn: undefined | close | Cierra la herramienta.
+		------------------------------------------------
+		fn close =
+		(
+			this.destroyInterface() --destruye el interface.
+			this.opened = false --indica que la herramienta está cerrada.
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addTool this --añade la tool a la libreria principal	
+		)		
+		
+	)--tl_animDeform
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------	
+	
+	tl_animDeform() --crea la herramienta
+)

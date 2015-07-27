@@ -1,0 +1,3895 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--Descripcion: libreria de plantilla
+------------------------------------------------------------------------------------------------------------------------------------------------
+(	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: template | Contiene la libreria de plantilla.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct lib_materials
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,					--@var: category | Categoria de la libreria.
+		className = lb.getFileLibName (getThisScriptFilename() as string),	--@var: className | Nombre de la libreria.
+		description = "Librería de funciones relativas a materiales",	--@var: description | Descripcion de la libreria.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		defaultStandardMaterial = undefined, --@var: defaultStandardMaterial | Material standard para utilizar en los pases especiales cuando las propiedades extendidas de los materiales para mental ray se quedan podriddas debido a un bug de max. (Esto pasaba en Max 2010, ahora no se si pasa en 2013 y 2014, hay que comprobarlo).
+
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: array{material} | getSubMaterials | Devuelve los materiales que forman un material.
+		--@gets: material | mat | Material del cual obtener los submateriales.
+		--@opt: boolean | ignoreSelf | false | Hace que la funcion no incluya el propio material pasado por parametro en el array que devuelve.
+		--@opt: boolean | makeUnique | true | Indica si eliminar los duplicados del array devuelto.
+		--@opt: integer | deepLevelLimit | -1 | Indica el nivel de profundidad limite al que busca, menor que cero equivale a infinito. 1 solo los submateriales de primer nivel, 2 los submateriales de los submateriales...
+		--@opt: integer | currentDeepLevel | 0 | Variable de gestion interna de la recursividad para saber el nivel actual.
+		------------------------------------------------
+		fn getSubMaterials mat ignoreSelf:true makeUnique:true deepLevelLimit:-1 currentDeepLevel:0 =
+		(
+			_subMaterials = #()
+			
+			if mat != undefined then
+			(
+				if superClassof mat == material then --si es un material
+				(
+					if not ignoreSelf then append _subMaterials mat --almacena el material
+					
+					if (deepLevelLimit < 0) or (deepLevelLimit > 0) then
+						for i = 1 to mat.numsubs do _subMaterials += this.getSubMaterials mat[i] ignoreSelf:false deepLevelLimit:(deepLevelLimit - 1) currentDeepLevel:(currentDeepLevel + 1) --busca los submateriales del material
+				)
+				else if classof mat == SubAnim then
+				(
+					if superclassof mat.object == material then
+					(
+						if not ignoreSelf then append _subMaterials mat.object
+							
+						if (deepLevelLimit < 0) or (deepLevelLimit > 0) then
+							for i = 1 to mat.object.numsubs do _subMaterials += this.getSubMaterials (mat.object)[i] ignoreSelf:false deepLevelLimit:(deepLevelLimit - 1) currentDeepLevel:(currentDeepLevel + 1) --busca los submateriales del material
+					)
+				)--if else
+			)--if mat != undefined
+			
+			if makeUnique then _subMaterials = makeUniqueArray _subMaterials
+			
+			_subMaterials
+		),
+		
+		------------------------------------------------
+		--@fn: array | getSceneMaterials | Funcion que devuelve los materiales de la escena en un array los materiales duplicados, o submateriales que no deberia devolver scenematerials no los devuelve
+		--@opt: array{node} | alternativeNodes | #() | Array de nodos concretos de los que queremos los materiales.
+		--@opt: boolean | includeSubMaterials | false | Flag para indicar si queremos obtener los submateriales los nodos pasados.
+		------------------------------------------------
+		fn getSceneMaterials alternativeNodes:#() includeSubmaterials:false =
+		(
+			_returnMats = #()
+			
+			_nodesToUse = objects as array
+			
+			if alternativeNodes.count !=0 then
+				_nodesToUse = alternativeNodes
+			
+			--recorre la escena buscando los materiales de los objetos
+			for _obj in _nodesToUse do
+			(
+				if _obj.material != undefined then
+					appendIfunique _returnMats _obj.material
+				
+				if includeSubmaterials then
+					for m in (this.getSubMaterials _obj.material) do
+						if m != undefined then
+							appendIfunique _returnMats m
+			)--for
+			
+			_returnMats
+		),
+
+		------------------------------------------------
+		--@fn: array | getMaterialsRecursive | Función que devuelve los materiales de los nodos pasados por parámetro, así como de los modificadores internos
+		--@opt: array{node} | nodes | #() | Array de nodos concretos de los que queremos los materiales.
+		------------------------------------------------
+		fn getMaterialsRecursive node =
+		(
+			_returnMats = #()
+
+			_promNames = getPropNames node
+
+
+			if isProperty node #value and superclassof node.value == material then
+				appendIfunique _returnMats node.value
+			else
+			(
+				for _pn in _promNames do
+				(
+					if _pn == #bitmap do continue -- Excepción para evitar try catch
+					_propValue = getProperty node _pn
+					if (superclassof _propValue) == material then appendIfunique _returnMats _propValue
+				)
+
+				if node.numSubs != 0 then
+				(
+					for i=1 to node.numSubs where node[i].value != undefined do
+					(
+						_returnMats += this.getMaterialsRecursive node[i]
+					)
+				)
+			)
+
+			_returnMats
+		),
+
+		------------------------------------------------
+		--@fn: array | getMaterialsRecursiveExt | Función que devuelve los materiales de los nodos pasados por parámetro, así como de los modificadores internos
+		--@opt: array{node} | nodes | #() | Array de nodos concretos de los que queremos los materiales.
+		--@ret: array | #() | Array con la estructura de datos para cada material, con la información necesaria para acceder al material
+		------------------------------------------------
+		fn getMaterialsRecursiveExt node rootNode:undefined subAnimChain:#() fullSearch:false=
+		(
+			struct _materialInfo
+			(
+				rootNode = undefined,
+				subAnimChain = #(),
+				property = undefined,
+				material = undefined
+			)
+
+			_returnMats = #()
+
+			if node != undefined do
+			(
+				if rootNode == undefined do rootNode = node
+
+				if isProperty node #value and superclassof node.value == material then
+				(
+					append _returnMats (_materialInfo rootNode:rootNode subAnimChain:subAnimChain property:#value material:node.value)
+				)
+				else
+				(
+					_propNames = getPropNames node
+					for _pn in _propNames do
+					(
+						if fullSearch == false and (findItem #(#material) _pn) == 0 do continue --Hacemos la búsqueda completa o vamos a tiro hecho a las propiedades que nos interesan
+						if _pn == #bitmap do continue -- Excepción para evitar try catch
+						_propValue = getProperty node _pn
+						if (superclassof _propValue) == material do append _returnMats (_materialInfo rootNode:rootNode subAnimChain:subAnimChain property:_pn material:_propValue)
+					)
+
+					if node.numSubs != 0 do
+					(
+						if fullSearch then --Hacemos la búsqueda completa o vamos a tiro hecho a las propiedades que nos interesan
+						(
+							for i=1 to node.numSubs where node[i].value != undefined do
+							(
+								_returnMats += this.getMaterialsRecursiveExt node[i] rootNode:rootNode subAnimChain:(subAnimChain+#(i)) fullSearch:fullSearch
+							)
+						)
+						else if subAnimChain.count == 0 do --A tiro hecho es a tiro hecho, queda muy feo, pero mejor ésto que unos iluminadores tristes
+						(
+							--Pelo
+							if node[4] != undefined do
+								for i=1 to node[4].numSubs where node[4][i].value != undefined and (classof node[4][i].value) == Hair_Generate do
+									_returnMats += this.getMaterialsRecursiveExt node[4][i] rootNode:node subAnimChain:(#(4,i)) fullSearch:fullSearch
+							--Material
+							if node[5] != undefined and (superclassof node[5].value) == material do
+								_returnMats += this.getMaterialsRecursiveExt node[5] rootNode:node subAnimChain:(#(5)) fullSearch:fullSearch
+						)
+					)
+				)
+			)
+
+			_returnMats
+		),
+			
+		------------------------------------------------
+		--@fn: array{node} | getMatOwners | Devuelve un array con los objetos que usan el material pasado.
+		--@gets: material | mat | Material que buscar en los objetos de la escena.
+		--@opt: boolean | includeSubmaterials | false | Indica si se debe buscar en los submateriales. TO DO.
+		------------------------------------------------
+		fn getMatOwners mat includeSubmaterials:false =
+		(
+			_matOwners = #()
+			
+			if mat != undefined then
+				for _obj in objects where _obj.mat == mat do append _matOwners _obj					
+			
+			_matOwners
+		),
+		
+		------------------------------------------------
+		--@fn: array{string} | getBitmapPaths | Devuelve un array con todos los paths de los bitmaps de un objeto o material.
+		--@gets: material-node | source | Material u objeto del que buscar las rutas de sus mapas.
+		------------------------------------------------
+		fn getBitmapPaths source =
+		(
+			_process = true
+			_bitmapPaths = #()
+			
+			--si el material pasado es un material de xref, resuelve la referencia y obtiene el material al que apunta
+			if classof source == XRef_Material then source = source.getSourceMaterial true
+			
+			--------------------------------------------------------------
+			--casos especiales donde no debe buscar los bitmaps
+			
+			--si un point de scripts lo ignora
+			if isProperty source #name and findString source.name "scripts" != undefined then _process = false
+			--------------------------------------------------------------
+			
+			if source != undefined and _process then
+				if source.numsubs > 0 then 
+					for i = 1 to source.numsubs do
+					(
+						try 
+						(
+							if classof source[i].object == BitmapTexture then 
+								append _bitmapPaths (getFileNamePath source[i].object.filename)
+						)
+						catch()
+						
+						join _bitmapPaths (this.getBitmapPaths source[i])
+					)--for
+			
+			makeUniqueArray _bitmapPaths
+		),
+		
+		------------------------------------------------
+		--@fn: array{bitmap} | getBitmaps | Devuelve un array con todos los bitmaps de un objeto o material.
+		--@gets: material-node | source | Material u objeto del que buscar sus mapas.
+		------------------------------------------------
+		fn getBitmaps source =
+		(
+			_bitmaps = #()
+			_process = true
+			
+			--si el material pasado es un material de xref, resuelve la referencia y obtiene el material al que apunta
+			if classof source == XRef_Material then
+				source = source.getSourceMaterial true
+				
+			if source != undefined then
+			(
+				for i=1 to source.numsubs do
+				(
+					if (isProperty source[i] #object) and (classof source[i].object == BitmapTexture) then 
+					(
+						_bitmap = source[i].object.filename
+						if _bitmap != undefined do --esto es porque a veces reconoce que hay una textura pero en realidad no la hay
+							appendIfUnique _bitmaps _bitmap
+					)
+					
+					_bitmaps += this.getBitmaps source[i]
+				)--for
+				
+				if (maxVersion())[1] < 15000 then  --para versiones anteriores a 2013
+				(
+					try
+						for _ca in source.custAttributes do _bitmaps += this.getBitmaps _ca
+					catch()
+				)
+				else --para version 2013 y posteriores, que la funcion getNumRefs ya existe
+				(
+					--Ésta comprobación es necesaria porque algunos subAnims petan al acceder a sus customAttributes.
+					--Comprobando esto se evita tener que hacer un try catch(), y va al doble de velocidad.
+					if refs.getNumRefs source > 0 then	
+					(
+						for _ca in source.custAttributes do
+							_bitmaps += this.getBitmaps _ca
+					)--if
+				)
+			)
+			
+			_bitmaps
+		),
+		
+		------------------------------------------------
+		--@fn: array{bitmap} | getBitmaps | Devuelve un array con los mapas del material u objeto pasado por parametro.
+		--@gets: material-node | source | Material u objeto del que buscar sus mapas.
+		--@opt: name | type | #all | Tipo de mapa a que se busca. Opciones -> #all, #2D, #3D, #COMP, #COLMOD, #OTHER, #mental_ray.		
+		------------------------------------------------
+		fn getTextureMaps source type:#all =
+		(
+			_textMaps = #()
+			
+			--si el material pasado es un material de xref, resuelve la referencia y obtiene el material al que apunta
+			if classof source == XRef_Material then
+				source = source.getSourceMaterial true
+				
+			if source != undefined then
+				if source.numsubs > 0 then 
+					for i = 1 to source.numsubs do
+					(
+						try 
+						(
+							if (superclassof source[i].object == textureMap) and ((type == #all) or (source[i].object.category == type)) then
+								append _textMaps (source[i].object)
+							else if (superclassof source[i].object == textureMap) and (type == #OTHER) then
+								append _textMaps (source[i].object)
+						)
+						catch()
+						
+						_textMaps += (this.getTextureMaps source[i] type:type)
+					)
+				
+			makeUniqueArray _textMaps
+		),
+		
+		
+		------------------------------------------------
+		--@fn: array{material} | getSubmaterialsByClass | Devuelve los submateriales del tipo que le indiquemos por matClass.
+		--@gets: material | mat | Material cuyos submateriales explorar en busca de los del tipo solicitado.
+		--@gets: classof | matClass | Tipo de los submateriales que se solicitan.
+		--TO DO: Todavía no entra dentro de materiales por referencia.
+		------------------------------------------------
+		fn getSubmaterialsByClass mat matClass =
+		(
+			_submats = #()
+			
+			--------------------------------------------------------------
+			if classOf mat == matClass then --Si el material es de del tipo que buscamos entonces lo apilaremos.
+				append _submats mat
+			else if classOf mat == SubAnim then --Si lo que hemos recibido es un subanim entonces miraremos dentro de su object
+			(
+				if classOf mat.object == matClass then
+					append _submats mat.object
+			)--if else if
+			--------------------------------------------------------------
+			
+			if mat != undefined then
+			(
+				if mat.numsubs > 0 do
+				(
+					for i = 1 to mat.numsubs do
+					(
+						if classof mat[i] == SubAnim then --Miro si es un subanim
+						(
+							--Miramos si el objeto al que se refiere el subanim tiene de clase padre material.
+							if superclassof mat[i].object == material then join _submats (this.getSubmaterialsByClass mat[i] matClass)
+						)
+						else --Si no es un subanim entonces lo que haremos será llamar a la superclase de manera normal.
+						(
+							if superclassof mat[i] == material then join _submats (this.getSubmaterialsByClass mat[i] matClass)
+						)--if else classof
+					)--for mat.numsubs
+				)--if mat.numSubs
+				
+				try
+				(
+					if mat.custAttributes != undefined and mat.custAttributes.count > 0 then	
+					(
+						for cust in mat.custAttributes do
+						(
+							if classof cust == SubAnim then --Miro si es un subanim
+							(
+								--Miramos si el objeto al que se refiere el subanim tiene de clase padre material.
+								if superclassof cust.object == material then join _submats (this.getSubmaterialsByClass cust matClass)
+							)
+							else --Si no es un subanim entonces lo que haremos será llamar a la superclase de manera normal.
+							(
+								if superclassof cust == material then	join _submats (this.getSubmaterialsByClass cust matClass)
+							)--if else
+						)--for mat.custAttributes
+					)--if mat.custAttributes
+				)
+				catch()
+			)--if mat != undefined
+			
+			_submats
+		),
+		
+		------------------------------------------------
+		--@fn: array{material} | getMaterialsByTextureName | Devuelve un array con los materiales de la escena que contienen esa textura.
+		--@gets: string | texturePattern | Patron a buscar en el nombre de las texturas.
+		--@opt: array{material} | materials | #() | Array de materiales donde buscar, si no se le pasa ninguno usa todos los de la escena.
+		------------------------------------------------
+		fn getMaterialsByTextureName texturePattern materials:#() =
+		(
+			_matArray = #() --array donde almacenaremos el resultado 
+			
+			--si no se le han pasado materiales, coge todos los de la escena
+			if materials.count == 0 then materials = this.getSceneMaterials()
+			
+			_submaterials = #() --array para desglosar los submateriales
+			for i=1 to materials.count do _submaterials[i] = (this.getSubMaterials materials[i] ignoreSelf:false) --desglosa los submateriales
+			
+			_bitmaps = #() --array para guardar todos los bitmaps de los materiales
+			for i=1 to _submaterials.count do
+			(
+				_bitmaps[i] = #() --añade un array vacio al array
+				for m in _submaterials[i] do _bitmaps[i] += this.getBitmaps m --recopila los bitmaps de los materiales
+			)--for
+			
+			--ahora se busca el patron en los bitmaps
+			_coincidentBitmaps = #()
+			for i=1 to _bitmaps.count do
+				for b in _bitmaps[i] where matchPattern b pattern:("*" + texturePattern + "*") do
+					appendIfUnique _matArray _submaterials[i][1]
+					
+			_matArray
+		),
+
+		------------------------------------------------
+		--@fn: array{material} | getObjectsByTextureName | Devuelve un array con los objetos que contienen esa textura en sus materiales.
+		--@gets: string | texturePattern | Patron a buscar en el nombre de las texturas.
+		--@opt: array{material} | materials | #() | Array de materiales donde buscar, si no se le pasa ninguno usa todos los de la escena.
+		--@opt: array{node} | nodes | #() | Array de objetos donde buscar, si no se le pasa ninguno usa todos los de la escena.
+		------------------------------------------------		
+		fn getObjectsByTextureName texturePattern materials:#() nodes:#() =
+		(
+			_nodes = #() --array para los nodos que tengan bitmaps con ese patron
+			
+			--si no se le han pasado materiales, coge todos los de la escena
+			if materials.count == 0 then materials = this.getSceneMaterials()
+			
+			--si no se le han pasado nodos, coge todos los de la escena
+			if nodes.count == 0 then nodes = objects as array
+				
+			--obtien los materiales que cumplen ese patron
+			_mats =	this.getMaterialsByTextureName texturePattern materials:materials
+			
+			--obtiene los objetos que llevan esos materiales
+			for m in _mats do _nodes += this.getMatOwners m
+			
+			--Ahora quitaremos los nodos que no estén en la lista de los que hemos sacado por material
+			for i=nodes.count to 1 by -1 do
+			(
+				if finditem _nodes nodes[i] == 0 then
+					deleteItem nodes i 
+			)
+			
+			nodes
+		),
+
+		------------------------------------------------
+		--@fn: array{material} | getSpecificMapsFromMaterial | Devuelve un array con los mapas de un tipo presentes en el material pasado.
+		--@gets: node-material | currentNode | Nodo, material o subanim en el que empezar a buscar de forma recursiva.
+		--@gets: classof | mapClass | Clase de mapa que buscar.
+		------------------------------------------------		
+		fn getSpecificMapsFromMaterial currentNode mapClass =
+		(
+			--Me creo un array con resultados.
+			_results = #()
+			
+			--Si es un material
+			if superclassof currentNode == material then
+			(
+				--Primero sacaremos los subanims del material
+				for i=1 to currentNode.numsubs do
+					_results += (this.getSpecificMapsFromMaterial currentNode[i] mapClass)
+				
+				--Luego los subanims de sus custom attributes.
+				for i=1 to currentNode.custAttributes.count do
+				(
+					for j=1 to currentNode.custAttributes[i].numsubs do
+						_results += (this.getSpecificMapsFromMaterial currentNode.custAttributes[i][j] mapClass)
+				)
+			)
+			--Si es un subanim entonces lo que haremos será intentar sacar la clase de su objeto.
+			else if classof currentNode == SubAnim then
+			(
+				--Intentamos sacar la clase del objeto al que se refiere el subanim y si coincide la añadiremos a los resultadoas
+				try
+				(
+					if currentNode.object != undefined and classof currentNode.object == mapClass then
+					(
+						append _results currentNode.object
+					)
+				)
+				catch()
+				
+				--Luego recorreremos a su vez los subanims de este objeto a ver si hay más submapas
+				for i=1 to currentNode.numsubs do
+					_results += (this.getSpecificMapsFromMaterial currentNode[i] mapClass)
+			)
+			
+			_results = makeUniqueArray _results
+			
+			_results
+		),
+
+		------------------------------------------------
+		--@fn: array{material} | getMaterialsByMapClass | Devuelve un array con los materiales que contengan ese tipo de mapa.
+		--@gets: classof | mapClass | Clase de mapa que buscar.
+		--@opt: array{material} | materials | #() | Array de materiales donde buscar, si no se le pasa ninguno usa todos los de la escena.
+		------------------------------------------------
+		fn getMaterialsByMapClass mapClass materials:#() =
+		(
+			--si no se le han pasado materiales, coge todos los de la escena
+			if materials.count == 0 then materials = this.getSceneMaterials()
+			
+			--Vamos a procesar el array y eliminar todos aquellos materiales que no tengan el mapa especificado en mapclass
+			for i=materials.count to 1 by -1 do
+			(
+				if (this.getSpecificMapsFromMaterial materials[i] mapClass).count == 0 then
+					deleteItem materials i
+			)
+			
+			materials
+		),
+
+		------------------------------------------------
+		--@fn: array{material} | getObjectsByMapClass | Devuelve un array con los objetos que contengan ese tipo de mapa.
+		--@gets: classof | mapClass | Clase de mapa que buscar.
+		--@opt: array{node} | nodes | #() | Array de objetos donde buscar, si no se le pasa ninguno usa todos los de la escena.
+		------------------------------------------------
+		fn getObjectsByMapClass mapClass nodes:#() =
+		(
+			_nodes =#() --array de nodos a devolver
+
+			--Si no he pasado nodos entonces tomaré todos los objetos de la escena
+			if nodes.count == 0 then nodes = Objects As Array
+				
+			--Obtiene los materiales que usan ese mapa
+			_mats =	this.getMaterialsByMapClass mapClass
+			
+			--Obtiene los objetos que llevan esos materiales
+			_mapNodes = #()
+			for m in _mats do _mapNodes += this.getMatOwners m
+				
+			--Ahora quitaremos los nodos que no estén en la lista de los que hemos sacado por material
+			for i = nodes.count to 1 by -1 do
+				if finditem _mapNodes nodes[i] != 0 then append _nodes nodes[i]
+			
+			_nodes 
+		),
+
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | setBitmapHighSettings | Sobreescribe los settings de sistema operativo para el tipo de bitmap pasado por parametro a sus niveles mas altos.
+		--@gets: name | bitmapType | Tipo de bitmap apra el cual sobreescribir los settings.
+		------------------------------------------------
+		fn setBitmapHighSettings bitmapType =
+		(
+			case bitmapType of
+			(
+				#jpeg:
+				(
+					jpegio.setQuality 100
+					jpegio.setSmoothing 100
+				)--jpg
+				
+				#png:
+				(
+					pngio.setType #true48
+					pngio.setAlpha true
+					pngio.setInterlaced false
+				)
+				
+				#tif:
+				(
+					tifio.setType #color
+					tifio.setShowControl #true
+					tifio.setCompression #none
+					tifio.setAlpha #true
+					tifio.setDPI 300.0
+				)--tif
+				
+				#bmp:
+				(
+					bmp.setType #true24
+				)--bmp
+				
+				#tga:
+				(
+					tgaio.setColorDepth 16
+					tgaio.setCompressed true
+					tgaio.setAlphaSplit true
+					tgaio.setPreMultAlpha true
+					tgaio.setAuthor ""
+					tgaio.setJobName ""
+					tgaio.setComment1 ""
+					tgaio.setComment2 ""
+					tgaio.setComment3 ""
+					tgaio.setComment4 ""
+				)--tga
+				
+				#rla:
+				(
+					rla.iRLAio.colorDepth = 16
+					rla.iRLAio.alpha = true
+					rla.iRLAio.premultAlpha = true
+					rla.iRLAio.author = ""
+					rla.iRLAio.zChannel = false
+					rla.iRLAio.mtlIDChannel = false
+					rla.iRLAio.nodeIDChannel = false
+					rla.iRLAio.uvChannel = false
+					rla.iRLAio.normalChannel = false
+					rla.iRLAio.realpixChannel = false
+					rla.iRLAio.coverageChannel = false
+				)--rla
+				
+				#rpf:
+				(
+					rpf.iRPFio.colorDepth = 16
+					rpf.iRPFio.alpha = true
+					rpf.iRPFio.premultAlpha = true
+					rpf.iRPFio.author = ""
+					rpf.iRPFio.zChannel = false
+					rpf.iRPFio.mtlIDChannel = false
+					rpf.iRPFio.nodeIDChannel = false
+					rpf.iRPFio.uvChannel = false
+					rpf.iRPFio.normalChannel = false
+					rpf.iRPFio.realpixChannel = false
+					rpf.iRPFio.coverageChannel = false
+					rpf.iRPFio.nodeRenderIDChannel = false
+					rpf.iRPFio.colorChannel = false
+					rpf.iRPFio.transpChannel = false
+					rpf.iRPFio.velocChannel = false
+					rpf.iRPFio.weightChannel = false
+					rpf.iRPFio.maskChannel = false
+				)--rpf
+				
+				#exr:
+				(
+					exrio.SetLoadExponent 1.0
+					exrio.SetSaveExponent 1.0
+					exrio.SetSavePreMultAlpha true
+					exrio.SetSaveAlpha true
+					exrio.SetSaveRed true
+					exrio.SetSaveGreen true
+					exrio.SetSaveBlue true
+					exrio.SetSaveBitDepth 0
+					exrio.SetSaveUseFrameNumDigits false
+					exrio.SetSaveFrameNumDigits 0
+					exrio.SetSaveCompressionType 2
+					exrio.SetSaveUseExponent false
+					exrio.SetSaveUseRealPix true
+					exrio.SetLoadBlackPoint 0.0
+					exrio.SetLoadWhitePoint 1.0
+					exrio.SetLoadRGBLevel 1.0
+					exrio.SetLoadRGBOffset 0.0
+					exrio.SetLoadStorageFormat 8
+					exrio.SetLoadDoColorTransform false
+					exrio.SetSaveUseDefaults false
+					exrio.SetLoadUseDefaults false
+					exrio.SetNetServerSaveOverrideParams false
+					exrio.SetNetServerLoadOverrideParams false
+					exrio.RemoveAllAttribs()
+					exrio.RemoveAllChannels()
+				)--exr
+			)--case _fileType
+		),		
+		
+		------------------------------------------------
+		--@fn: undefined | setAllMrArchDesignBackfaceCull | Activa/desactiva backface culling en todos los materiales y submateriales.
+		--@gets: boolean | activate | Indica si activar o desactivar el backface culling
+		------------------------------------------------
+		fn setAllMrArchDesignBackfaceCull activate =
+		(
+			mats = this.getSceneMaterials()
+			archMats = #()
+
+			for m in mats do
+			(
+				if classof m == Arch___Design__mi then appendIfUnique archMats m
+				appendIfUnique archMats (this.getSubmaterialsByClass m Arch___Design__mi)
+			)--for
+
+			for am in archMats do am.opts_backface_cull = activate
+		),
+
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | showMaterialInViewport | Hace visibles los materiales en viewport.
+		--@gets: node | obj | Objeto cuyos materiales mostrar en viewport.
+		------------------------------------------------
+		fn showMaterialInViewport obj =
+		(
+			if obj.material != undefined then
+			(
+				_mat = obj.material
+				if classof _mat == XRef_Material or classof _mat == XRefmaterial then
+					_mat = _mat.GetSourceMaterial true
+				
+				if classof _mat != Multimaterial then
+					_mat.showInViewport = true
+				else
+					for m in _mat where m != undefined do
+						m.showInViewport = true
+			)
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | hideMaterialInViewport | Oculta los materiales en viewport.
+		--@gets: node | obj | Objeto cuyos materiales ocultar en viewport.
+		------------------------------------------------
+		fn hideMaterialInViewport obj =
+		(
+			if obj.material != undefined then
+			(
+				_mat = obj.material
+				if classof _mat == XRef_Material or classof _mat == XRefmaterial then
+					_mat = _mat.GetSourceMaterial true
+				
+				if classof _mat != Multimaterial then
+				(
+					--_mat.showInViewport = true
+					_mat.showInViewport = false
+				)
+				else
+				(
+					for m in _mat where m != undefined do
+					(
+						--_m.showInViewport = true
+						m.showInViewport = false
+					)
+				)	
+			)
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | matCmp | Devuelve true si los dos materiales son el mismo, false si no.
+		--@gets: material | mat1 | Material 1 que comparar.
+		--@gets: material | mat2 | Material 2 que comparar.
+		------------------------------------------------
+		fn matCmp mat1 mat2 = 
+		(
+			_equals = true
+			
+			if mat1.numsubs == mat2.numsubs  then 
+			(
+				if mat1.numsubs > 0 then
+				(
+					for i = 1 to mat1.numsubs where _equals do
+						_equals = _equals and (matCmp mat1[i] mat2[i])
+				)
+				else if (mat2.numsubs != 0) or (mat1.value != mat2.value) then
+				(
+					-- para los casos siguientes hay errores de precisión. Los analizamos antes de devorlver error
+					if finditem #("Ambient Color", "Diffuse Color") mat1.name != 0 then
+					(
+						v = (mat1.value as point3) - (mat2.value as point3)						
+						if abs (v[1] + v[2] + v[3]) > 0.5 then _equals = false
+					)
+					else if mat1.name == "Glossiness" then
+					(
+						if abs (mat1.value - mat2.value) > 0.5 then _equals = false
+					)
+					else
+					(
+						_equals = false
+					)
+				)
+			)
+			else
+				_equals = false
+			
+			_equals
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | enableFirstDiffuseBitmap | Habilita el primer mapa de difuso que encuentra en los subanims de un material y devuelve TRUE si lo consigue
+		--@gets: material | mat | Material en el que habilitar su primer mapa de difuso.
+		--@opt: material | originalMat | undefined | Para que recursivamente se sepa en cada nivel de recusrividad cual era el material del que parten los subanims.
+		------------------------------------------------
+		fn enableFirstDiffuseBitmap mat originalMat:undefined =
+		(
+			_stop = false --flag de parada
+		  
+			if isProperty mat #object and classOf mat.object == Bitmaptexture then --si es un bitmap
+			(
+				bm = mat.object.filename --obtiene el nombre del bitmap
+				
+				if bm != undefined then --a veces detecta que hay un bitmap cuando no lo hay, por eso se comprueba que no sea undefined
+				(
+					nameParts = filterString bm "_" --separamos el nombre en partes
+					if nameParts[nameParts.count - 1] == lb.nc.NC_mapDiffuse then --si el mapa es de tipo DIFFUSE
+					(
+						showTextureMap originalMat mat.object on --habilita la textura en viewport
+						_stop = true --pone le flag de parada a true
+					)
+				)
+			)
+			else if mat.numSubs > 0 then --si mat no es un bitmap, hay que recorrer sus subanims de forma recursiva
+			(
+				if originalMat == undefined then originalMat = mat --si no se ha definido ORIGINALMAT usa el propio material
+				
+				--llama recursivamente a la funcion con en subAnim
+				--esta metido en un try porque al acceder a algunos subanims de algunos tipos de materiales salta una excepcion (BUG de max)
+				for i = 1 to mat.numSubs where not _stop do --recorre los subanims
+					try _stop = this.enableFirstDiffuseBitmap mat[i] originalMat:originalMat catch() 
+			)
+		  
+			_stop --devuelve el flag de parada
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | redirectBitmap | Redirecciona un bitmap usando el path viejo y el path nuevo. Devuelve TRUE si tiene exito, FALSE si no.
+		--@gets: array{node} | nodes | Objetos en los que redireccionar el bitmap.
+		--@gets: string | oldBitmapPath | Path del bitmap actual.
+		--@gets: string | newBitmapPath | Path del nuevo bitmap.		
+		------------------------------------------------
+		fn redirectBitmap nodes oldBitmapPath newBitmapPath =
+		(
+			for obj in nodes do
+			(
+				if classof obj == XRef_Material then
+					obj = obj.getSourceMaterial true
+				
+				if obj.numsubs > 0 then 
+					for i = 1 to obj.numsubs do
+					(
+						try 
+						(
+							if classof obj[i].object == BitmapTexture then 
+								if obj[i].object.filename == oldBitmapPath then
+								(
+									obj[i].object.filename = ""
+									obj[i].object.filename = newBitmapPath
+								)
+						)
+						catch()
+						
+						try
+							this.redirectBitmap #(obj[i]) oldBitmapPath newBitmapPath
+						catch()
+					)--for
+			)--for
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | deleteDuplicatedMaterials | Elimina los materiales duplicados de la escena.
+		--@gets: array{node} | nodes | Objetos en los que buscar los materiales duplciados.		
+		------------------------------------------------
+		fn deleteDuplicatedMaterials nodes =
+		(
+			if nodes == undefined then nodes = (objects as array)
+			
+			_mats = this.getSceneMaterials() --obtiene los materiales de la ecena
+			
+			_uniqueMatsNames = #() --array para almacenar los nombres de los materiales no duplicados
+			_duplicatedMatsNames = #() --array para almacenar los nombres de los materiales que sustituiran a los duplicados
+			_duplicatedMats = #() --array para almacenar los materiales que sustituiran a los duplicados
+			
+			for _mat in _mats do
+				if not appendIfunique _uniqueMatsNames _mat.name then
+					if appendIfunique _duplicatedMatsNames _mat.name then
+						append _duplicatedMats _mat
+			
+			for _obj in nodes do --recorre los nodos mirando si tienen uno de los materiales duplicados y sustituyendolo y apor uno unico
+			(
+				_index = 0
+				
+				if _obj.material != undefined then
+				(
+					_index = findItem _duplicatedMatsNames _obj.material.name --averigua si tiene un material duplicado
+				
+					if _index != 0 then --si lleva un material duplicado lo sustituye por el que se va a quedar de todos
+						_obj.material = _duplicatedMats[_index]
+				)--if
+			)--for			
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | isMaterialShownInViewport | Devuevle TRUE si el material psado está visible en viewport y FALSE si no.
+		--@gets: material | mat | Material del que aqveriguar si está visible ne viewport
+		--@opt: boolean | fix | false | Fix hace que si algun material no esta visible en viewport, lo ponga. Para los SSS fast skin material se activa el mapa de overall diffuse directamente ignorando el fix  porque no existe la función para saber si está activo.
+		------------------------------------------------
+		fn isMaterialShownInViewport mat fix:false =
+		(
+			--Creamos un flag para ver cual es verdadero
+			_isShown = undefined
+			
+			--Array de excluídos (no pasan check)
+			
+			_excluded = #(Hair_Realistic,CompositeTextureMap)
+
+			--Si es un xref cogemos el source
+			if classof mat == XRef_Material or classof mat == XRefmaterial then
+			(
+				mat = mat.GetSourceMaterial true
+			)
+			
+			--Si es un material vacio entonces retorno verdadero ya que no se aplica
+			if mat == undefined or (finditem _excluded (classof mat)) > 0 then
+			(
+				_isShown = true
+			)
+			else
+			(
+				--Creamos un array de tipos de materiales compuestos.
+				_groupMats = #(Multimaterial,Shell_Material,compositematerial,Shellac,Blend,TopBottom)
+				--Creo otro array con los materiales simples que tengo que mirar.
+				_simpleMats = #(Arch___Design__mi,SSS_Fast_Skin_Material__mi,Standardmaterial,XRef_Material)
+				--Miramos que tipo de material es, simple o de grupo.
+				--Si es material complejo
+				if (findItem _groupMats (classof mat)) != 0 then
+				(
+					--Si es un blend 
+					if classof mat == Blend then
+					(
+						--Miramos cual es el que está marcado como interactivo
+						if mat.interactive == 0 then -- el mapa 1
+							_isShown = (this.isMaterialShownInViewport mat.map1 fix:fix)
+						else if mat.interactive == 1 then -- el mapa 2
+							_isShown = (this.isMaterialShownInViewport mat.map2 fix:fix)
+						else -- la máscara
+						(
+							if (classof mat.mask) != Bitmaptexture then
+								_isShown = (this.isMaterialShownInViewport mat.mask fix:fix)
+							else
+								_isShown = true
+						)
+					)
+					--Si es un multisubobject
+					else if classof mat == Multimaterial then
+					(
+						--Hago una llamada por cada material dentro del Multisubobject
+						for i=1 to mat.materialList.count do
+							if mat.mapEnabled[i] do
+							(
+								if _isShown != undefined then
+									_isShown = _isShown and (this.isMaterialShownInViewport mat.materialList[i] fix:fix)
+								else
+									_isShown = (this.isMaterialShownInViewport mat.materialList[i] fix:fix)
+							)
+					)
+					--Si es un shell
+					else if classof mat == Shell_Material then
+					(
+						--Cojo el original
+						_isShown = (this.isMaterialShownInViewport mat.originalMaterial fix:fix)
+					)
+					--Si es un composite
+					else if classof mat == compositematerial then
+					(
+						--Me recorro la lista de materiales que no son nulos ni están desactivados
+						for i=1 to mat.materialList.count do
+							if mat.materialList[i] != undefined and mat.mapEnables[i] do
+								_isShown = (this.isMaterialShownInViewport (mat.materialList[i]) fix:fix)
+					)
+					--Si es un Shellac
+					else if classof mat == Shellac then
+					(
+						--Cojo el material base del shellac.
+						_isShown = (this.isMaterialShownInViewport mat.shellacMtl1 fix:fix)
+					)
+					--Si es un TopBottom iremos directos al de abajo
+					else if classof mat == TopBottom then
+					(
+						_isShown = (this.isMaterialShownInViewport mat.bottomMaterial fix:fix)
+					)
+				)
+				else --Si es un material simple.
+				(
+					--Si es un material SSS es un caso especial
+					if classof mat == SSS_Fast_Skin_Material__mi or classof mat == SSS_Fast_Material__mi or classof mat == SSS_Fast_Skin_Material_Displace__mi then
+					(
+						--Si no tiene mapa de difuso devolvemos verdadero (no hay nada que mostrar)
+						if mat.overall_color_shader == undefined then
+							_isShown = true
+						else --Si hay mapa lo sacamos directamente porque no hay manera de saber si está activado o no.
+						(
+							if hasProperty mat.overall_color_shader #map then
+							(
+								if fix then
+									showTextureMap mat mat.overall_color_shader.map true
+							)
+							else
+							(
+								if fix then
+									showTextureMap mat mat.overall_color_shader true
+							)
+							_isShown = true
+						)
+					)
+					--El material del car paint no se puede poner visible en viewport lo ponemos como true
+					else if classof mat == Car_Paint_Material__mi then
+					(
+						_isShown = true
+					)
+					else
+					(
+						--Vemos si es visible en el viewport
+						if mat.showInViewport then
+						(
+							_isShown = true
+						)
+						else --Si no lo es
+						(
+							_isShown = false
+							--Si hay fix lo arreglamos
+							if fix do
+							(
+								mat.showInViewport = true
+								_isShown = true
+							)
+						)
+					)
+				)
+			)
+			
+			if _isShown == undefined then
+				_isShown = false
+			_isShown
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | createLowBitmap | Devuevle TRUE si consigue crear el mapa de baja resolucion, FALSE si no.
+		--@gets: string | bitmapPath | Path del bitmap original.
+		--@gets: string | lowBitmapPath | Path del bitmap de baja resolucion que se va a crear.
+		--@opt: name | size | #half | Tamaño del bitmap a generar. {#full|#half|#third|#quarter|#eighth}.
+		--@opt: name | method | #unfiltered | Indica el metodo de reduccion de bitmaps que se va a usar. {#unfiltered|#filtered|#external}
+		--@opt: name | overwrite | #false | Indica si forzar a que sobrescriba la textura si existe. {#true|#prompt,|#false}
+		------------------------------------------------
+		fn createLowBitmap bitmapPath lowBitmapPath size:#half method:#unfiltered overwrite:#false =
+		(
+			_success = true
+			
+			if doesFileExist bitmapPath then --si existe el bitmap original puede continuar
+			(
+				_process = true --para saber si crear el mapa o no, por si hay que sobreescribirlo o no
+				_reduce = true --para saber si hay que reducir el mapa o no, ya que si ya existe y hay que sobreescribirlo, no debe reducirlo más
+				
+				if doesFileExist lowBitmapPath then --si el bitmap de baja ya existe nos prgunta que hacer, lo fuerza a sobreescribir o no hace nada
+					case overwrite of
+					(
+						#true:		_process = true
+						#prompt:	_process = queryBox (lowBitmapPath + " -> already exists, do you want to overwrite it?")
+						#false:		_process = false
+						default:		_process = false
+					)--case
+					
+				if _process and (bitmapPath == lowBitmapPath) then _reduce = false --si ya esta reducido no hay que reducirlo de nuevo
+					
+				--si no son del mismo tipo no deja crear el nuevo bitmap
+				if _process then _process = ((getFileNameType bitmapPath) == (getFileNameType lowBitmapPath))
+					
+				--si hasta aqui no hay conflictos sigue con la ejecución
+				if _process then
+				(
+					--crea el path si no existe
+					makeDir (getFilenamePath lowBitmapPath) all:true
+					
+					--obtiene el tamaño del bitmap original
+					_originWidth = (getBitmapInfo bitmapPath)[3]
+					_originHeight = (getBitmapInfo bitmapPath)[4]
+					
+					--prepara las variables para el tamaño del bitmap a reducir
+					_defWidth = _originWidth
+					_defHeight = _originHeight
+					
+					if _reduce then --si hay que reducir el mapa
+						case size of --calcula el tamaño del nuevo bitmap
+						(
+							#full:			(_defWidth = _defWidth;		_defHeight = _defHeight)
+							#half:		(_defWidth = _defWidth/2;	_defHeight = _defHeight/2)
+							#third:		(_defWidth = _defWidth/3;	_defHeight = _defHeight/3)
+							#quarter:	(_defWidth = _defWidth/4;	_defHeight = _defHeight/4)
+							#eighth:		(_defWidth = _defWidth/8;	_defHeight = _defHeight/8)
+						)--case
+					
+					case method of
+					(
+						#unfiltered: --sin filtro (pixela la imagen al reducir)
+						(
+							_originBitmap = openBitMap bitmapPath
+							_lowBitmap = bitmap _defWidth _defHeight filename:lowBitmapPath gamma:(1.0/displayGamma)
+							
+							copy _originBitmap _lowBitmap
+							save _lowBitmap
+							
+							_originBitmap = undefined
+							_lowBitmap = undefined
+							freesceneBitmaps()						
+						)--sin filtro
+						
+						#filtered: --con filtro (no pixela la imagen, lo suaviza)
+						(
+							_originBitmap = openBitMap bitmapPath
+							_lowBitmap = bitmap _defWidth _defHeight filename:lowBitmapPath gamma:(1.0/displayGamma)
+								
+							_texture = bitmaptexture bitmap:_originBitmap
+							rendermap _texture into:_lowBitmap size:[_defWidth, _defHeight] filter:on display:off
+							
+							save _lowBitmap
+							_originBitmap = undefined
+							_lowBitmap = undefined
+							freesceneBitmaps()
+						)--con filtro
+					)--case
+					
+					_success = doesFileExist lowBitmapPath --si se ha logrado crear el mapa, el proceso se considera satisfactorio
+				)--if			
+			)
+			else --si el bitmap original no existe, entonces falla
+				_success = false
+				
+			_success
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | createMaterialLowBitmaps | Devuevle TRUE si consigue crear los mapas de baja resolucion, FALSE si no.
+		--@gets: material | mat | Material cuyos mapas transformar en bitmaps de baja resolucion.
+		--@gets: string | lowBitmapsPath | Path para los nuevos bitmaps de baja resolucion.
+		--@opt: name | size | #half | Tamaño de los bitmaps a generar. {#full|#half|#third|#quarter|#eighth}.
+		--@opt: name | method | #unfiltered | Indica el metodo de reduccion de bitmaps que se va a usar. {#unfiltered|#filtered|#external}
+		--@opt: name | overwrite | #false | Indica si forzar a que sobrescriba los bitmaps si existe. {#true|#prompt,|#false}
+		--@opt: boolean | redirectBitmaps | true | Indica si redireccionar los paths de los mapas del material a los nuevos bitmaps creados.
+		--@opt: boolean | useProgressBar | false | Indica si mostrar una barra de progreso en la ejecucion.
+		------------------------------------------------
+		fn createMaterialLowBitmaps mat lowBitmapsPath size:#half method:#unfiltered overwrite:#false redirectBitmaps:true useProgressBar:false =
+		(
+			_success = true
+			_process = true
+			
+			if useProgressBar then
+			(
+				global _mapCount = 1
+				global _mapCountTotal = (this.getBitmaps mat).count
+			)
+			
+			_lowPathPart = ""
+			_lowFilePart = ""
+			
+			case size of --rellena la parte del size en el nuevo path
+			(
+				#full:			(_lowPathPart = "1x1\\"; _lowFilePart = "(1x1)")
+				#half:			(_lowPathPart = "1x2\\"; _lowFilePart = "(1x2)")
+				#third:			(_lowPathPart = "1x3\\"; _lowFilePart = "(1x3)")
+				#quarter:		(_lowPathPart = "1x4\\"; _lowFilePart = "(1x4)")
+				#eighth:		(_lowPathPart = "1x8\\"; _lowFilePart = "(1x8)")
+			)--case
+			
+			--si el material pasado es un material de xref, resuelve la referencia y obtiene el material al que apunta
+			if classof mat == XRef_Material then
+				mat = mat.getSourceMaterial true
+			
+			--------------------------------------------------------------
+			--casos especiales donde no debe buscar los bitmaps
+			
+			if mat != undefined and _process then
+				if mat.numsubs > 0 then
+					for i = 1 to mat.numsubs where _success do --recorre los subanims buscando texturas
+					(
+						try 
+						(
+							if classof mat[i].object == BitmapTexture then
+							(						
+								_originalBitmap = mat[i].object.filename
+								_lowBitmap = lowBitmapsPath + _lowPathPart + (getFileNameFile _originalBitmap) + _lowFilePart + (getFileNameType _originalBitmap)
+								
+								--si el mapa en cuestion es ya un mapa de low, debe sobreescribirlo, no hacer nada o preguntar segun la opcion overwrite
+								if matchPattern _originalBitmap pattern:"*1x?*" then
+									_lowBitmap = lowBitmapsPath + _lowPathPart + (getFileNameFile _originalBitmap) + (getFileNameType _originalBitmap)
+								
+								if not this.createLowBitmap _originalBitmap _lowBitmap size:size method:method overwrite:overwrite then
+									_success = false
+								
+								if _success and redirectBitmaps then
+								(
+									mat[i].object.filename = ""
+									mat[i].object.filename = _lowBitmap
+								)--if
+								
+								if rollProgressBar.opened then lb.progressBar.setProgressBarValue ((100.0/_mapCountTotal)*_mapCount) useSecondary:true
+								_mapCount += 1
+							)--if
+						)
+						catch()
+						
+						if not this.createMaterialLowBitmaps mat[i] lowBitmapsPath size:size method:method overwrite:overwrite redirectBitmaps:redirectBitmaps then
+							_success = false
+					)--for
+			
+			_success
+		),
+
+		------------------------------------------------
+		--@fn: boolean | resizeMaterialTextures | Devuevle TRUE si consigue crear los mapas de baja resolucion, FALSE si no.
+		--@gets: material | mat | Material cuyos mapas transformar en bitmaps de baja resolucion.
+		--@gets: string | lowBitmapsPath | Path para los nuevos bitmaps de baja resolucion.
+		--@opt: name | size | #half | Tamaño de los bitmaps a generar. {#full|#half|#third|#quarter|#eighth}.
+		--@opt: name | method | #unfiltered | Indica el metodo de reduccion de bitmaps que se va a usar. {#unfiltered|#filtered|#external}
+		------------------------------------------------
+		fn resizeMaterialTextures mat size:#half method:#unfiltered =
+		(
+			_success = true
+			if (finditem #(#half,#third,#quarter,#eighth) size) != 0 then
+			(
+			
+				_lowPathPart = ""
+				_lowFilePart = ""
+				
+				--si el material pasado es un material de xref, resuelve la referencia y obtiene el material al que apunta
+				if classof mat == XRef_Material then
+					mat = mat.getSourceMaterial true
+				
+				--------------------------------------------------------------
+				--casos especiales donde no debe buscar los bitmaps
+				if mat != undefined then
+					for i = 1 to mat.numsubs where _success do --recorre los subanims buscando texturas
+					(
+						if isProperty mat[i] "value" and classof mat[i].value == BitmapTexture then
+						(						
+							_originalBitmap = mat[i].value.filename
+							_originalDir = lb.io.getDirName(_originalBitmap)
+							while (finditem #(#half,#third,#quarter,#eighth) (lb.io.getBaseName(_originalDir) as name)) != 0 do
+								_originalDir = lb.io.getDirName(_originalDir)
+							_originalBase = lb.io.getBaseName(_originalBitmap)
+							_lowBitmap = lb.str.join #(_originalDir, size as string, _originalBase) "\\"
+
+							if _lowBitmap != _originalBitmap do
+							(
+								_overwrite = #false
+								if doesFileExist _lowBitmap do
+								(
+									_originalFInfo = dotNetObject "System.IO.FileInfo" _originalBitmap
+									_lowFInfo = dotNetObject "System.IO.FileInfo" _lowBitmap
+									if (_lowFInfo.CreationTime.CompareTo _originalFInfo.lastwritetime) < 0 do
+										_overwrite = #true
+								)
+								
+								if not this.createLowBitmap _originalBitmap _lowBitmap size:size method:method overwrite:_overwrite then
+									_success = false
+								
+								if _success then
+								(
+									mat[i].value.filename = ""
+									mat[i].value.filename = _lowBitmap
+								)--if
+							)
+						)--if
+						
+						if not this.resizeMaterialTextures mat[i] size:size method:method then
+							_success = false
+					)--for
+			)
+			
+			_success
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | storeMaterialBackup | Devuevle TRUE si consigue hacer un backup del material del objeto, FALSE si no. El backup se hace en un CA interno del objeto.
+		--@gets: node | obj | Objeto de cuyo material hacer backup.
+		------------------------------------------------
+		fn storeMaterialBackup obj =
+		(
+			_success = true
+			
+			_materialBackup = attributes materialBackup
+			(
+				parameters main
+				(
+					--guarda la descripcion del CA y su version
+					CA_description type:#string		animatable:false	default:"Guarda un material del backup para poder restaurarlo despues."
+					CA_version type:#integer		animatable:false	default:1
+					
+					selfNode type:#maxObject --hay que almacenarlo por referencia debil
+					material type:#material
+				)
+				
+				--------------------------------------------------
+				--FUNCTIONS
+				--------------------------------------------------
+				
+				--------------------------------------------------
+				--almacena el material del objeto
+				--------------------------------------------------
+				fn storeSelfNodeMaterialBackup asCopy:false =
+				(
+					_success_ = true
+					material = if asCopy then (copy selfNode.node.material) else (selfNode.node.material)
+					_success_
+				)
+					
+				--------------------------------------------------
+				--restaura el material almacenado en el objeto
+				--------------------------------------------------
+				fn restoreSelfNodeMaterialBackup =
+				(
+					_success_ = true
+					selfNode.node.material = material
+					_success_
+				)
+			) 
+			
+			
+			if not lb.customAttributes.hasAttribute obj #materialBackup then
+				custAttributes.add obj _materialBackup #unique baseobject:false
+			
+			if lb.customAttributes.hasAttribute obj #materialBackup then
+			(
+				obj.custAttributes[#materialBackup].selfNode = (nodeTransformMonitor node:obj forwardTransformChangeMsgs:false forwardFlagNodesMessages:false forwardEnumDependents:false)
+				_success = obj.custAttributes[#materialBackup].storeSelfNodeMaterialBackup()
+			)
+			else
+				_success = false
+			
+			_success
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | restoreMaterialBackup | Devuevle TRUE si consigue hacer un restore del material del objeto, FALSE si no. El backup se hace desde un CA interno del objeto.
+		--@gets: node | obj | Objeto de cuyo material hacer restore.
+		------------------------------------------------
+		fn restoreMaterialBackup obj =
+		(
+			_success = true
+			
+			if lb.customAttributes.hasAttribute obj #materialBackup then
+				_success = obj.custAttributes[#materialBackup].restoreSelfNodeMaterialBackup()
+			else
+				_success = false
+			
+			_success
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | removeMaterialBackup | Devuevle TRUE si consigue elimiar el backup del material que pudiera tener un objeto, FALSE si no. El backup se encontraria en un CA interno del objeto.
+		--@gets: node | obj | Objeto del que eliminar el backup.
+		------------------------------------------------
+		fn removeMaterialBackup obj =
+		(
+			_success = true
+			
+			if lb.customAttributes.hasAttribute obj #materialBackup then
+				custAttributes.delete obj (custAttributes.getDef obj.custAttributes[#materialBackup]) baseobject:false
+			else
+				_success = false
+			
+			_success
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | restoreNodesMaterialBackup | Devuevle TRUE si consigue restaurar el material de backup de un conjunto de nodos, FALSE si no. El backup se encontraria en un CA interno de los objetos.
+		--@gets: array{node} | nodes | Objetos a los que restaurar el material.
+		------------------------------------------------
+		fn restoreNodesMaterialBackup nodes =
+		(
+			_success = true
+			
+			--arrays para los materiales de backup y los objetos que llevaban ese material
+			_nodesBckpMats = #()
+			_nodesByBckpMats = #()
+			
+			for n in nodes where lb.customAttributes.hasAttribute n #materialBackup do --recorre los nodos con backup de material
+			(
+				_mat = n.custAttributes[#materialBackup].material --obiene el material de backup
+				_index = findItem _nodesBckpMats _mat --busca el material en el array
+				
+				if _index != 0 then --si el material ya lo tenia otro objeto como backup
+					append _nodesByBckpMats[_index] n
+				else --si es la primera vex que encontramos ese material en el recorrido lo añadimos y el objeto tambien
+				(
+					append _nodesBckpMats _mat
+					append _nodesByBckpMats #(n)
+				)
+			)--for			
+			
+			--restaura los materiales por grupo de objetos
+			for i=1 to _nodesByBckpMats.count do
+			(
+				meditMaterials[24] = _nodesBckpMats[i]
+				_nodesByBckpMats[i].material = meditMaterials[24]
+			)--for
+			
+			_success
+		),
+
+		------------------------------------------------
+		--@fn: material | createMaskXYZMaterial | Carga de fichero el material Mask XYZ y lo devuelve
+		------------------------------------------------
+		fn createMaskXYZMaterial =
+		(
+			_libraryPath = lb.config.getScriptsPath()+"\\mat\\mask-xyz.mat"
+			_mat = (loadTempMaterialLibrary _libraryPath)[1]
+			_mat
+		),
+
+		------------------------------------------------
+		--@fn: material | createPupilMaterial | Carga de fichero el material Mask Pupil y lo devuelve
+		------------------------------------------------
+		fn createMaskPupilMaterial =
+		(
+			_libraryPath = lb.config.getScriptsPath()+"\\mat\\mask-pupil.mat"
+			_mat = (loadTempMaterialLibrary _libraryPath)[1]
+			_mat
+		),
+
+		------------------------------------------------
+		--@fn: material | createPupilMaterial | Carga de fichero el material Matte/Shadow y lo devuelve
+		------------------------------------------------
+		fn createMatteShadowMaterial =
+		(
+			_libraryPath = lb.config.getScriptsPath()+"\\mat\\matteshadow.mat"
+			_mat = (loadTempMaterialLibrary _libraryPath)[1]
+			_mat
+		),
+
+		------------------------------------------------
+		--@fn: material | createHairRGBMaterial | Crea un material de pelo RGB
+		------------------------------------------------
+		fn createHairRGBMaterial =
+		(
+			_libraryPath = lb.config.getScriptsPath()+"\\mat\\hair-rgb.mat"
+			_mat = (loadTempMaterialLibrary _libraryPath)[1]
+			_mat
+		),
+		------------------------------------------------
+		--@fn: material | creatematteDisplaceMaterial | Crea un material de tipo UNNAMED
+		------------------------------------------------
+		fn creatematteDisplaceMaterial mat keepDisplacement:true=
+		(
+			_libraryPath = lb.config.getScriptsPath()+"\\mat\\mattedisplace.mat"
+			_MDmat = (loadTempMaterialLibrary _libraryPath)[1]
+			_displMap = undefined
+			if mat != undefined then
+			(
+				_originalMat = undefined --para almacenar el material original con el que trabajar
+				
+				if superClassof mat == material then _originalMat = mat
+				else if classof mat == SubAnim and superclassof mat.object == material then _originalMat = mat.object
+				
+				if _originalMat != undefined then --si el material pasado por parametro es un material o un subanim con un material
+				(
+					--si hay que conservar la opacidad o el displacement
+					--si hay que conservar la opacidad o el displacement
+					if keepDisplacement then
+					(
+						--segun el tipo de material hay que montar el material de una forma u otra
+						case (classof _originalMat) of
+						(
+							Arch___Design__mi:
+							(
+								try (_displMap = _originalMat.mental_ray__material_custom_attribute.Displacement) catch (print "no tiene la propiedad mental_ray__material_custom_attribute")
+							)--Arch___Design__mi
+							
+							Blend:
+							(
+								try (_displMap = _originalMat.mental_ray__material_custom_attribute.Displacement) catch (print "no tiene la propiedad mental_ray__material_custom_attribute")
+							)--Blend
+							
+							mental_ray:
+							(
+								_displMap = _originalMat.Displacement
+							)--mental_ray
+							
+							Standardmaterial:
+							(
+								try (_displMap = _originalMat.mental_ray__material_custom_attribute.Displacement) catch (print "no tiene la propiedad mental_ray__material_custom_attribute")
+							)--Standardmaterial
+							
+							SSS_Fast_Skin_Material_Displace__mi:
+							(
+								_displMap = _originalMat.Displace
+							)--SSS_Fast_Skin_Material_Displace__mi
+							
+							TopBottom:
+							(
+								try (_displMap = _originalMat.mental_ray__material_custom_attribute.Displacement) catch (print "no tiene la propiedad mental_ray__material_custom_attribute")
+							)--TopBottom
+						)--case
+					)--keepOpacity or keepDisplacement
+				)
+			)
+			if _displMap != undefined do 
+			(
+				_MDmat.Displacement = _displMap
+			)
+			_MDmat
+		),
+		
+		------------------------------------------------
+		--@fn: material | createPassAOmaterial | Devuelve un material de AO a creado a partir de uno pasado por parámetro. Es recursiva por el arbol de submateriales del original.
+		--@gets: material | mat | Material a partir del cual construir el nuevo.
+		--@gets: float | nSamples | Numero de samples del calculo de AO.
+		--@gets: float | calcDistance | Distancia a partir de la cual afectan unos objetos a otros en su AO.
+		--@gets: integer | nonSelfID | Id de objetos para que el material ignore su influencia en el calculo de AO.
+		--@opt: boolean | keepOpacity | true | Indica si conservar la opcidad del material original en el material de AO.
+		--@opt: boolean | keepDisplacement | true | Indica si conservar el desplazamiento del material original en el material de AO.
+		--@opt: boolean | keepTransparency | false | Indica si conservar la transparencia del material original en el material de AO.
+		--@opt: boolean | forceTransparencyValue | false | Indica si forzar el valor de transparencia del material original en el material de AO.
+		--@opt: integer | transparencyValue | 90 | Valor de transparencia que se quiere forzar.
+		--@opt: boolean | preserveEyeMaterial | false | Indica si conservar el material de los ojos.
+		--@opt: color | aoColor | (color 255 255 255 255) | Color de la parte iluminada del AO.
+		------------------------------------------------
+		fn createPassAOmaterial mat nSamples calcDistance nonSelfID keepOpacity:true keepDisplacement:true keepTransparency:false forceTransparencyValue:false transparencyValue:90 preserveEyeMaterial:false aoColor:(color 255 255 255 255) =
+		(
+			local _aoMat = undefined
+			
+			if mat != undefined then
+			(
+				_originalMat = undefined --para almacenar el material original con el que trabajar
+				
+				if superClassof mat == material then _originalMat = mat
+				else if classof mat == SubAnim and superclassof mat.object == material then _originalMat = mat.object
+				
+				if _originalMat != undefined then --si el material pasado por parametro es un material o un subanim con un material
+				(
+					_aoMat = copy _originalMat --crea una copia del material original
+					--_aoMat.name = _originalMat.name + "_pass-AO" --renombra la copia del material
+					_hasSubmaterials = false
+					
+					if matchpattern _originalMat.name pattern:"chr_*_eye" then --caso especial para los materiales de los ojos
+					(--si el material original es el de ojos de un personaje, lo deja en blanco autoiluminado
+						
+						if not preserveEyeMaterial then --si no hay que conservar el material original genera uno nuevo
+						(
+							_aoMat = standardMaterial() --se utiliza un standar blanco autoiluminado
+							_aoMat.Diffuse = aoColor --color a blanco
+							_aoMat.ambient = aoColor --color a blanco
+							_aoMat.twoSided = true --2 sided
+							_aoMat.selfIllumAmount = 100 --autoiluminado a 100
+						)
+						else --si hay que conservar el material original
+						(
+							if classOf _aoMat == Multimaterial then --si es un multimaterial hay que poner todos los submateriales autoiliminados
+							(
+								for i=1 to _aoMat.materialList.count do
+								(
+									case classof _aoMat.materialList[i] of
+									(
+										Arch___Design__mi: --si es arch tiene que convertirlo a standard autoiluminado respetando los mapas y la opacidad
+										(
+											_tempStandard = Standardmaterial() --crea un standard temporal
+											if _aoMat.materialList[i].refr_weight == 1 then _tempStandard.opacity = 0 --respeta la opacidad
+											if _aoMat.materialList[i].diff_color_map != undefined then
+											(
+												_tempStandard.diffuseMap = ColorCorrection()
+												_tempStandard.diffuseMap.map = _aoMat.materialList[i].diff_color_map --respeta el mapa
+												_tempStandard.diffuseMap.saturation = -100.0
+												_tempStandard.diffuseMap.contrast = -10.0
+											)
+											_tempStandard.selfIllumAmount = 100
+											_aoMat.materialList[i] = _tempStandard --lo sustituye
+										)--Arch___Design__mi
+										
+										Standardmaterial: --si es standard solo hay que autoiluminarlo
+										(
+											_aoMat.materialList[i].selfIllumAmount = 100
+											_mapBckp = _aoMat.materialList[i].diffuseMap
+											_aoMat.materialList[i].diffuseMap = ColorCorrection()
+											_aoMat.materialList[i].diffuseMap.map = _mapBckp
+											_aoMat.materialList[i].diffuseMap.saturation = -100.0
+											_aoMat.materialList[i].diffuseMap.contrast = -10.0
+										)--Standardmaterial
+									)--case
+								)--for
+							)--if classof _aoMat
+						)--if else preserveEyeMaterial
+						
+						_hasSubmaterials = true
+					)
+					else if false then --descartado de momento --classof _originalMat == Multimaterial then --si es un multimaterial hay que construir el material de otra forma
+					(---------------------------------------------------------------------------------------------------------------------------------------------------------
+						--arrays para los materiales de AO y de mapas de desplazamiento
+						_AOsubMaterials = #()
+						_displMaps = #()
+						
+						_mrMat = mental_ray() --crea el material de mental donde irán los submateriales
+						_multiMat = multimaterial() --crea el multimaterial donde meter los submateriales convertidos.
+						
+						global _dispMats
+						_dispMats = Multi_Sub_Map() --mapa para los submapas de desplazamiento
+						
+						--recorre los submateriales convirtiendolos en materiales de AO
+						for i=1 to _originalMat.materialList.count do
+						(
+							--calcula el material de AO y lo almacena en el array
+							_tempAOMat = this.createPassAOMaterial _originalMat.materialList[i] nSamples calcDistance nonSelfID keepOpacity:keepOpacity keepDisplacement:false
+							append _AOsubMaterials _tempAOMat
+							
+							--si hay que respetar el desplazamiento busca ese mapa por cada submaterial y lo almacena en el array en el indice correspondiente
+							if keepDisplacement then
+							(
+								_displMap = undefined
+								
+								--segun el tipo de material hay que montar el material de una forma u otra
+								case (classof _originalMat.materialList[i]) of
+								(
+									Arch___Design__mi:							try (_displMap = _originalMat.materialList[i].mental_ray__material_custom_attribute.Displacement) catch (print "no tiene la propiedad mental_ray__material_custom_attribute")
+									Blend:											try (_displMap = _originalMat.materialList[i].mental_ray__material_custom_attribute.Displacement) catch (print "no tiene la propiedad mental_ray__material_custom_attribute")
+									mental_ray:									_displMap = _originalMat.materialList[i].Displacement
+									Standardmaterial:							try (_displMap = _originalMat.materialList[i].mental_ray__material_custom_attribute.Displacement) catch (print "no tiene la propiedad mental_ray__material_custom_attribute")
+									SSS_Fast_Skin_Material_Displace__mi:	_displMap = _originalMat.materialList[i].Displace
+									TopBottom:									try (_displMap = _originalMat.materialList[i].mental_ray__material_custom_attribute.Displacement) catch (print "no tiene la propiedad mental_ray__material_custom_attribute")
+								)--case
+								
+								_displMaps[i] = _displMap --almacena el mapa
+							)--if keepDisplacement
+						)--for
+						
+						_multiMat.materialList = _AOsubMaterials --rellena la lista de materiales del multiSubobject con los materiales calculados
+						_mrMat.surface = Material_to_Shader() --pone un material to shader al material de mental ray
+						_mrMat.surface.material = _multiMat --pone el multimaterial dentro del material to shader
+						
+						if keepDisplacement then --si hay que almacenar desplazamiento
+						(
+							_hasDisp = false --flag para saber si hay desplazamientos
+							_limit = 1 --numero de mapas de desplazamiento
+							
+							for i=1 to 20 do --recorre los mapas de desplazamiento aplicandolos a los multisubmapas
+							(
+								_submapColor = execute ("_dispMats.id_" + ((i-1) as string) + "_color")
+								_submapColor = color 0 0 0 255
+								
+								if _displMaps[i] != undefined then
+								(
+									_submap = execute ("_dispMats.id_" + ((i-1) as string) + "_color_shader")
+									_submap = _displMaps[i]
+									_hasDisp = true
+									_limit = i
+									print _submap
+								)--if
+							)--for
+							
+							if _hasDisp then --si había algun mapa de desplazamiento
+							(
+								_dispMats.mode = 1 --lo pone en modo MaterialID
+								_dispMats.num_colors = _limit
+								--_mrMat.displacement = Displacement_3D__3dsmax() --establece los multisubmaps como mapas de desplazamiento del material de mental
+								
+								_mrMat.displacement = _dispMats
+								
+								meditMaterials[24] = _mrMat
+							)
+						)--if keepDisplacement
+						
+						_aoMat = _mrMat --rellena el material definitivo a devolver
+						_hasSubmaterials = true
+						_dispMats = undefined --libera la variable global
+					)---------------------------------------------------------------------------------------------------------------------------------------------------------
+					else --si es cualquiera de los otros tipos de material
+					(
+						--recorre los subanims buscando submateriales para aplicarles la conversion tambien
+						for i = 1 to _originalMat.numsubs do
+						(
+							--lama recursivamente para obtener
+							_convMat = this.createPassAOMaterial _originalMat[i] nSamples calcDistance nonSelfID keepOpacity:keepOpacity keepDisplacement:keepDisplacement keepTransparency:keepTransparency forceTransparencyValue:forceTransparencyValue transparencyValue:transparencyValue preserveEyeMaterial:preserveEyeMaterial aoColor:aoColor
+							if _convMat != undefined then
+							(
+								if classof _aoMat[i] == SubAnim and superclassof _aoMat[i].object == material then
+									_aoMat[i].value = _convMat
+								else
+									_aoMat[i] = _convMat
+								
+								_hasSubmaterials = true
+							)--if _convMat
+							
+						)--for
+					)
+					
+					if not _hasSubmaterials and _aoMat != undefined then
+					(
+						--variables para almacenar el mapa de opacidad y de desplazamiento si los hubiera
+						_opacityValue = 100
+						_opacityMapValue = 100
+						_opacityMap = undefined
+						_displMap = undefined
+						
+						--si hay que conservar la opacidad o el displacement
+						--si hay que conservar la opacidad o el displacement
+						if keepOpacity or keepDisplacement then
+						(
+							--segun el tipo de material hay que montar el material de una forma u otra
+							case (classof _originalMat) of
+							(
+								Arch___Design__mi:
+								(
+									if keepOpacity then --en caso de querer salvar la opacidad
+									(
+										if _originalMat.refr_weight != 0 then _opacityValue = 100.0 - (_originalMat.refr_weight * 100.0)
+										if not keepTransparency then _opacityValue = 100
+										if keepTransparency and forceTransparencyValue and _opacityValue != 100 then _opacityValue = transparencyValue
+										_opacityMap = _originalMat.cutout_map
+									)--if keepOpacity
+									
+									if keepDisplacement then --en caso de querer salvar el displacement
+									(
+										try (_displMap = _originalMat.mental_ray__material_custom_attribute.Displacement) catch (print "no tiene la propiedad mental_ray__material_custom_attribute")
+									)--if keepDisplacement
+								)--Arch___Design__mi
+								
+								Blend:
+								(
+									if keepDisplacement then --en caso de querer salvar el displacement
+									(
+										try (_displMap = _originalMat.mental_ray__material_custom_attribute.Displacement) catch (print "no tiene la propiedad mental_ray__material_custom_attribute")
+									)--if keepDisplacement
+								)--Blend
+								
+								mental_ray:
+								(
+									if keepDisplacement then --en caso de querer salvar el displacement
+									(
+										_displMap = _originalMat.Displacement
+									)--if keepDisplacement
+								)--mental_ray
+								
+								Standardmaterial:
+								(
+									if keepOpacity then --en caso de querer salvar la opacidad
+									(
+										_opacityValue = _originalMat.opacity
+										if keepTransparency and forceTransparencyValue and _opacityValue != 100 then _opacityValue = transparencyValue
+										_opacityMapValue = if keepTransparency then _originalMat.opacityMapAmount else 100
+										_opacityMap = _originalMat.opacityMap
+									)--if keepOpacity
+									
+									if keepDisplacement then --en caso de querer salvar el displacement
+									(
+										try (_displMap = _originalMat.mental_ray__material_custom_attribute.Displacement) catch (print "no tiene la propiedad mental_ray__material_custom_attribute")
+									)--if keepDisplacement
+								)--Standardmaterial
+								
+								SSS_Fast_Skin_Material_Displace__mi:
+								(
+									if keepDisplacement then --en caso de querer salvar el displacement
+									(
+										_displMap = _originalMat.Displace
+									)--if keepDisplacement
+								)--SSS_Fast_Skin_Material_Displace__mi
+								
+								TopBottom:
+								(
+									if keepDisplacement then --en caso de querer salvar el displacement
+									(
+										try (_displMap = _originalMat.mental_ray__material_custom_attribute.Displacement) catch (print "no tiene la propiedad mental_ray__material_custom_attribute")
+									)--if keepDisplacement
+								)--TopBottom
+							)--case
+						)--keepOpacity or keepDisplacement
+						
+						----------------------------------------------------------------------------------------
+						----------------------------------------------------------------------------------------
+						--creacion del material de pase AO
+						----------------------------------------------------------------------------------------
+						
+						--tenemos que hacer estos pasos para que el nuevo material tenga el CA de mental ray
+						_mBckp = meditMaterials[1]
+						activeMeditSlot = 1
+						meditMaterials[1] = copy _originalMat
+						meditMaterials[1] = Arch___Design__mi()
+						meditMaterials[1] = Matte_Shadow_Reflection__mi() --crea el material
+						_aoMat = meditMaterials[1] --lo coge del editor
+						meditMaterials[1] = _mBckp
+						
+						_aoMat.name = _originalMat.name + "_pass-AO" --renombra la copia del material
+							
+						--en caso de que el material sea de skin se debe hacer de otra forma.
+						case (classof _originalMat) of
+						(
+							SSS_Fast_Material__mi:
+							(
+								_aoMat.catch_shadows = false --no genera sombras
+								
+								if nonSelfID == 0 then
+								(
+									_aoMat.Background = aoColor --color a blanco
+									_aoMat.ao_on = true --activa el AO de este tipo de material
+									_aoMat.ao_samples = nSamples --numero de samples
+									_aoMat.ao_distance = calcDistance --distancia de calculo
+								)
+								else
+								(
+									_aoMat.Background = color 0 0 0 255 --color a negro
+									_aoMat.ao_on = false --desactiva el AO de este tipo de material
+									
+									_aoMap = _aoMat.background_shader = Ambient_Reflective_Occlusion__3dsmax() --crea el mapa
+									_aoMap.bright  = aoColor
+									_aoMap.Samples = nSamples
+									_aoMap.max_distance = calcDistance
+									_aoMap.id_nonself = nonSelfID
+								)
+							)--SSS_Fast_Material__mi
+							
+							SSS_Fast_Skin_Material__mi:
+							(
+								_aoMat.catch_shadows = false --no genera sombras
+								
+								if nonSelfID == 0 then
+								(
+									_aoMat.Background = aoColor --color a blanco
+									_aoMat.ao_on = true --activa el AO de este tipo de material
+									_aoMat.ao_samples = nSamples --numero de samples
+									_aoMat.ao_distance = calcDistance --distancia de calculo
+								)
+								else
+								(
+									_aoMat.Background = color 0 0 0 255 --color a negro
+									_aoMat.ao_on = false --desactiva el AO de este tipo de material
+									
+									_aoMap = _aoMat.background_shader = Ambient_Reflective_Occlusion__3dsmax() --crea el mapa
+									_aoMap.bright  = aoColor
+									_aoMap.Samples = nSamples
+									_aoMap.max_distance = calcDistance
+									_aoMap.id_nonself = nonSelfID
+								)
+							)--SSS_Fast_Skin_Material__mi
+							
+							SSS_Fast_Skin_Material_Displace__mi:
+							(
+								_aoMat.catch_shadows = false --no genera sombras
+								
+								if nonSelfID == 0 then
+								(
+									_aoMat.Background = aoColor --color a blanco
+									_aoMat.ao_on = true --activa el AO de este tipo de material
+									_aoMat.ao_samples = nSamples --numero de samples
+									_aoMat.ao_distance = calcDistance --distancia de calculo
+								)
+								else
+								(
+									_aoMat.Background = color 0 0 0 255 --color a negro
+									_aoMat.ao_on = false --desactiva el AO de este tipo de material
+									
+									_aoMap = _aoMat.background_shader = Ambient_Reflective_Occlusion__3dsmax() --crea el mapa
+									_aoMap.bright  = aoColor
+									_aoMap.Samples = nSamples
+									_aoMap.max_distance = calcDistance
+									_aoMap.id_nonself = nonSelfID
+								)
+							)--SSS_Fast_Skin_Material_Displace__mi
+							
+							default:
+							(
+								_aoMat.catch_shadows = false --no genera sombras
+								_aoMat.Background = color 0 0 0 255 --color a negro
+								_aoMat.ao_on = false --desactiva el AO de este tipo de material
+								
+								--parte del mapa de AO
+								_aoMap = _aoMat.background_shader = Ambient_Reflective_Occlusion__3dsmax() --crea el mapa
+								_aoMap.bright = aoColor
+								_aoMap.Samples = nSamples
+								_aoMap.max_distance = calcDistance
+								_aoMap.id_nonself = nonSelfID
+							)--default
+						)--case
+						
+						if (_opacityMap != undefined) or ((_opacityValue != 100 or _opacityMapValue != 100) and keepTransparency) then --si hay que aplicar el mapa de opacidad
+						(
+							_aoMat = standardMaterial() --se utiliza un standar blanco autoiluminado
+							_aoMat.Diffuse = aoColor --color a blanco
+							_aoMat.ambient = aoColor --color a blanco
+							_aoMat.twoSided = on --2 sided
+							_aoMat.selfIllumAmount = 100 --autoiluminado a 100
+							
+							--aplica la opacidad
+							_aoMat.opacity = _opacityValue
+							_aoMat.opacityMapAmount = _opacityMapValue --if keepTransparency then _opacityMapValue else 100
+							
+							_aoMat.opacityMapEnable = true
+							_aoMat.opacityMap = _opacityMap
+						)
+						else if matchpattern _originalMat.name pattern:"chr_*_eye" then
+						(--si el material original es el de ojos de un personaje, lo deja en blanco autoiluminado
+							_aoMat = standardMaterial() --se utiliza un standar blanco autoiluminado
+							_aoMat.Diffuse = aoColor --color a blanco
+							_aoMat.ambient = aoColor --color a blanco
+							_aoMat.twoSided = true --2 sided
+							_aoMat.selfIllumAmount = 100 --autoiluminado a 100
+						)
+						
+						if _displMap != undefined then --si hay que aplicar el mapa de displacement
+						(
+							--tenemos que hacer estos pasos para que el nuevo material tenga el CA de mental ray
+							_mBckp = meditMaterials[1]
+							activeMeditSlot = 1
+							meditMaterials[1] = copy _originalMat
+							meditMaterials[1] = Arch___Design__mi()
+							meditMaterials[1] = mental_ray() --Blend() --crea el material blend
+							--_blendMat = meditMaterials[1] --lo coge del editor
+							_mrTempMat = meditMaterials[1] --lo coge del editor
+							meditMaterials[1] = _mBckp
+							
+							--fuerza a que el desplazamiento salga, debido a un bug de max
+							--hay que meter el desplazamiento en el canal de displacement por defecto
+							_mrTempMat.surface = Material_to_Shader()
+							_mrTempMat.surface.material = _aoMat
+							_mrTempMat.Displacement = _displMap
+							_aoMat = _mrTempMat
+							------------------------------------------------------------
+							
+							--forma antigua de hacerlo, cuando se hacía con un blend-----------------
+							--añade dos veces como submaterial el que ya teniamos
+	 						/*_blendMat.name = _aoMat.name
+	 						_blendMat.map1 = _aoMat
+	 						_blendMat.map2 = _aoMat
+	 						_aoMat = _blendMat
+							
+							--añade el desplazamiento
+	 						(_aoMat.mental_ray__material_custom_attribute).DisplacementLocked = false
+	 						(_aoMat.mental_ray__material_custom_attribute).DisplacementON = true
+	 						(_aoMat.mental_ray__material_custom_attribute).Displacement = _displMap*/
+							-------------------------------------------------------------------------------
+						)--if
+						----------------------------------------------------------------------------------------
+						----------------------------------------------------------------------------------------
+						----------------------------------------------------------------------------------------
+					)--if _aoMat
+				)--if _originalMat
+			)--if
+			
+			_aoMat
+		),
+		
+		------------------------------------------------
+		--@fn: material | createPassZmaterial | Devuelve un material de Z a creado a partir de uno pasado por parámetro. Es recursiva por el arbol de submateriales del original.
+		--@gets: material | mat | Material a partir del cual construir el nuevo.
+		--@gets: float | nearDistance | Distancia de camara a la que empieza el degradado.
+		--@gets: float | farDistance | Distancia de camara a la que termina el degradado.
+		--@opt: boolean | keepOpacity | true | Indica si conservar la opcidad del material original en el material de Z.
+		--@opt: boolean | keepDisplacement | true | Indica si conservar el desplazamiento del material original en el material de Z.		
+		------------------------------------------------		
+		fn createPassZmaterial mat nearDistance farDistance keepOpacity:true keepDisplacement:true =
+		(
+			local _zMat = undefined
+			
+			if mat != undefined then
+			(
+				_originalMat = undefined --para almacenar el material original con el que trabajar
+				
+				if superClassof mat == material then _originalMat = mat
+				else if classof mat == SubAnim and superclassof mat.object == material then _originalMat = mat.object
+				
+				if _originalMat != undefined then --si el material pasado por parametro es un material o un subanim con un material
+				(
+					_zMat = copy _originalMat --crea una copia del material original
+					--_zMat.name = _originalMat.name + "_pass-Z" --renombra la copia del material
+					_hasSubmaterials = false
+					
+					--recorre los subanims buscando submateriales para aplicarles la conversion tambien
+					for i = 1 to _originalMat.numsubs do
+					(
+						--lama recursivamente para obtener
+						_convMat = this.createPassZmaterial _originalMat[i] nearDistance farDistance keepOpacity:keepOpacity keepDisplacement:keepDisplacement nTabs:(nTabs + 1)
+						if _convMat != undefined then
+						(
+							if classof _zMat[i] == SubAnim and superclassof _zMat[i].object == material then
+								_zMat[i].value = _convMat
+							else
+								_zMat[i] = _convMat
+							
+							_hasSubmaterials = true
+						)--if _convMat
+						
+					)--for
+					
+					if not _hasSubmaterials and _zMat != undefined then
+					(
+						--variables para almacenar el mapa de opacidad y de desplazamiento si los hubiera
+						_opacityValue = 100
+						_opacityMap = undefined
+						_displMap = undefined
+						
+						--si hay que conservar la opacidad o el displacement
+						if keepOpacity or keepDisplacement then
+						(
+							--segun el tipo de material hay que montar el material de una forma u otra
+							case (classof _originalMat) of
+							(
+								Arch___Design__mi:
+								(
+									if keepOpacity then --en caso de querer salvar la opacidad
+									(
+										_opacityMap = _originalMat.cutout_map
+									)--if keepOpacity
+									
+									if keepDisplacement then --en caso de querer salvar el displacement
+									(
+										try (_displMap = _originalMat.mental_ray__material_custom_attribute.Displacement) catch (print "no tiene la propiedad mental_ray__material_custom_attribute")
+									)--if keepDisplacement
+								)--Arch___Design__mi
+								
+								Blend:
+								(
+									if keepDisplacement then --en caso de querer salvar el displacement
+									(
+										try (_displMap = _originalMat.mental_ray__material_custom_attribute.Displacement) catch (print "no tiene la propiedad mental_ray__material_custom_attribute")
+									)--if keepDisplacement
+								)--Blend
+								
+								mental_ray:
+								(
+									if keepDisplacement then --en caso de querer salvar el displacement
+									(
+										_displMap = _originalMat.Displacement
+									)--if keepDisplacement
+								)--mental_ray
+								
+								Standardmaterial:
+								(
+									if keepOpacity then --en caso de querer salvar la opacidad
+									(
+										_opacityValue = _originalMat.opacity
+										_opacityMap = _originalMat.opacityMap
+									)--if keepOpacity
+									
+									if keepDisplacement then --en caso de querer salvar el displacement
+									(
+										try (_displMap = _originalMat.mental_ray__material_custom_attribute.Displacement) catch (print "no tiene la propiedad mental_ray__material_custom_attribute")
+									)--if keepDisplacement
+								)--Standardmaterial
+								
+								SSS_Fast_Skin_Material_Displace__mi:
+								(
+									if keepDisplacement then --en caso de querer salvar el displacement
+									(
+										_displMap = _originalMat.Displace
+									)--if keepDisplacement
+								)--SSS_Fast_Skin_Material_Displace__mi
+								
+								TopBottom:
+								(
+									if keepDisplacement then --en caso de querer salvar el displacement
+									(
+										try (_displMap = _originalMat.mental_ray__material_custom_attribute.Displacement) catch (print "no tiene la propiedad mental_ray__material_custom_attribute")
+									)--if keepDisplacement
+								)--TopBottom
+							)--case
+						)--keepOpacity or keepDisplacement
+						
+						----------------------------------------------------------------------------------------
+						----------------------------------------------------------------------------------------
+						--creacion del material de pase Y
+						----------------------------------------------------------------------------------------
+						
+						--tenemos que hacer estos pasos para que el nuevo material tenga el CA de mental ray
+						_mBckp = meditMaterials[1]
+						activeMeditSlot = 1
+						meditMaterials[1] = copy _originalMat
+						meditMaterials[1] = Arch___Design__mi()
+						meditMaterials[1] = standardMaterial() --crea el material
+						_zMat = meditMaterials[1] --lo coge del editor
+						meditMaterials[1] = _mBckp
+						
+						--si por algun motivo el material standard no tiene mental ray custom attribute COSA QUE OCURRE A MENUDO - BUG DE MAX
+						--los materiales nuevos que se crean salen sin ello, hay que buscar uno de la escena que si que lo tenga, hacer una copia  y dejarlo como un standard nuevo
+						if not isProperty _zMat #mental_ray__material_custom_attribute then
+						(
+							_sceneMats = #()
+							
+							if this.defaultStandardMaterial != undefined and not isProperty this.defaultStandardMaterial #mental_ray__material_custom_attribute then
+								this.defaultStandardMaterial = undefined
+							
+							if this.defaultStandardMaterial == undefined then
+							(--print "search for ok standardMaterial"
+								_sceneMats = this.getSceneMaterials()
+								_stop = false
+								for i=1 to _sceneMats.count where not _stop and classof _sceneMats[i] == Standardmaterial do
+								(
+									if isProperty _sceneMats[i] #mental_ray__material_custom_attribute then
+									(
+										_stop = true
+										_matToUse = copy _sceneMats[i]
+										
+										_matToUse.shaderType = 1
+										
+										for i=1 to _matToUse[#Maps].numsubs where
+										(classof _matToUse[#Maps][i].value != Float) and
+										(classof _matToUse[#Maps][i].value != UndefinedClass) do
+											_matToUse[#Maps][i].value = undefined
+										
+										_matToUse.wire = off
+										_matToUse.twoSided = off
+										_matToUse.faceted = off
+										_matToUse.faceMap = off
+										
+										_matToUse.adTextureLock = on
+										_matToUse.Diffuse = color 150 150 150
+										_matToUse.ambient = color 150 150 150
+										_matToUse.Specular = color 230 230 230
+										
+										_matToUse.selfIllumAmount = 0
+										_matToUse.useSelfIllumColor = off
+										_matToUse.selfIllumColor = color 0 0 0
+										
+										_matToUse.opacity = 100
+										
+										_matToUse.specularLevel = 0
+										_matToUse.glossiness = 10
+										_matToUse.Soften = 0.1
+										
+										this.defaultStandardMaterial = _matToUse
+									)
+								)--for
+							)--if
+							
+							if this.defaultStandardMaterial == undefined then
+							(print "search for ok standardMaterial in submaterials"
+								_sceneSubmaterials = #()
+								for mat in _sceneMats do _sceneSubmaterials += this.getSubMaterials mat
+								
+								_stop = false
+								for i=1 to _sceneSubmaterials.count where not _stop and classof _sceneSubmaterials[i] == Standardmaterial do
+								(
+									if isProperty _sceneSubmaterials[i] #mental_ray__material_custom_attribute then
+									(
+										_stop = true
+										_matToUse = copy _sceneSubmaterials[i]
+										
+										_matToUse.shaderType = 1
+										
+										for i=1 to _matToUse[#Maps].numsubs where
+										(classof _matToUse[#Maps][i].value != Float) and
+										(classof _matToUse[#Maps][i].value != UndefinedClass) do
+											_matToUse[#Maps][i].value = undefined
+										
+										_matToUse.wire = off
+										_matToUse.twoSided = off
+										_matToUse.faceted = off
+										_matToUse.faceMap = off
+										
+										_matToUse.adTextureLock = on
+										_matToUse.Diffuse = color 150 150 150
+										_matToUse.ambient = color 150 150 150
+										_matToUse.Specular = color 230 230 230
+										
+										_matToUse.selfIllumAmount = 0
+										_matToUse.useSelfIllumColor = off
+										_matToUse.selfIllumColor = color 0 0 0
+										
+										_matToUse.opacity = 100
+										
+										_matToUse.specularLevel = 0
+										_matToUse.glossiness = 10
+										_matToUse.Soften = 0.1
+										
+										this.defaultStandardMaterial = _matToUse
+									)
+								)--for
+							)--if
+							
+							--si aún no se ha podido encontrar un candidato para hacer de this.defaultStandardMaterial rellenamos una variable global de stop a true
+							if this.defaultStandardMaterial != undefined then
+							(
+								lb.render.stopRender = false
+								print this.defaultStandardMaterial
+							)
+							else
+								lb.render.stopRender = true
+							
+							if this.defaultStandardMaterial != undefined then
+								_zMat = copy this.defaultStandardMaterial
+							
+						)--if
+						else
+						(
+							print "tiene mental ray connection"
+						)
+						
+						_zMat.name = _originalMat.name + "_pass-Z" --renombra la copia del material
+						_zMat.twoSided = true --activa el 2 sided
+						_zMat.selfIllumAmount = 100 --pone la autoiluminaciona true
+						_zMat.diffuseMapEnable = true --activa el mapa de difuso
+						_fallOff = _zMat.diffuseMap = falloff() --crea el mapa de fallof
+						_fallOff.color1 = color 0 0 0 255 --pone el color 1 a negro
+						_fallOff.color2 = color 255 255 255 255 --pone el color 2 a blanco
+						_fallOff.type = 3
+						_fallOff.type = 4 --pone el fallof en distance blend
+						_fallOff.direction = 1
+						_fallOff.direction = 0 --pone el fallof en camera z axis
+						_fallOff.nearDistance = nearDistance --near distance
+						_fallOff.farDistance = farDistance --far distance
+						
+						if _opacityMap != undefined then --si hay que aplicar el mapa de opacidad
+						(
+							_zMat.opacity = _opacityValue
+							_zMat.opacityMapEnable = true
+							_zMat.opacityMap = _opacityMap
+						)--if
+						
+						if _displMap != undefined then --si hay que aplicar el mapa de displacement
+						(
+							if isProperty _zMat #mental_ray__material_custom_attribute then
+							(
+								print "añade displacement en pase de Z."
+								(_zMat.mental_ray__material_custom_attribute).DisplacementLocked = false
+								(_zMat.mental_ray__material_custom_attribute).DisplacementON = true
+								(_zMat.mental_ray__material_custom_attribute).Displacement = _displMap
+							)
+							else
+							(
+								print "falla la asignacion de displacement en pase de Z."
+							)--if else
+							
+							--debido a un bug de max hay que poner el displacement en el canal por defecto y luego poner el valor a cero
+							_zMat.displacementMap = _displMap
+							_zMat.displacementMapAmount = 0
+						)--if
+						----------------------------------------------------------------------------------------
+						----------------------------------------------------------------------------------------
+						----------------------------------------------------------------------------------------
+					)--if _zMat
+				)--if _originalMat
+			)--if
+			
+			_zMat
+		),
+		
+		------------------------------------------------
+		--@fn: material | createPassYmaterial | Devuelve un material de Y a creado a partir de uno pasado por parámetro. Es recursiva por el arbol de submateriales del original.
+		--@gets: material | mat | Material a partir del cual construir el nuevo.
+		--@gets: float | gradientCenterPosition | Altura del mundo que usa como centro del degradado en escala de grises.
+		--@gets: float | gradientDistance | Distancia que se degrada en cada direccion a partir del centro.
+		--@opt: boolean | keepOpacity | true | Indica si conservar la opcidad del material original en el material de Y.
+		--@opt: boolean | keepDisplacement | true | Indica si conservar el desplazamiento del material original en el material de Y.		
+		------------------------------------------------
+ 		fn createPassYmaterial mat gradientCenterPosition gradientDistance keepOpacity:true keepDisplacement:true =
+		(
+			local _yMat = undefined
+			
+			if mat != undefined then
+			(
+				_originalMat = undefined --para almacenar el material original con el que trabajar
+				
+				if superClassof mat == material then _originalMat = mat
+				else if classof mat == SubAnim and superclassof mat.object == material then _originalMat = mat.object
+				
+				if _originalMat != undefined then --si el material pasado por parametro es un material o un subanim con un material
+				(
+					_yMat = copy _originalMat --crea una copia del material original
+					--_yMat.name = _originalMat.name + "_pass-Y" --renombra la copia del material
+					_hasSubmaterials = false
+					
+					--recorre los subanims buscando submateriales para aplicarles la conversion tambien
+					for i = 1 to _originalMat.numsubs do
+					(
+						--lama recursivamente para obtener
+						_convMat = this.createPassYmaterial _originalMat[i] gradientCenterPosition gradientDistance keepOpacity:keepOpacity keepDisplacement:keepDisplacement nTabs:(nTabs + 1)
+						if _convMat != undefined then
+						(
+							if classof _yMat[i] == SubAnim and superclassof _yMat[i].object == material then
+								_yMat[i].value = _convMat
+							else
+								_yMat[i] = _convMat
+							
+							_hasSubmaterials = true
+						)--if _convMat
+						
+					)--for
+					
+					if not _hasSubmaterials and _yMat != undefined then
+					(
+						--variables para almacenar el mapa de opacidad y de desplazamiento si los hubiera
+						_opacityValue = 100
+						_opacityMap = undefined
+						_displMap = undefined
+						
+						--si hay que conservar la opacidad o el displacement
+						if keepOpacity or keepDisplacement then
+						(
+							--segun el tipo de material hay que montar el material de una forma u otra
+							case (classof _originalMat) of
+							(
+								Arch___Design__mi:
+								(
+									if keepOpacity then --en caso de querer salvar la opacidad
+									(
+										_opacityMap = _originalMat.cutout_map
+									)--if keepOpacity
+									
+									if keepDisplacement then --en caso de querer salvar el displacement
+									(
+										try (_displMap = _originalMat.mental_ray__material_custom_attribute.Displacement) catch (print "no tiene la propiedad mental_ray__material_custom_attribute")
+									)--if keepDisplacement
+								)--Arch___Design__mi
+								
+								Blend:
+								(
+									if keepDisplacement then --en caso de querer salvar el displacement
+									(
+										try (_displMap = _originalMat.mental_ray__material_custom_attribute.Displacement) catch (print "no tiene la propiedad mental_ray__material_custom_attribute")
+									)--if keepDisplacement
+								)--Blend
+								
+								mental_ray:
+								(
+									if keepDisplacement then --en caso de querer salvar el displacement
+									(
+										_displMap = _originalMat.Displacement
+									)--if keepDisplacement
+								)--mental_ray
+								
+								Standardmaterial:
+								(
+									if keepOpacity then --en caso de querer salvar la opacidad
+									(
+										_opacityValue = _originalMat.opacity
+										_opacityMap = _originalMat.opacityMap
+									)--if keepOpacity
+									
+									if keepDisplacement then --en caso de querer salvar el displacement
+									(
+										try (_displMap = _originalMat.mental_ray__material_custom_attribute.Displacement) catch (print "no tiene la propiedad mental_ray__material_custom_attribute")
+									)--if keepDisplacement
+								)--Standardmaterial
+								
+								SSS_Fast_Skin_Material_Displace__mi:
+								(
+									if keepDisplacement then --en caso de querer salvar el displacement
+									(
+										_displMap = _originalMat.Displace
+									)--if keepDisplacement
+								)--SSS_Fast_Skin_Material_Displace__mi
+								
+								TopBottom:
+								(
+									if keepDisplacement then --en caso de querer salvar el displacement
+									(
+										try (_displMap = _originalMat.mental_ray__material_custom_attribute.Displacement) catch (print "no tiene la propiedad mental_ray__material_custom_attribute")
+									)--if keepDisplacement
+								)--TopBottom
+							)--case
+						)--keepOpacity or keepDisplacement
+						
+						----------------------------------------------------------------------------------------
+						----------------------------------------------------------------------------------------
+						--creacion del material de pase Y
+						----------------------------------------------------------------------------------------
+						
+						--tenemos que hacer estos pasos para que el nuevo material tenga el CA de mental ray
+						_mBckp = meditMaterials[1]
+						activeMeditSlot = 1
+						meditMaterials[1] = copy _originalMat
+						meditMaterials[1] = Arch___Design__mi()
+						meditMaterials[1] = standardMaterial() --crea el material
+						_yMat = meditMaterials[1] --lo coge del editor
+						meditMaterials[1] = _mBckp
+						
+						--si por algun motivo el material standard no tiene mental ray custom attribute COSA QUE OCURRE A MENUDO - BUG DE MAX
+						--los materiales nuevos que se crean salen sin ello, hay que buscar uno de la escena que si que lo tenga, hacer una copia  y dejarlo como un standard nuevo
+						if not isProperty _yMat #mental_ray__material_custom_attribute then
+						(
+							_sceneMats = #()
+							
+							if this.defaultStandardMaterial != undefined and not isProperty this.defaultStandardMaterial #mental_ray__material_custom_attribute then
+								this.defaultStandardMaterial = undefined
+							
+							if this.defaultStandardMaterial == undefined then
+							(--print "search for ok standardMaterial"
+								_sceneMats = this.getSceneMaterials()
+								_stop = false
+								for i=1 to _sceneMats.count where not _stop and classof _sceneMats[i] == Standardmaterial do
+								(
+									if isProperty _sceneMats[i] #mental_ray__material_custom_attribute then
+									(
+										_stop = true
+										_matToUse = copy _sceneMats[i]
+										
+										_matToUse.shaderType = 1
+										
+										for i=1 to _matToUse[#Maps].numsubs where
+										(classof _matToUse[#Maps][i].value != Float) and
+										(classof _matToUse[#Maps][i].value != UndefinedClass) do
+											_matToUse[#Maps][i].value = undefined
+										
+										_matToUse.wire = off
+										_matToUse.twoSided = off
+										_matToUse.faceted = off
+										_matToUse.faceMap = off
+										
+										_matToUse.adTextureLock = on
+										_matToUse.Diffuse = color 150 150 150
+										_matToUse.ambient = color 150 150 150
+										_matToUse.Specular = color 230 230 230
+										
+										_matToUse.selfIllumAmount = 0
+										_matToUse.useSelfIllumColor = off
+										_matToUse.selfIllumColor = color 0 0 0
+										
+										_matToUse.opacity = 100
+										
+										_matToUse.specularLevel = 0
+										_matToUse.glossiness = 10
+										_matToUse.Soften = 0.1
+										
+										this.defaultStandardMaterial = _matToUse
+									)
+								)--for
+							)--if
+							
+							if this.defaultStandardMaterial == undefined then
+							(print "search for ok standardMaterial in submaterials"
+								_sceneSubmaterials = #()
+								for mat in _sceneMats do _sceneSubmaterials += this.getSubMaterials mat
+								
+								_stop = false
+								for i=1 to _sceneSubmaterials.count where not _stop and classof _sceneSubmaterials[i] == Standardmaterial do
+								(
+									if isProperty _sceneSubmaterials[i] #mental_ray__material_custom_attribute then
+									(
+										_stop = true
+										_matToUse = copy _sceneSubmaterials[i]
+										
+										_matToUse.shaderType = 1
+										
+										for i=1 to _matToUse[#Maps].numsubs where
+										(classof _matToUse[#Maps][i].value != Float) and
+										(classof _matToUse[#Maps][i].value != UndefinedClass) do
+											_matToUse[#Maps][i].value = undefined
+										
+										_matToUse.wire = off
+										_matToUse.twoSided = off
+										_matToUse.faceted = off
+										_matToUse.faceMap = off
+										
+										_matToUse.adTextureLock = on
+										_matToUse.Diffuse = color 150 150 150
+										_matToUse.ambient = color 150 150 150
+										_matToUse.Specular = color 230 230 230
+										
+										_matToUse.selfIllumAmount = 0
+										_matToUse.useSelfIllumColor = off
+										_matToUse.selfIllumColor = color 0 0 0
+										
+										_matToUse.opacity = 100
+										
+										_matToUse.specularLevel = 0
+										_matToUse.glossiness = 10
+										_matToUse.Soften = 0.1
+										
+										this.defaultStandardMaterial = _matToUse
+									)
+								)--for
+							)--if
+							
+							--si aún no se ha podido encontrar un candidato para hacer de this.defaultStandardMaterial rellenamos una variable global de stop a true
+							if this.defaultStandardMaterial != undefined then
+							(
+								lb.render.stopRender = false
+								print this.defaultStandardMaterial
+							)
+							else
+								lb.render.stopRender = true
+							
+							if this.defaultStandardMaterial != undefined then
+								_yMat = copy this.defaultStandardMaterial
+						)--if		
+						
+						_yMat.name = _originalMat.name + "_pass-Y" --renombra la copia del material
+						_yMat.twoSided = true --activa el 2 sided
+						_yMat.selfIllumAmount = 100 --pone la autoiluminaciona true
+						_yMat.diffuseMapEnable = true --activa el mapa de
+						
+						if (maxversion())[1] < 15000 then _lumeLand = _yMat.diffuseMap = Landscape__lume()
+						else _lumeLand = _yMat.diffuseMap = LandscapetextureMap()
+						
+						_lumeLand.Base_Color = color 0 0 0 255
+						_lumeLand.Overlay_Color = color 255 255 255 255
+						_lumeLand.blur = 1.0
+						
+						_lumeLand[15].value = true --height activado
+						_lumeLand[#Height].value = gradientCenterPosition --centro del gradiente
+						_lumeLand[#Spread].value = gradientDistance --distancia del degradado
+						
+						_lumeLand[9].value = false --texture desactivado
+						_lumeLand[20].value = false --slope desactivado
+						_lumeLand[24].value = false --positional noise desactivado
+						_lumeLand[30].value = false --shape based noise desactivado
+						_lumeLand[36].value = false --stain desactivado
+						
+						if _opacityMap != undefined then --si hay que aplicar el mapa de opacidad
+						(
+							_yMat.opacity = _opacityValue
+							_yMat.opacityMapEnable = true
+							_yMat.opacityMap = _opacityMap
+						)--if
+						
+						if _displMap != undefined then --si hay que aplicar el mapa de displacement
+						(
+							if isProperty _yMat #mental_ray__material_custom_attribute then
+							(
+								print "añade displacement en pase de Y."
+								(_yMat.mental_ray__material_custom_attribute).DisplacementLocked = false
+								(_yMat.mental_ray__material_custom_attribute).DisplacementON = true
+								(_yMat.mental_ray__material_custom_attribute).Displacement = _displMap
+							)
+							else
+							(
+								print "falla la asignacion de displacement en pase de Y."
+							)
+							
+							--debido a un bug de max hay que poner el displacement en el canal por defecto y luego poner el valor a cero
+							_yMat.displacementMap = _displMap
+							_yMat.displacementMapAmount = 0
+						)--if
+						----------------------------------------------------------------------------------------
+						----------------------------------------------------------------------------------------
+						----------------------------------------------------------------------------------------
+					)--if _yMat
+				)--if _originalMat
+			)--if
+			
+			_yMat
+		),
+
+		------------------------------------------------
+		--@fn: material | createPassFmaterial | Devuelve un material FLAT COLOR para máscaras, creado a partir de uno pasado por parámetro. Es recursiva por el arbol de submateriales del original.
+		--@gets: material | mat | Material a partir del cual construir el nuevo.
+		--@gets: color | flatColor | Color que usat para la máscara.
+		--@opt: boolean | keepOpacity | true | Indica si conservar la opcidad del material original en el material FLAT.
+		--@opt: boolean | keepDisplacement | true | Indica si conservar el desplazamiento del material original en el material de FLAT.
+		--@opt: array | applyIfClassOf | undefined | Si el array está definido, solamente le aplicará el color a los materiales que sean de algún tipo incluido, en caso contrario le aplicará un negro.
+		------------------------------------------------
+		fn createPassFmaterial mat flatColor keepOpacity:true keepDisplacement:true applyIfClassOf:undefined =
+		(
+			local _fMat = undefined
+			
+			if mat != undefined then
+			(
+				_originalMat = undefined --para almacenar el material original con el que trabajar
+				
+				if superClassof mat == material then _originalMat = mat
+				else if classof mat == SubAnim and superclassof mat.object == material then _originalMat = mat.object
+				
+				if _originalMat != undefined then --si el material pasado por parametro es un material o un subanim con un material
+				(
+					_fMat = copy _originalMat --crea una copia del material original
+					--_fMat.name = _originalMat.name + "_pass-F" --renombra la copia del material
+					_hasSubmaterials = false
+					
+					--recorre los subanims buscando submateriales para aplicarles la conversion tambien
+					for i = 1 to _originalMat.numsubs do
+					(
+						--llama recursivamente para obtener
+						_convMat = this.createPassFmaterial _originalMat[i] flatColor keepOpacity:keepOpacity keepDisplacement:keepDisplacement applyIfClassOf:applyIfClassOf
+						if _convMat != undefined then
+						(
+							if classof _fMat[i] == SubAnim and superclassof _fMat[i].object == material then
+								_fMat[i].value = _convMat
+							else
+								_fMat[i] = _convMat
+							
+							_hasSubmaterials = true
+						)--if _convMat
+						
+					)--for
+					
+					if not _hasSubmaterials and _fMat != undefined then
+					(
+						--variables para almacenar el mapa de opacidad y de desplazamiento si los hubiera
+						_opacityValue = 100
+						_opacityMap = undefined
+						_displMap = undefined
+						
+						--si hay que conservar la opacidad o el displacement
+						if keepOpacity or keepDisplacement then
+						(
+							--segun el tipo de material hay que montar el material de una forma u otra
+							case (classof _originalMat) of
+							(
+								Arch___Design__mi:
+								(
+									if keepOpacity then --en caso de querer salvar la opacidad
+									(
+										_opacityMap = _originalMat.cutout_map
+									)--if keepOpacity
+									
+									if keepDisplacement then --en caso de querer salvar el displacement
+									(
+										try (_displMap = _originalMat.mental_ray__material_custom_attribute.Displacement) catch (print "no tiene la propiedad mental_ray__material_custom_attribute")
+									)--if keepDisplacement
+								)--Arch___Design__mi
+								
+								Blend:
+								(
+									if keepDisplacement then --en caso de querer salvar el displacement
+									(
+										try (_displMap = _originalMat.mental_ray__material_custom_attribute.Displacement) catch (print "no tiene la propiedad mental_ray__material_custom_attribute")
+									)--if keepDisplacement
+								)--Blend
+								
+								mental_ray:
+								(
+									if keepDisplacement then --en caso de querer salvar el displacement
+									(
+										_displMap = _originalMat.Displacement
+									)--if keepDisplacement
+								)--mental_ray
+								
+								Standardmaterial:
+								(
+									if keepOpacity then --en caso de querer salvar la opacidad
+									(
+										_opacityValue = _originalMat.opacity
+										_opacityMap = _originalMat.opacityMap
+									)--if keepOpacity
+									
+									if keepDisplacement then --en caso de querer salvar el displacement
+									(
+										try (_displMap = _originalMat.mental_ray__material_custom_attribute.Displacement) catch (print "no tiene la propiedad mental_ray__material_custom_attribute")
+									)--if keepDisplacement
+								)--Standardmaterial
+								
+								SSS_Fast_Skin_Material_Displace__mi:
+								(
+									if keepDisplacement then --en caso de querer salvar el displacement
+									(
+										_displMap = _originalMat.Displace
+									)--if keepDisplacement
+								)--SSS_Fast_Skin_Material_Displace__mi
+								
+								TopBottom:
+								(
+									if keepDisplacement then --en caso de querer salvar el displacement
+									(
+										try (_displMap = _originalMat.mental_ray__material_custom_attribute.Displacement) catch (print "no tiene la propiedad mental_ray__material_custom_attribute")
+									)--if keepDisplacement
+								)--TopBottom
+							)--case
+						)--keepOpacity or keepDisplacement
+						
+						----------------------------------------------------------------------------------------
+						----------------------------------------------------------------------------------------
+						--creacion del material de pase F
+						----------------------------------------------------------------------------------------
+						
+						--tenemos que hacer estos pasos para que el nuevo material tenga el CA de mental ray
+						_mBckp = meditMaterials[1]
+						activeMeditSlot = 1
+						meditMaterials[1] = copy _originalMat
+						meditMaterials[1] = Arch___Design__mi()
+						meditMaterials[1] = standardMaterial() --crea el material
+						_fMat = meditMaterials[1] --lo coge del editor
+						meditMaterials[1] = _mBckp
+						
+						--si por algun motivo el material standard no tiene mental ray custom attribute COSA QUE OCURRE A MENUDO - BUG DE MAX
+						--los materiales nuevos que se crean salen sin ello, hay que buscar uno de la escena que si que lo tenga, hacer una copia  y dejarlo como un standard nuevo
+						if not isProperty _fMat #mental_ray__material_custom_attribute then
+						(
+							_sceneMats = #()
+							
+							if this.defaultStandardMaterial != undefined and not isProperty this.defaultStandardMaterial #mental_ray__material_custom_attribute then
+								this.defaultStandardMaterial = undefined
+							
+							if this.defaultStandardMaterial == undefined then
+							(--print "search for ok standardMaterial"
+								_sceneMats = this.getSceneMaterials()
+								_stop = false
+								for i=1 to _sceneMats.count where not _stop and classof _sceneMats[i] == Standardmaterial do
+								(
+									if isProperty _sceneMats[i] #mental_ray__material_custom_attribute then
+									(
+										_stop = true
+										_matToUse = copy _sceneMats[i]
+										
+										_matToUse.shaderType = 1
+										
+										for i=1 to _matToUse[#Maps].numsubs where
+										(classof _matToUse[#Maps][i].value != Float) and
+										(classof _matToUse[#Maps][i].value != UndefinedClass) do
+											_matToUse[#Maps][i].value = undefined
+										
+										_matToUse.wire = off
+										_matToUse.twoSided = off
+										_matToUse.faceted = off
+										_matToUse.faceMap = off
+										
+										_matToUse.adTextureLock = on
+										_matToUse.Diffuse = color 150 150 150
+										_matToUse.ambient = color 150 150 150
+										_matToUse.Specular = color 230 230 230
+										
+										_matToUse.selfIllumAmount = 0
+										_matToUse.useSelfIllumColor = off
+										_matToUse.selfIllumColor = color 0 0 0
+										
+										_matToUse.opacity = 100
+										
+										_matToUse.specularLevel = 0
+										_matToUse.glossiness = 10
+										_matToUse.Soften = 0.1
+										
+										this.defaultStandardMaterial = _matToUse
+									)
+								)--for
+							)--if
+							
+							if this.defaultStandardMaterial == undefined then
+							(print "search for ok standardMaterial in submaterials"
+								_sceneSubmaterials = #()
+								for mat in _sceneMats do _sceneSubmaterials += this.getSubMaterials mat
+								
+								_stop = false
+								for i=1 to _sceneSubmaterials.count where not _stop and classof _sceneSubmaterials[i] == Standardmaterial do
+								(
+									if isProperty _sceneSubmaterials[i] #mental_ray__material_custom_attribute then
+									(
+										_stop = true
+										_matToUse = copy _sceneSubmaterials[i]
+										
+										_matToUse.shaderType = 1
+										
+										for i=1 to _matToUse[#Maps].numsubs where
+										(classof _matToUse[#Maps][i].value != Float) and
+										(classof _matToUse[#Maps][i].value != UndefinedClass) do
+											_matToUse[#Maps][i].value = undefined
+										
+										_matToUse.wire = off
+										_matToUse.twoSided = off
+										_matToUse.faceted = off
+										_matToUse.faceMap = off
+										
+										_matToUse.adTextureLock = on
+										_matToUse.Diffuse = color 150 150 150
+										_matToUse.ambient = color 150 150 150
+										_matToUse.Specular = color 230 230 230
+										
+										_matToUse.selfIllumAmount = 0
+										_matToUse.useSelfIllumColor = off
+										_matToUse.selfIllumColor = color 0 0 0
+										
+										_matToUse.opacity = 100
+										
+										_matToUse.specularLevel = 0
+										_matToUse.glossiness = 10
+										_matToUse.Soften = 0.1
+										
+										this.defaultStandardMaterial = _matToUse
+									)
+								)--for
+							)--if
+							
+							--si aún no se ha podido encontrar un candidato para hacer de this.defaultStandardMaterial rellenamos una variable global de stop a true
+							if this.defaultStandardMaterial != undefined then
+							(
+								lb.render.stopRender = false
+								print this.defaultStandardMaterial
+							)
+							else
+								lb.render.stopRender = true
+							
+							if this.defaultStandardMaterial != undefined then
+								_fMat = copy this.defaultStandardMaterial
+						)--if
+						
+						_fMat.name = _originalMat.name + "_pass-F" --renombra la copia del material
+						_fMat.twoSided = true --activa el 2 sided
+						_fMat.selfIllumAmount = 100 --pone la autoiluminaciona true
+						_fMat.diffuseMapEnable = true --activa el mapa de
+						
+						--Comprueba si debe de aplicar el color del parámetro o un negro
+						_colorToApply = flatColor
+						if (applyIfClassOf != undefined and finditem applyIfClassOf (classOf _originalMat) == 0) do
+							_colorToApply = color 0 0 0 0
+
+						--asigna el color plano
+						_fMat.Diffuse = _colorToApply
+						_fMat.ambient = _colorToApply
+						
+						if _opacityMap != undefined then --si hay que aplicar el mapa de opacidad
+						(
+							_fMat.opacity = _opacityValue
+							_fMat.opacityMapEnable = true
+							_fMat.opacityMap = _opacityMap
+						)--if
+						
+						if _displMap != undefined then --si hay que aplicar el mapa de displacement
+						(
+							if isProperty _fMat #mental_ray__material_custom_attribute then
+							(
+								print "añade displacement en pase de F."
+								(_fMat.mental_ray__material_custom_attribute).DisplacementLocked = false
+								(_fMat.mental_ray__material_custom_attribute).DisplacementON = true
+								(_fMat.mental_ray__material_custom_attribute).Displacement = _displMap
+							)
+							else
+							(
+								print "falla la asignacion de displacement en pase de F."
+							)
+							
+							--debido a un bug de max hay que poner el displacement en el canal por defecto y luego poner el valor a cero
+							_fMat.displacementMap = _displMap
+							_fMat.displacementMapAmount = 0
+						)--if
+						----------------------------------------------------------------------------------------
+						----------------------------------------------------------------------------------------
+						----------------------------------------------------------------------------------------
+					)--if _fMat
+				)--if _originalMat
+			)--if mat != undefined
+			
+			_fMat
+		),
+
+		------------------------------------------------
+		--@fn: material | createPassMaskXYZmaterial | Devuelve un material de Z a creado a partir de uno pasado por parámetro. Es recursiva por el arbol de submateriales del original.
+		--@gets: material | mat | Material a partir del cual construir el nuevo.
+		--@opt: boolean | keepOpacity | true | Indica si conservar la opcidad del material original en el material de Z.
+		--@opt: boolean | keepDisplacement | true | Indica si conservar el desplazamiento del material original en el material de Z.		
+		------------------------------------------------		
+		fn createPassMaskXYZmaterial mat keepOpacity:true keepDisplacement:true =
+		(
+			local _mxyzMat = undefined
+			
+			if mat != undefined then
+			(
+				_originalMat = undefined --para almacenar el material original con el que trabajar
+				
+				if superClassof mat == material then _originalMat = mat
+				else if classof mat == SubAnim and superclassof mat.object == material then _originalMat = mat.object
+				
+				if _originalMat != undefined then --si el material pasado por parametro es un material o un subanim con un material
+				(
+					_mxyzMat = copy _originalMat --crea una copia del material original
+					--_mxyzMat.name = _originalMat.name + "_pass-Z" --renombra la copia del material
+					_hasSubmaterials = false
+					
+					--recorre los subanims buscando submateriales para aplicarles la conversion tambien
+					for i = 1 to _originalMat.numsubs do
+					(
+						--lama recursivamente para obtener
+						_convMat = this.createPassMaskXYZmaterial _originalMat[i] keepOpacity:keepOpacity keepDisplacement:keepDisplacement nTabs:(nTabs + 1)
+						if _convMat != undefined then
+						(
+							if classof _mxyzMat[i] == SubAnim and superclassof _mxyzMat[i].object == material then
+								_mxyzMat[i].value = _convMat
+							else
+								_mxyzMat[i] = _convMat
+							
+							_hasSubmaterials = true
+						)--if _convMat
+						
+					)--for
+					
+					if not _hasSubmaterials and _mxyzMat != undefined then
+					(
+						--variables para almacenar el mapa de opacidad y de desplazamiento si los hubiera
+						_opacityValue = 100
+						_opacityMap = undefined
+						_displMap = undefined
+						
+						--si hay que conservar la opacidad o el displacement
+						if keepOpacity or keepDisplacement then
+						(
+							--segun el tipo de material hay que montar el material de una forma u otra
+							case (classof _originalMat) of
+							(
+								Arch___Design__mi:
+								(
+									if keepOpacity then --en caso de querer salvar la opacidad
+									(
+										_opacityMap = _originalMat.cutout_map
+									)--if keepOpacity
+									
+									if keepDisplacement then --en caso de querer salvar el displacement
+									(
+										try (_displMap = _originalMat.mental_ray__material_custom_attribute.Displacement) catch (print "no tiene la propiedad mental_ray__material_custom_attribute")
+									)--if keepDisplacement
+								)--Arch___Design__mi
+								
+								Blend:
+								(
+									if keepDisplacement then --en caso de querer salvar el displacement
+									(
+										try (_displMap = _originalMat.mental_ray__material_custom_attribute.Displacement) catch (print "no tiene la propiedad mental_ray__material_custom_attribute")
+									)--if keepDisplacement
+								)--Blend
+								
+								mental_ray:
+								(
+									if keepDisplacement then --en caso de querer salvar el displacement
+									(
+										_displMap = _originalMat.Displacement
+									)--if keepDisplacement
+								)--mental_ray
+								
+								Standardmaterial:
+								(
+									if keepOpacity then --en caso de querer salvar la opacidad
+									(
+										_opacityValue = _originalMat.opacity
+										_opacityMap = _originalMat.opacityMap
+									)--if keepOpacity
+									
+									if keepDisplacement then --en caso de querer salvar el displacement
+									(
+										try (_displMap = _originalMat.mental_ray__material_custom_attribute.Displacement) catch (print "no tiene la propiedad mental_ray__material_custom_attribute")
+									)--if keepDisplacement
+								)--Standardmaterial
+								
+								SSS_Fast_Skin_Material_Displace__mi:
+								(
+									if keepDisplacement then --en caso de querer salvar el displacement
+									(
+										_displMap = _originalMat.Displace
+									)--if keepDisplacement
+								)--SSS_Fast_Skin_Material_Displace__mi
+								
+								TopBottom:
+								(
+									if keepDisplacement then --en caso de querer salvar el displacement
+									(
+										try (_displMap = _originalMat.mental_ray__material_custom_attribute.Displacement) catch (print "no tiene la propiedad mental_ray__material_custom_attribute")
+									)--if keepDisplacement
+								)--TopBottom
+							)--case
+						)--keepOpacity or keepDisplacement
+						
+						----------------------------------------------------------------------------------------
+						----------------------------------------------------------------------------------------
+						--creacion del material de pase Mask XYZ
+						----------------------------------------------------------------------------------------
+						
+						--tenemos que hacer estos pasos para que el nuevo material tenga el CA de mental ray
+						_mBckp = meditMaterials[1]
+						activeMeditSlot = 1
+						meditMaterials[1] = copy _originalMat
+						meditMaterials[1] = Arch___Design__mi()
+						meditMaterials[1] = standardMaterial() --crea el material
+						_mxyzMat = meditMaterials[1] --lo coge del editor
+						meditMaterials[1] = _mBckp
+						
+						--si por algun motivo el material standard no tiene mental ray custom attribute COSA QUE OCURRE A MENUDO - BUG DE MAX
+						--los materiales nuevos que se crean salen sin ello, hay que buscar uno de la escena que si que lo tenga, hacer una copia  y dejarlo como un standard nuevo
+						if not isProperty _mxyzMat #mental_ray__material_custom_attribute then
+						(
+							_sceneMats = #()
+							
+							if this.defaultStandardMaterial != undefined and not isProperty this.defaultStandardMaterial #mental_ray__material_custom_attribute then
+								this.defaultStandardMaterial = undefined
+							
+							if this.defaultStandardMaterial == undefined then
+							(--print "search for ok standardMaterial"
+								_sceneMats = this.getSceneMaterials()
+								_stop = false
+								for i=1 to _sceneMats.count where not _stop and classof _sceneMats[i] == Standardmaterial do
+								(
+									if isProperty _sceneMats[i] #mental_ray__material_custom_attribute then
+									(
+										_stop = true
+										_matToUse = copy _sceneMats[i]
+										
+										_matToUse.shaderType = 1
+										
+										for i=1 to _matToUse[#Maps].numsubs where
+										(classof _matToUse[#Maps][i].value != Float) and
+										(classof _matToUse[#Maps][i].value != UndefinedClass) do
+											_matToUse[#Maps][i].value = undefined
+										
+										_matToUse.wire = off
+										_matToUse.twoSided = off
+										_matToUse.faceted = off
+										_matToUse.faceMap = off
+										
+										_matToUse.adTextureLock = on
+										_matToUse.Diffuse = color 150 150 150
+										_matToUse.ambient = color 150 150 150
+										_matToUse.Specular = color 230 230 230
+										
+										_matToUse.selfIllumAmount = 0
+										_matToUse.useSelfIllumColor = off
+										_matToUse.selfIllumColor = color 0 0 0
+										
+										_matToUse.opacity = 100
+										
+										_matToUse.specularLevel = 0
+										_matToUse.glossiness = 10
+										_matToUse.Soften = 0.1
+										
+										this.defaultStandardMaterial = _matToUse
+									)
+								)--for
+							)--if
+							
+							if this.defaultStandardMaterial == undefined then
+							(print "search for ok standardMaterial in submaterials"
+								_sceneSubmaterials = #()
+								for mat in _sceneMats do _sceneSubmaterials += this.getSubMaterials mat
+								
+								_stop = false
+								for i=1 to _sceneSubmaterials.count where not _stop and classof _sceneSubmaterials[i] == Standardmaterial do
+								(
+									if isProperty _sceneSubmaterials[i] #mental_ray__material_custom_attribute then
+									(
+										_stop = true
+										_matToUse = copy _sceneSubmaterials[i]
+										
+										_matToUse.shaderType = 1
+										
+										for i=1 to _matToUse[#Maps].numsubs where
+										(classof _matToUse[#Maps][i].value != Float) and
+										(classof _matToUse[#Maps][i].value != UndefinedClass) do
+											_matToUse[#Maps][i].value = undefined
+										
+										_matToUse.wire = off
+										_matToUse.twoSided = off
+										_matToUse.faceted = off
+										_matToUse.faceMap = off
+										
+										_matToUse.adTextureLock = on
+										_matToUse.Diffuse = color 150 150 150
+										_matToUse.ambient = color 150 150 150
+										_matToUse.Specular = color 230 230 230
+										
+										_matToUse.selfIllumAmount = 0
+										_matToUse.useSelfIllumColor = off
+										_matToUse.selfIllumColor = color 0 0 0
+										
+										_matToUse.opacity = 100
+										
+										_matToUse.specularLevel = 0
+										_matToUse.glossiness = 10
+										_matToUse.Soften = 0.1
+										
+										this.defaultStandardMaterial = _matToUse
+									)
+								)--for
+							)--if
+							
+							--si aún no se ha podido encontrar un candidato para hacer de this.defaultStandardMaterial rellenamos una variable global de stop a true
+							if this.defaultStandardMaterial != undefined then
+							(
+								lb.render.stopRender = false
+								print this.defaultStandardMaterial
+							)
+							else
+								lb.render.stopRender = true
+							
+							if this.defaultStandardMaterial != undefined then
+								_mxyzMat = copy this.defaultStandardMaterial
+							
+						)--if
+						else
+						(
+							print "tiene mental ray connection"
+						)
+						
+						_mxyzMat.name = _originalMat.name + "_pass-MaskXYZ" --renombra la copia del material
+						_mxyzMat.twoSided = true --activa el 2 sided
+						_mxyzMat.selfIllumAmount = 100 --pone la autoiluminaciona true
+						_mat = createMaskXYZMaterial()
+						_mapXYZ = _mxyzMat.diffuseMap = (copy _mat.diffuseMap) --crea el mapa de XYZ (copiándolo de otro)
+						_mapXYZ.coordinateSystem = 3 --pone el sistema de coordenadas a 3
+												
+						if _opacityMap != undefined then --si hay que aplicar el mapa de opacidad
+						(
+							_mxyzMat.opacity = _opacityValue
+							_mxyzMat.opacityMapEnable = true
+							_mxyzMat.opacityMap = _opacityMap
+						)--if
+						
+						if _displMap != undefined then --si hay que aplicar el mapa de displacement
+						(
+							if isProperty _mxyzMat #mental_ray__material_custom_attribute then
+							(
+								print "añade displacement en pase de Mask XYZ."
+								(_mxyzMat.mental_ray__material_custom_attribute).DisplacementLocked = false
+								(_mxyzMat.mental_ray__material_custom_attribute).DisplacementON = true
+								(_mxyzMat.mental_ray__material_custom_attribute).Displacement = _displMap
+							)
+							else
+							(
+								print "falla la asignacion de displacement en pase de Mask XYZ."
+							)--if else
+							
+							--debido a un bug de max hay que poner el displacement en el canal por defecto y luego poner el valor a cero
+							_mxyzMat.displacementMap = _displMap
+							_mxyzMat.displacementMapAmount = 0
+						)--if
+						----------------------------------------------------------------------------------------
+						----------------------------------------------------------------------------------------
+						----------------------------------------------------------------------------------------
+					)--if _mxyzMat
+				)--if _originalMat
+			)--if
+			
+			_mxyzMat
+		),
+		
+		------------------------------------------------
+		--@fn: udefined | passAOmaterialConversion | Crea un material de tipo AO a partir del de los objetos suministrados y se lo sustituye.
+		--@gets: array{node} | nodes | Objetos a los que aplicar el cambio de material.
+		--@gets: float | nSamples | Numero de samples del calculo de AO.
+		--@gets: float | calcDistance | Distancia a partir de la cual afectan unos objetos a otros en su AO.
+		--@gets: integer | nonSelfID | Id de objetos para que el material ignore su influencia en el calculo de AO.
+		--@opt: boolean | keepOpacity | true | Indica si conservar la opcidad del material original en el material de AO.
+		--@opt: boolean | keepDisplacement | true | Indica si conservar el desplazamiento del material original en el material de AO.
+		--@opt: boolean | keepTransparency | false | Indica si conservar la transparencia del material original en el material de AO.
+		--@opt: boolean | forceTransparencyValue | false | Indica si forzar el valor de transparencia del material original en el material de AO.
+		--@opt: integer | transparencyValue | 90 | Valor de transparencia que se quiere forzar.
+		--@opt: boolean | preserveEyeMaterial | false | Indica si conservar el material de los ojos.
+		--@opt: color | aoColor | (color 255 255 255 255) | Color de la parte iluminada del AO.	
+		------------------------------------------------
+		fn passAOmaterialConversion nodes nSamples calcDistance nonSelfID keepOpacity:true keepDisplacement:true keepTransparency:false forceTransparencyValue:true transparencyValue:10 preserveEyeMaterial:false aoColor:(color 255 255 255 255) =
+		(
+			--obtiene los materiales de los nodos pasados por parametro
+			_nodesMats = this.getSceneMaterials alternativeNodes:nodes
+			
+			--intenta agrupar los nodos segun su material			
+			_nodesByMat = #() --array para distribuir los nodos por material
+			for i=1 to nodes.count do
+			(
+				obj = nodes[i]
+				
+				_index = findItem _nodesMats obj.material --busca el material en el Array
+				
+				if _index != 0 then
+				(
+					if _nodesByMat[_index] == undefined then _nodesByMat[_index] = #()
+					append _nodesByMat[_index] obj
+				)--if _index
+			)--for
+			
+			for i=1 to _nodesMats.count do
+			(
+				_aoMat = this.createPassAOmaterial _nodesMats[i] nSamples calcDistance nonSelfID keepOpacity:keepOpacity keepDisplacement:keepDisplacement keepTransparency:keepTransparency forceTransparencyValue:forceTransparencyValue transparencyValue:transparencyValue preserveEyeMaterial:preserveEyeMaterial aoColor:aoColor
+				_aoMat.name = _nodesMats[i].name + "_pass-AO" --renombra la copia del material
+				
+				--if _aoMat != undefined then (/*meditMaterials[i] = _aoMat; */)
+				_nodesByMat[i].material = _aoMat --sustituye el material				
+			)--for
+		),
+
+		------------------------------------------------
+		--@fn: udefined | passZmaterialConversion | Crea un material de tipo Z a partir del de los objetos suministrados y se lo sustituye.
+		--@gets: array{node} | nodes | Objetos a los que aplicar el cambio de material.
+		--@gets: float | nearDistance | Distancia de camara a la que empieza el degradado.
+		--@gets: float | farDistance | Distancia de camara a la que termina el degradado.
+		--@opt: boolean | keepOpacity | true | Indica si conservar la opcidad del material original en el material de Z.
+		--@opt: boolean | keepDisplacement | true | Indica si conservar el desplazamiento del material original en el material de Z.		
+		------------------------------------------------
+		fn passZmaterialConversion nodes nearDistance farDistance keepOpacity:true keepDisplacement:true =
+		(
+			--obtiene los materiales de los nodos pasados por parametro
+			_materialInfos = #()
+			for _n in nodes do _materialInfos += this.getMaterialsRecursiveExt _n
+			_nodesMats = #()
+			_infoByMat = #() --array para distribuir los nodos por material
+			_zMats = #() --array para los materiales de z por grupo de objetos
+			
+			--intenta agrupar los nodos segun su material
+			if keepOpacity or keepDisplacement then --si hay que conservar pacidad o desplazamiento
+			(
+				for _matInfo in _materialInfos do
+				(
+					_index = findItem _nodesMats _matInfo.material
+					if _index == 0 then
+					(
+						append _nodesMats _matInfo.material
+						_index = _nodesMats.count
+						_infoByMat[_index] = #()
+					)
+					append _infoByMat[_index] _matInfo
+					
+				)--for
+			)
+			else
+			(
+				_nodesMats = #(Standardmaterial())
+				_infoByMat[1] = _materialInfos
+			)
+			
+			--calcula los materiales de Z
+			for i=1 to _nodesMats.count do
+			(
+				_zMat = this.createPassZmaterial _nodesMats[i] nearDistance farDistance keepOpacity:keepOpacity keepDisplacement:keepDisplacement
+				_zMat.name = _nodesMats[i].name + "_pass-Z" --renombra la copia del material
+				_zMats[i] = _zMat
+			)--for
+			
+			--aplica los materiales de Z
+			for i=1 to _nodesMats.count do
+			(
+				for _matInfo in _infoByMat[i] do
+				(
+					_node = _matInfo.rootNode
+					if (lb.misc.areArraysEqual _matInfo.subAnimChain #(5)) and _matInfo.property == #value then
+					(
+						_property = #material
+					)
+					else
+					(
+						for subAnimIndex in _matInfo.subAnimChain do
+							_node = _node[subAnimIndex]
+						_property = _matInfo.property
+					)
+					setProperty _node _property _zMats[i] --sustituye el material
+				)
+			)
+		),
+
+		------------------------------------------------
+		--@fn: udefined | passYmaterialConversion | Crea un material de tipo Y a partir del de los objetos suministrados y se lo sustituye.
+		--@gets: array{node} | nodes | Objetos a los que aplicar el cambio de material.
+		--@gets: float | gradientCenterPosition | Altura del mundo que usa como centro del degradado en escala de grises.
+		--@gets: float | gradientDistance | Distancia que se degrada en cada direccion a partir del centro.
+		--@opt: boolean | keepOpacity | true | Indica si conservar la opcidad del material original en el material de Y.
+		--@opt: boolean | keepDisplacement | true | Indica si conservar el desplazamiento del material original en el material de Y.		
+		------------------------------------------------
+		fn passYmaterialConversion nodes gradientCenterPosition gradientDistance keepOpacity:true keepDisplacement:true =
+		(
+			--obtiene los materiales de los nodos pasados por parametro
+			_materialInfos = #()
+			for _n in nodes do _materialInfos += this.getMaterialsRecursiveExt _n
+			_nodesMats = #()
+			_infoByMat = #() --array para distribuir los nodos por material
+			_yMats = #() --array para los materiales de y por grupo de objetos
+			
+			--intenta agrupar los nodos segun su material
+			if keepOpacity or keepDisplacement then --si hay que conservar pacidad o desplazamiento
+			(
+				for _matInfo in _materialInfos do
+				(
+					_index = findItem _nodesMats _matInfo.material
+					if _index == 0 then
+					(
+						append _nodesMats _matInfo.material
+						_index = _nodesMats.count
+						_infoByMat[_index] = #()
+					)
+					append _infoByMat[_index] _matInfo
+					
+				)--for
+			)
+			else
+			(
+				_nodesMats = #(Standardmaterial())
+				_infoByMat[1] = _materialInfos
+			)
+			
+			for i=1 to _nodesMats.count do
+			(
+				_yMat = this.createPassYmaterial _nodesMats[i] gradientCenterPosition gradientDistance keepOpacity:keepOpacity keepDisplacement:keepDisplacement
+				_yMat.name = _nodesMats[i].name + "_pass-Y" --renombra la copia del material
+				_yMats[i] = _yMat
+			)--for
+			
+			--aplica los materiales de Y
+			for i=1 to _nodesMats.count do
+			(
+				for _matInfo in _infoByMat[i] do
+				(
+					_node = _matInfo.rootNode
+					if (lb.misc.areArraysEqual _matInfo.subAnimChain #(5)) and _matInfo.property == #value then
+					(
+						_property = #material
+					)
+					else
+					(
+						for subAnimIndex in _matInfo.subAnimChain do
+							_node = _node[subAnimIndex]
+						_property = _matInfo.property
+					)
+					setProperty _node _property _yMats[i] --sustituye el material
+				)
+			)
+		),
+
+		------------------------------------------------
+		--@fn: undefined | passFmaterialConversion | Crea un material de tipo máscara a partir del de los objetos suministrados y se lo sustituye.
+		--@gets: array{node} | nodes | Objetos a los que aplicar el cambio de material.
+		--@gets: color | flatColor | Color que usar para la máscara.
+		--@opt: boolean | keepOpacity | true | Indica si conservar la opcidad del material original en el material FLAT.
+		--@opt: boolean | keepDisplacement | true | Indica si conservar el desplazamiento del material original en el material de FLAT.		
+		------------------------------------------------		
+		fn passFmaterialConversion nodes flatColor keepOpacity:true keepDisplacement:true =
+		(
+			--obtiene los materiales de los nodos pasados por parametro
+			_materialInfos = #()
+			for _n in nodes do _materialInfos += this.getMaterialsRecursiveExt _n
+			_nodesMats = #()
+			_infoByMat = #() --array para distribuir los nodos por material
+			_fMats = #() --array para los materiales de F por grupo de objetos
+			
+			--intenta agrupar los nodos segun su material
+			if keepOpacity or keepDisplacement then --si hay que conservar pacidad o desplazamiento
+			(
+				for _matInfo in _materialInfos do
+				(
+					_index = findItem _nodesMats _matInfo.material
+					if _index == 0 then
+					(
+						append _nodesMats _matInfo.material
+						_index = _nodesMats.count
+						_infoByMat[_index] = #()
+					)
+					append _infoByMat[_index] _matInfo
+					
+				)--for
+			)
+			else
+			(
+				_nodesMats = #(Standardmaterial())
+				_infoByMat[1] = _materialInfos
+			)
+			
+			for i=1 to _nodesMats.count do
+			(
+				_fMat = this.createPassFmaterial _nodesMats[i] flatColor keepOpacity:keepOpacity keepDisplacement:keepDisplacement
+				_fMat.name = _nodesMats[i].name + "_pass-F" --renombra la copia del material
+				_fMats[i] = _fMat
+			)--for
+			
+			--aplica los materiales de F
+			for i=1 to _nodesMats.count do
+			(
+				for _matInfo in _infoByMat[i] do
+				(
+					_node = _matInfo.rootNode
+					if (lb.misc.areArraysEqual _matInfo.subAnimChain #(5)) and _matInfo.property == #value then
+					(
+						_property = #material
+					)
+					else
+					(
+						for subAnimIndex in _matInfo.subAnimChain do
+							_node = _node[subAnimIndex]
+						_property = _matInfo.property
+					)
+					setProperty _node _property _fMats[i] --sustituye el material
+				)
+			)
+		),
+
+		------------------------------------------------
+		--@fn: udefined | passMXYZmaterialConversion | Crea un material de tipo Mask XYZ a partir del de los objetos suministrados y se lo sustituye.
+		--@gets: array{node} | nodes | Objetos a los que aplicar el cambio de material.
+		--@opt: boolean | keepOpacity | true | Indica si conservar la opcidad del material original en el material de Mask XYZ.
+		--@opt: boolean | keepDisplacement | true | Indica si conservar el desplazamiento del material original en el material de Mask XYZ.		
+		------------------------------------------------
+		fn passMXYZmaterialConversion nodes keepOpacity:true keepDisplacement:true =
+		(
+			--obtiene los materiales de los nodos pasados por parametro
+			_materialInfos = #()
+			for _n in nodes do _materialInfos += this.getMaterialsRecursiveExt _n
+			_nodesMats = #()
+			_infoByMat = #() --array para distribuir los nodos por material
+			_mxyzMats = #() --array para los materiales de mask xyz por grupo de objetos
+			
+			--intenta agrupar los nodos segun su material
+			if keepOpacity or keepDisplacement then --si hay que conservar pacidad o desplazamiento
+			(
+				for _matInfo in _materialInfos do
+				(
+					_index = findItem _nodesMats _matInfo.material
+					if _index == 0 then
+					(
+						append _nodesMats _matInfo.material
+						_index = _nodesMats.count
+						_infoByMat[_index] = #()
+					)
+					append _infoByMat[_index] _matInfo
+					
+				)--for
+			)
+			else
+			(
+				_nodesMats = #(Standardmaterial())
+				_infoByMat[1] = _materialInfos
+			)
+			
+			--calcula los materiales de Mask XYZ
+			for i=1 to _nodesMats.count do
+			(
+				_mxyzMat = this.createPassMaskXYZmaterial _nodesMats[i] keepOpacity:keepOpacity keepDisplacement:keepDisplacement
+				_mxyzMat.name = _nodesMats[i].name + "_pass-MaskXYZ" --renombra la copia del material
+				_mxyzMats[i] = _mxyzMat
+			)--for
+			
+			--aplica los materiales de Mask XYZ
+			for i=1 to _nodesMats.count do
+			(
+				for _matInfo in _infoByMat[i] do
+				(
+					_node = _matInfo.rootNode
+					if (lb.misc.areArraysEqual _matInfo.subAnimChain #(5)) and _matInfo.property == #value then
+					(
+						_property = #material
+					)
+					else
+					(
+						for subAnimIndex in _matInfo.subAnimChain do
+							_node = _node[subAnimIndex]
+						_property = _matInfo.property
+					)
+					setProperty _node _property _mxyzMats[i] --sustituye el material
+				)
+			)
+		),
+
+		------------------------------------------------
+		--@fn: undefined | passETSmaterialConversion | Crea un material de tipo máscara a partir del de los objetos suministrados y se lo sustituye.
+		--@gets: array{node} | nodes | Objetos a los que aplicar el cambio de material.
+		--@gets: color | eyesColor | Color que usar para la máscara de los ojos.
+		--@gets: color | teethColor | Color que usar para la máscara de los dientes.
+		--@gets: color | skinColor | Color que usar para la máscara de la piel.
+		--@opt: boolean | keepOpacity | true | Indica si conservar la opcidad del material original en el material FLAT.
+		--@opt: boolean | keepDisplacement | true | Indica si conservar el desplazamiento del material original en el material de FLAT.		
+		------------------------------------------------		
+		fn passETSmaterialConversion nodes eyesColor teethColor skinColor keepOpacity:true keepDisplacement:true =
+		(
+			--aplica los materiales de ETS
+			for _obj in nodes do
+			(
+				_descriptor = (filterString _obj.name "_")[5]
+				_colorToApply = undefined
+				_applyIfClassOf = undefined
+				if matchPattern _descriptor pattern:"*eye*" ignoreCase:true then --Ojos (comprobación por nombre)
+					_colorToApply = eyesColor
+				else if matchPattern _descriptor pattern:"*teeth*" ignoreCase:true then --Dientes (comprobación por nombre)
+					_colorToApply = teethColor
+				else --Piel (comprobación por material)
+				(
+					if _obj.material != undefined do
+					(
+						if classof _obj.material == Multimaterial then
+							_materials = _obj.material
+						else
+							_materials = #(_obj.material)
+						for i=1 to _materials.count where _colorToApply == undefined do
+							if finditem #(SSS_Fast_Material__mi,SSS_Fast_Skin_Material__mi,SSS_Fast_Skin_Material_Displace__mi) (classof _obj.material[i]) != 0 do
+								(
+									_colorToApply = skinColor
+									_applyIfClassOf = #(SSS_Fast_Material__mi, SSS_Fast_Skin_Material__mi, SSS_Fast_Skin_Material_Displace__mi)
+								)
+					)
+				)
+				if _colorToApply != undefined do
+				(
+					_ETSMat = this.createPassFmaterial _obj.material _colorToApply keepOpacity:keepOpacity keepDisplacement:keepDisplacement applyIfClassOf:_applyIfClassOf
+					_ETSMat.name =  _obj.material.name + "_pass-ETS" --renombra la copia del material
+					_obj.material = _ETSMat --sustituye el material
+				)
+			)--for
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | passPupilmaterialConversion | Crea un material de tipo máscara a partir del de los objetos suministrados y se lo sustituye.
+		--@gets: array{node} | nodes | Objetos a los que aplicar el cambio de material.
+		------------------------------------------------		
+		fn passPupilmaterialConversion nodes =
+		(
+			--aplica los materiales de ETS
+			for _obj in nodes do
+			(
+				_descriptor = (filterString _obj.name "_")[5]
+				if matchPattern _descriptor pattern:"*eye*" ignoreCase:true do
+				(
+					_PupilMat = this.createMaskPupilMaterial()
+					_PupilMat.name =  _obj.material.name + "_pass-PUPIL" --renombra la copia del material
+					_obj.material = _PupilMat --sustituye el material
+				)
+			)--for
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | passHairRGBmaterialConversion | Crea un material de tipo máscara a partir del de los objetos suministrados y se lo sustituye.
+		--@gets: array{node} | nodes | Objetos a los que aplicar el cambio de material.
+		------------------------------------------------		
+		fn passHairRGBmaterialConversion nodes =
+		(
+			--obtiene los materiales de los nodos pasados por parametro
+			_materialInfos = #()
+			for _n in nodes do _materialInfos += this.getMaterialsRecursiveExt _n
+			
+			_matHairRGB = this.createHairRGBMaterial()
+
+			for _matInfo in _materialInfos do
+			(
+				_node = _matInfo.rootNode
+				if (lb.misc.areArraysEqual _matInfo.subAnimChain #(5)) and _matInfo.property == #value then
+				(
+					_property = #material
+				)
+				else
+				(
+					for subAnimIndex in _matInfo.subAnimChain do
+						_node = _node[subAnimIndex]
+					_property = _matInfo.property
+				)
+				setProperty _node _property _matHairRGB --sustituye el material
+			)
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | passMatteShadowMaterialConversion | Crea un material de tipo máscara a partir del de los objetos suministrados y se lo sustituye.
+		--@gets: array{node} | nodes | Objetos a los que aplicar el cambio de material.
+		------------------------------------------------		
+		fn passMatteShadowMaterialConversion nodes =
+		(
+			--obtiene los materiales de los nodos pasados por parametro
+			_materialInfos = #()
+			for _n in nodes do _materialInfos += this.getMaterialsRecursiveExt _n
+			
+			_matMatteShadow = this.createMatteShadowMaterial()
+
+			for _matInfo in _materialInfos do
+			(
+				_node = _matInfo.rootNode
+				if (lb.misc.areArraysEqual _matInfo.subAnimChain #(5)) and _matInfo.property == #value then
+				(
+					_property = #material
+				)
+				else
+				(
+					for subAnimIndex in _matInfo.subAnimChain do
+						_node = _node[subAnimIndex]
+					_property = _matInfo.property
+				)
+				setProperty _node _property _matMatteShadow --sustituye el material
+			)
+		),
+				------------------------------------------------
+		--@fn: undefined | passMatteShadowMaterialConversion | Crea un material de tipo máscara a partir del de los objetos suministrados y se lo sustituye.
+		--@gets: array{node} | nodes | Objetos a los que aplicar el cambio de material.
+		------------------------------------------------		
+		fn passMatteDisplaceMaterialConversion nodes _keepDisplacement:true =
+		(
+			--obtiene los materiales de los nodos pasados por parametro
+			_materialInfos = #()
+			for _n in nodes do _materialInfos += this.getMaterialsRecursiveExt _n
+			
+
+			for _matInfo in _materialInfos do
+			(
+				_node = _matInfo.rootNode
+				if (lb.misc.areArraysEqual _matInfo.subAnimChain #(5)) and _matInfo.property == #value then
+				(
+					_property = #material
+				)
+				else
+				(
+					for subAnimIndex in _matInfo.subAnimChain do
+						_node = _node[subAnimIndex]
+					_property = _matInfo.property
+				)
+				if _node.material != undefined do 
+				(
+					_matteDisplace = this.createMatteDisplaceMaterial _node.material keepDisplacement:_keepDisplacement
+				)
+	
+				setProperty _node _property _matteDisplace --sustituye el material
+			)
+			
+		),
+		------------------------------------------------
+		--@fn: undefined | redirectMatBitmaps | Redirecciona todos los paths de un material.
+		--@gets: material | mat | Material al que redireccionarle los paths.
+		--@gets: string | sourcePattern | Parte del path que sustituir.
+		--@gets: string | mappedPattern | Parte del path por la cual sustituir.
+		------------------------------------------------
+		fn redirectMatBitmaps mat sourcePattern mappedPattern lower:true=
+		(
+			--si es de Xref el material, obtiene el material source
+			if classof mat == XRef_Material then mat = mat.getSourceMaterial true
+			
+			if (mat != undefined) and (mat.numsubs > 0) then 
+				for i = 1 to mat.numsubs where mat[i] != undefined do
+				(
+					_propNames = getPropNames mat[i]					
+
+					--if isProperty mat[i] #object then --muy lento
+					if _propNames != undefined and finditem _propNames #bitmap != 0 then
+					(		
+						if (classof mat[i].object == BitmapTexture) and (mat[i].object.filename != undefined) then
+						(
+							if lower then
+							(
+								_originalPath = tolower mat[i].object.filename
+								_newBitmapPath = substituteString _originalPath (tolower sourcePattern) (tolower mappedPattern)
+							)
+							else
+							(
+								_originalPath =  mat[i].object.filename
+								_newBitmapPath = substituteString _originalPath sourcePattern mappedPattern
+							)
+
+
+							if _newBitmapPath != _originalPath then
+							(
+								_start = timeStamp()
+
+								--mat[i].object.filename = ""
+								mat[i].object.filename = _newBitmapPath
+							)--if							
+						)--if
+					)--if
+
+					this.redirectMatBitmaps mat[i] sourcePattern mappedPattern lower:lower 
+				)--for
+		),
+
+		fn assignRandomMaterialID mat forbiddenIDs:#() =
+		(
+			forbiddenIDs = makeUniqueArray forbiddenIDs --ahce unico el array de ids
+			if forbiddenIDs.count == 16 then forbiddenIDs = #(0) --se asegura de que no le pasan un array prohibido que contenga todos los utilizables
+			_usedIds = #(0) --array para los ids que ya se han utilizado
+			
+			seed (timeStamp()) --resetea el seed
+			_newID = random 1 15 --obtiene el id aleatorio
+			while (findItem forbiddenIDs _newID) != 0 do _newID = random 1 15 --mientras no se obtenga un id sin usar averigua uno
+			append _usedIds _newID --lo almacena como usado
+			
+			mat.effectsChannel = _newID	
+				
+			_matsToWork = lb.materials.getSubMaterials mat deepLevelLimit:1 
+			
+			for mat in _matsToWork do --recorre los materiales y les asigna un id nuevo
+			(
+				if _usedIds.count == 16 then _usedIds = #(0) --resetea el array de IDs usados
+				assignRandomMaterialID mat forbiddenIDs:_usedIds --asigna al material y submateriales IDs aleatorios y los mas diferentes posibles
+				appendIfUnique _usedIds mat.effectsChannel --almacena el ID nuevo como usado
+			)--for
+		),--fn assignRandomMaterialID
+
+
+		------------------------------------------------
+		--@fn: string | simplifyMultiMaterial | Simplifica un multimaterial con submateriales que a su vez sean multimaterials
+		--@gets: material | mat | Multimaterial
+		------------------------------------------------		
+		fn simplifyMultiMaterial mat =
+		(
+			if (classof mat) == Multimaterial do
+			(
+				for m=1 to mat.count where (classof mat[m]) == Multimaterial do
+				(
+					while (classof mat[m]) == Multimaterial and mat[m][m] != undefined do
+					(
+						mat[m] = mat[m][m]
+					)
+				)	
+			)
+		),--fn simplifyMultiMaterial
+
+
+		------------------------------------------------
+		--@fn: string | materialLibName | Devuelve el nombre de fichero de materiales correspondiente a un archivo
+		--@gets: string | fileName | Nombre del archivo
+		------------------------------------------------		
+		fn materialLibName fileName =
+		(
+			materialFileName = getFilenameFile fileName
+			for sString in #("_anim","_cloth","_fx","_hair","_cache","_render") do
+			(
+				if findString materialFileName sString != undefined then
+				(
+					materialFileName = substituteString materialFileName sString "_material"
+					break
+				)
+			)
+
+			if matchPattern materialFileName pattern:"seq_*_(*)" then
+			(
+				materialFileName = lb.str.split materialFileName "_"
+				materialFileName = for s=1 to (materialFileName.count-1) collect materialFileName[s]
+				materialFileName = lb.str.join materialFileName "_"
+			) else if matchPattern materialFileName pattern:"seq_*(*)" then
+			(
+				materialFileName = lb.str.split materialFileName "("
+				materialFileName = for s=1 to (materialFileName.count-1) collect materialFileName[s]
+				materialFileName = lb.str.join materialFileName "("
+			) 
+
+			materialFileName = materialFileName + ".mat"
+
+			return materialFileName
+		),
+
+		------------------------------------------------
+		--@fn: xmlDoc | loadMatInfo | Carga el xml integrado en el fichero de material
+		------------------------------------------------
+		fn loadMatInfo loadPath =
+		(
+			_xmlDoc = undefined
+
+			if (doesFileExist loadPath) do
+			(
+				_f = dotnetObject "System.IO.streamReader" loadPath
+				bXMLFound = false
+				_line = undefined
+				do
+				(
+					_line = _f.readLine()
+					if _line == "<nodesMaterials>" do
+						bXMLFound = true
+				)
+				while _line != undefined and not bXMLFound
+				
+				if bXMLFound do
+				(
+					_txt = "<nodesMaterials>\n" + _f.readToEnd()
+
+					_xmlDoc = lb.xml.xmlDoc()
+					_xmlDoc.setString _txt
+
+				)
+
+				_f.close()
+
+			)
+
+			return _xmlDoc
+		),
+
+		------------------------------------------------
+		--@fn: undefined | saveLib | Guarda los materiales de la escena en un .mat y .xml.
+		--@gets: string | savePath | Path donde guardar los ficheros de librería
+		------------------------------------------------		
+		fn saveLib savePath =
+		(
+			_materials = lb.materials.getSceneMaterials includeSubmaterials:false
+
+			-- si existe la librería, la cargamos y añadimos los materiales que no estén
+			if doesFileExist savePath then
+			(
+				_newMatLib = loadTempMaterialLibrary savePath
+				_xmlDoc = loadMatInfo savePath -- Cargamos el posible matinfo que pueda haber
+			)
+			else
+			(
+				_newMatLib = materialLibrary()
+			)
+			
+			for m in _materials do append _newMatLib m -- Append material no duplica
+ 
+			saveTempMaterialLibrary _newMatLib savePath
+
+			-- si el xml no estaba creado, lo hacemos
+			if _xmlDoc == undefined then
+			(
+				_xmlDoc = lb.xml.newXmlDoc() --Funcion de la libreria de xml para crear un nuevo archivo .xml 
+				_rootNode = _xmlDoc.getRoot() --Lo utilizamos para saber la raiz de nuestro .xml
+				_nodesMaterialsNode = _rootNode.newChild "nodesMaterials" --Lo utilizamos para crear una nueva raiz que sea hija de nuestro root.
+				_nodesMaterials = #()
+				_nodesMaterialsObjects = #()
+			)
+			else
+			-- si el xml ya estaba creado, leemos los nodos de material que tuviera
+			(
+				_rootNode = _xmlDoc.getRoot() --Lo utilizamos para saber la raiz de nuestro .xml
+				_nodesMaterialsNode = _rootNode.getNode "nodesMaterials"
+				_nodesMaterials = _nodesMaterialsNode.getNodes "nodeMaterial"
+				_nodesMaterialsObjects = for n=1 to _nodesMaterials.count collect (_nodesMaterials[n].getProperty "objName")
+			)
+
+			for _o in geometry where isProperty _o #material and _o.material != undefined do
+			(
+				-- si el nodo ya existia, tan solo actualizamos el nombre del material
+				iObjectIndex = findItem _nodesMaterialsObjects _o.name
+				if iObjectIndex == 0 do
+				(
+					--si no, lo creamos y añadimos a la lista
+					_newNodeMaterial = _nodesMaterialsNode.newChild "nodeMaterial"
+					_newNodeMaterial.setProperty "objName" _o.name
+					append _nodesMaterials _newNodeMaterial
+					append _nodesMaterialsObjects _o.name
+					iObjectIndex = _nodesMaterials.count -- para la siguiente linea
+				)
+				_nodesMaterials[iObjectIndex].setProperty "matName" _o.material.name
+			)
+
+			_f = dotnetObject "System.IO.fileStream" savePath (dotnetClass "System.IO.FileMode").Append
+			_fw = dotnetObject "System.IO.StreamWriter" _f
+
+			_fw.Write "\n"
+			_fw.Write (_xmlDoc.toString())
+			_fw.Flush()
+
+			_f.close()
+		),
+
+		------------------------------------------------
+		--@fn: undefined | loadLib | Carga la libreria de materiales guardada por la funcion saveTmpLib.
+		------------------------------------------------
+		fn loadLib loadPath =
+		(
+			if (doesFileExist loadPath) do
+			(
+				_tmpMatLib = loadTempMaterialLibrary loadPath
+
+				_xmlDoc = loadMatInfo loadPath
+				
+				if _xmlDoc != undefined do
+				(
+					_rootNode = _xmlDoc.getRoot()
+
+					_nodesMaterials = _rootNode.getNodes "nodesMaterials/nodeMaterial"
+
+					for _newNodeMaterial in _nodesMaterials do
+					(
+						_objName = _newNodeMaterial.getProperty "objName"
+						_matName = _newNodeMaterial.getProperty "matName"
+
+						_objPatt = _objName
+						if lb.nc.ncOK _objName then
+						(
+							_objPatt = lb.nc.replaceNamePart _objName 6 "*"
+							_objPatt = lb.nc.replaceNamePart _objPatt 7	"?"
+						)
+						
+						_matches = for o in objects where matchpattern o.name pattern:_objPatt collect o
+						
+						_obj = _matches[1]
+						_mat = _tmpMatLib[_matName]
+
+						if _obj	!= undefined and _mat != undefined then
+						(
+							_obj.material = _mat
+						)
+					)
+
+					for r=1 to objXRefMgr.recordCount do
+					(
+						record = objXRefMgr.getRecord r
+						record.update()
+					)
+				)
+
+			)
+		),
+
+		------------------------------------------------
+		--@fn: undefined | saveTmpLib | Guarda los materiales de la escena en un .mat y .xml.
+		------------------------------------------------		
+		fn saveTmpLib =
+		(
+			saveLib (lb.config.getScriptsPath()+"tmp\\tmplib.mat")
+		),
+
+		------------------------------------------------
+		--@fn: undefined | loadTmpLib | Carga la libreria de materiales guardada por la funcion saveTmpLib.
+		------------------------------------------------
+		fn loadTmpLib =
+		(
+			loadLib (lb.config.getScriptsPath()+"tmp\\tmplib.mat")
+		),
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+
+
+			
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addLibrary this --añade la libreria a la principal
+		)
+		
+	)--lib_template
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	
+	lib_materials() --crea la libreria
+)

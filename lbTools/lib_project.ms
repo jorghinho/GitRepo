@@ -1,0 +1,855 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--Descripcion: Librerías y structs de manejo de proyectos
+------------------------------------------------------------------------------------------------------------------------------------------------
+(
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: projectParams | Contiene los parametros de un proyecto.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct lib_projectParams
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		type = "general",	--@var: type | Tipo del conjunto de parametros. general u override.
+		paramName = "",		--@var: paramName | Nombre del conjunto de parametros.
+		
+		frameRate = 24.0,	--@var: frameRate | FrameRate
+			
+		height = 2048,		--@var: height | Altura de fotograma
+		width = 1108,		--@var: width | Anchura de fotograma
+		aspect = 1.0,		--@var: aspect | Pixel aspect de fotograma
+		
+		gammaIn = 1.84,		--@var: gammaIn | Gamma de entrada
+		gammaOut = 1.0,		--@var: gammaOut | Gamma de salida	
+		
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: string | getType | Devuelve el tipo del conjunto de parámetros. Pued eser 'general' u 'override'.
+		------------------------------------------------
+		fn getType = (this.type),
+		
+		------------------------------------------------
+		--@fn: string | getName | Devuelve el nombre del conjunto de parámetros.
+		------------------------------------------------
+		fn getName = (this.paramName),
+		
+		------------------------------------------------
+		--@fn: float | getFrameRate | Devuelve el fremeRate.
+		------------------------------------------------
+		fn getFrameRate = (this.frameRate),
+		
+		------------------------------------------------
+		--@fn: integer | getHeight | Devuelve la altura de fotograma.
+		------------------------------------------------
+		fn getHeight = (this.height),
+		
+		------------------------------------------------
+		--@fn: integer | getHeight | Devuelve el ancho de fotograma.
+		------------------------------------------------
+		fn getWidth = (this.width),
+		
+		------------------------------------------------
+		--@fn: float | getAspect | Devuelve el aspect de fotograma.
+		------------------------------------------------
+		fn getAspect = (this.aspect),
+		
+		------------------------------------------------
+		--@fn: float | getGammaInput | Devuelve el input de gamma.
+		------------------------------------------------
+		fn getGammaInput = (this.gammaIn),
+		
+		------------------------------------------------
+		--@fn: float | getGammaOutput | Devuelve el output de gamma.
+		------------------------------------------------
+		fn getGammaOutput = (this.gammaOut),
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | setType | Almacena el tipo del conjunto de parámetros.
+		--@gets: string | newType | Tipo del conjunto de parámetros. Puede ser 'general' u 'override'.
+		------------------------------------------------
+		fn setType newType = (this.type = newType),
+		
+		------------------------------------------------
+		--@fn: undefined | setName | Almacena el nombre del conjunto de parámetros.
+		--@gets: string | newName | Nombre del conjunto de parámetros.
+		------------------------------------------------
+		fn setName newName = (this.paramName = newName),
+		
+		------------------------------------------------
+		--@fn: undefined | setFrameRate | Almacena el frameRate.
+		--@gets: float | newFramerate | Nuevo frameRate.
+		------------------------------------------------
+		fn setFrameRate newFramerate = (this.frameRate = newFramerate),
+		
+		------------------------------------------------
+		--@fn: undefined | setHeight | Almacena la altura de fotograma.
+		--@gets: integer | newHeight | Nueva altura de fotograma.
+		------------------------------------------------
+		fn setHeight newHeight = (this.height = newHeight),
+		
+		------------------------------------------------
+		--@fn: undefined | setWidth | Almacena la anchura de fotograma.
+		--@gets: intger | newWidth | Nueva anchura de fotograma.
+		------------------------------------------------
+		fn setWidth newWidth = (this.width = newWidth),
+		
+		------------------------------------------------
+		--@fn: undefined | setAspect | Almacena el pixelAspect de fotograma.
+		--@gets: float | newAspect | Nuevo pixelAspect de fotograma.
+		------------------------------------------------
+		fn setAspect newAspect = (this.aspect = newAspect),
+		
+		------------------------------------------------
+		--@fn: undefined | setGammaInput | Almacena el input de gamma.
+		--@gets: float | newGammaInput | Nuevo input de gamma.
+		------------------------------------------------
+		fn setGammaInput newGammaInput = (this.gammaIn = newGammaInput),
+		
+		------------------------------------------------
+		--@fn: undefined | setGammaOutput | Almacena el output de gamma.
+		--@gets: float | newGammaOutput | Nuevo output de gamma.
+		------------------------------------------------
+		fn setGammaOutput newGammaOutput = (this.gammaOut = newGammaOutput),
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: string | toString | Devuelve un string con la informacion del struct.
+		------------------------------------------------
+		fn toString =
+		(
+			_theString = ""
+			
+			_theString += "paramsStart--------------------\n"
+ 			_theString += "type: " + this.type + "\n"
+			_theString += "name: " + this.paramName + "\n"
+			_theString += "frameRate: " + (this.frameRate as string) + "\n"
+			_theString += "height: " + (this.height as string) + "\n"
+			_theString += "width: " + (this.width as string) + "\n"
+			_theString += "aspect: " + (this.aspect as string) + "\n"
+			_theString += "gammaInput: " + (this.gammaIn as string) + "\n"
+			_theString += "gammaOutput: " + (this.gammaOut as string) + "\n"
+			_theString += "paramsEnd---------------------\n"
+			
+			_theString
+		),
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+			
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			
+		)
+	)	
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: singleProject | Contiene todas las propiedades de cada proyecto y funciones para su manejo.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct lib_singleProject
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		projectParams = lib_projectParams,	--@var: projectParams | Para almacenar los parametros de cada proyecto.
+		
+		id = "",							--@var: id | Identificador unico de proyecto.
+		projectName = "",					--@var: projectName | Nombre del proyecto.
+		root = "",							--@var: root | Ruta raiz del proyecto en local.
+		networkRoot = "",					--@var: networkRoot | Ruta raiz del proyecto en red.
+		svnRoot = "",						--@var: svnRoot | Ruta raiz del proyecto en svn.
+			
+		projectInfoTree = undefined,		--@var: projectInfoTree | arbol original del xml que contiene la informacion del proyecto antes de procesarla.
+		
+		params = #(),						--@var: params | Array de parametros
+			
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: string | getId | Devuelve el identificador del proyecto.
+		------------------------------------------------
+		fn getId = (this.id),
+		
+		------------------------------------------------
+		--@fn: string | getName | Devuelve el nombre del proyecto.
+		------------------------------------------------
+		fn getName = (this.projectName),
+		
+		------------------------------------------------
+		--@fn: string | getRoot | Devuelve el root local del proyecto.
+		------------------------------------------------
+		fn getRoot = (this.root),
+		
+		------------------------------------------------
+		--@fn: string | getNetworkRoot | Devuelve el root en red del proyecto.
+		------------------------------------------------
+		fn getNetworkRoot = (this.networkRoot),
+		
+		------------------------------------------------
+		--@fn: string | getSvnRoot | Devuelve el root de SVN del proyecto.
+		------------------------------------------------
+		fn getSvnRoot = (this.svnRoot),
+		
+		------------------------------------------------
+		--@fn: array{projectParams} | getParamBlocks | Devuelve los bloques de parametros del proyecto.
+		------------------------------------------------
+		fn getParamBlocks = (this.params),
+		
+		------------------------------------------------
+		--@fn: integer | getParamBlocksCount | Devuelve el numero de bloques de parametros del proyecto.
+		------------------------------------------------
+		fn getParamBlocksCount = (this.params.count),
+		
+		------------------------------------------------
+		--@fn: projectParams | getParamBlockByIndex | Devuelve el bloque de parametros del proyecto que ocupe el indice indicado.
+		--@gets: integer | index | Indice del bloque de parametros del proyecto que se quiere obtener.
+		------------------------------------------------
+		fn getParamBlockByIndex index = (this.params[index]),
+		
+		------------------------------------------------
+		--@fn: projectParams | getParamBlockByName | Devuelve el bloque de parametros del proyecto que tenga el nombre indicado.
+		--@gets: string | paramsName | Nombre del bloque de parametros del proyecto que se quiere obtener.
+		------------------------------------------------
+		fn getParamBlockByName paramsName =
+		(
+			_theParams = undefined
+			
+			_stop = false --flag de parada
+			for p in this.params where not _stop and p.getName() == paramsName do (_theParams = p; _stop = true)
+			
+			_theParams
+		),
+		
+		------------------------------------------------
+		--@fn: array{projectParams} | getParamBlocksByType | Devuelve los bloques de parametros del proyecto que sean de un tipo específico.
+		--@gets: string | theType | Tipo de los bloques de parametros del proyecto que se quieren obtener.
+		------------------------------------------------
+		fn getParamBlocksByType theType =
+		(
+			_theParams = #()
+			
+			for p in this.params where p.getType() == theType do append _theParams p
+			
+			_theParams
+		),
+		
+		------------------------------------------------
+		--@fn: projectParams | getCommonParamBlock | Devuelve los parametros generales del proyecto.
+		------------------------------------------------
+		fn getCommonParamBlock = (this.getParamBlockByName "common"),
+		
+		------------------------------------------------
+		--@fn: aray{projectParams} | getOverrideParamBlocks | Devuelve los bloaques de parametros del proyecto que sean de tipo override.
+		------------------------------------------------
+		fn getOverrideParamBlocks = (this.getParamBlocksByType "override"),
+			
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | setId | Almacena el identificador del proyecto.
+		--@gets: string | newId | Nuevo identificador del proyecto.
+		------------------------------------------------
+		fn setId newId= (this.id = newId),
+		
+		------------------------------------------------
+		--@fn: undefined | setName | Almacena el nombre del proyecto.
+		--@gets: string | newName | Nuevo nombre del proyecto.
+		------------------------------------------------
+		fn setName newName = (this.projectName = newName),
+		
+		------------------------------------------------
+		--@fn: undefined | setRoot | Almacena el Root local del proyecto.
+		--@gets: string | newRoot | Nuevo Root local del proyecto.
+		------------------------------------------------
+		fn setRoot newRoot = (this.root = newRoot),
+		
+		------------------------------------------------
+		--@fn: undefined | setNetworkRoot | Almacena el Root en red del proyecto.
+		--@gets: string | newNetworkRoot | Nuevo Root en red del proyecto.
+		------------------------------------------------
+		fn setNetworkRoot newNetworkRoot = (this.networkRoot = newNetworkRoot),
+		
+		------------------------------------------------
+		--@fn: undefined | setSvnRoot | Almacena el Root de SVN del proyecto.
+		--@gets: string | newSvnRoot | Nuevo Root de SVN del proyecto.
+		------------------------------------------------
+		fn setSvnRoot newSvnRoot = (this.svnRoot = newSvnRoot),
+		
+		------------------------------------------------
+		--@fn: undefined | setParamBlocks | Almacena los bloques de parametros del proyecto.
+		--@gets: array{projectParams} | newParams | Array con los nuevos bloques de parametros del proyecto.
+		------------------------------------------------
+		fn setParamBlocks newParams = (this.params = newParams),
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: projectParams | newResource | Crea un nuevo bloque de parámetros y lo devuelve.
+		--@gets: xmlElement | paramsNode | nodo xmlElement que contiene la información del bloque de parámetros a crear.
+		------------------------------------------------
+		fn newParamsBlock paramsNode =
+		(
+			_theParams = this.projectParams()
+			
+			--recopila el tipo y el nombre del bloque de parametros
+			_theParams.type = (paramsNode.getChildByName "type").getText()
+			_theParams.paramName = (paramsNode.getChildByName "name").getText()
+			
+			--recopila el framerate
+			_theFrameRate = (paramsNode.getChildByName "frameRate")
+			if _theFrameRate != undefined then _theParams.frameRate = _theFrameRate.getText() as float
+				
+			--recopila los parametros de tamaño
+			_theSize = (paramsNode.getChildByName "size")
+			if _theSize != undefined then
+			(
+				_theHeight = (_theSize.getChildByName "height")
+				if _theHeight != undefined then _theParams.height = _theHeight.getText() as integer
+				
+				_theWidth = (_theSize.getChildByName "width")
+				if _theWidth != undefined then _theParams.width = _theWidth.getText() as integer
+					
+				_theAspect = (_theSize.getChildByName "aspect")
+				if _theAspect != undefined then _theParams.aspect = _theAspect.getText() as float
+			)			
+			
+			--recopila los parametros de gamma
+			_theGamma = (paramsNode.getChildByName "gamma")
+			if _theGamma != undefined then
+			(
+				_theInput = (_theGamma.getChildByName "input")
+				if _theInput != undefined then _theParams.gammaIn = _theInput.getText() as float
+				
+				_theOutput = (_theGamma.getChildByName "output")
+				if _theOutput != undefined then _theParams.gammaOut = _theOutput.getText() as float
+			)
+			
+			_theParams
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | fillProjectData | Rellena la información del proyecto a partir de su archivo de settings
+		------------------------------------------------
+		fn fillProjectData = 
+		(
+			if this.projectInfoTree != undefined then
+			(				
+				--rellena los parametros principales
+				this.id = (this.projectInfoTree.getNode "id").getText()
+				this.projectName = (this.projectInfoTree.getNode "name").getText()
+				this.root = (this.projectInfoTree.getNode "root").getText()
+				this.networkRoot = (this.projectInfoTree.getNode "networkRoot").getText()
+				this.svnRoot = (this.projectInfoTree.getNode "svnRoot").getText()
+				
+				--obtiene todos los parametros
+				_allParams = (this.projectInfoTree.getNodes "parameters/paramblock")
+				for _params in _allParams do append this.params (newParamsBlock _params)
+				
+			)--if doesFileExist				
+		),
+		
+		------------------------------------------------
+		--@fn: string | toString | Devuelve un string con la informacion del proyecto
+		--@returns: string | Información del proyecto.
+		------------------------------------------------
+		fn toString =
+		(
+			_theString = ""
+			
+			_theString += "projectStart----------------------------------------\n"
+			_theString += "id: " + this.id + "\n"
+			_theString += "name: " + this.projectName + "\n"
+			_theString += "root: " + this.root + "\n"
+			_theString += "networkRoot: " + this.networkRoot + "\n"
+			_theString += "svnRoot: " + this.svnRoot + "\n"
+			
+			_theString += "\nparametersStart-------------------\n"
+				for p in this.params do _theString += p.toString() + "\n"
+			_theString += "parametersEnd-----------------------\n"
+			
+			_theString += "projectEnd------------------------------------------\n"
+			
+			_theString
+		),
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+			
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+			this.fillProjectData()
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			
+		)
+	)
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: project | Contiene todas las funciones de proyectos.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct lib_project
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),					--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),		--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,						--@var: category | Categoria de la libreria.
+		className = lb.getFileLibName (getThisScriptFilename() as string),	--@var: className | Nombre de la libreria.
+		description = "Libreria de proyectos",	--@var: description | Descripcion de la libreria.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		projectParams = lib_projectParams,	--Ovar: projectParams | Para almacenar el struct de los parametros de cada proyecto.
+		singleProject = lib_singleProject,	--@var: singleProject | Para almacenar el struct de proyectos.
+		
+		globalSettingsFile = "",			--@var: globalSettingsFile | Archivo de settings globales de las librerias de funciones.
+		projectInfoExe = "",				--@var: projectInfoExe | Path del exe de recopilación de xml de proyectos.
+		projectInfoExeTimeout = 5000,		--@var: projectInfoExeTimeout | Timeout para el exe. (5sec por defecto, siemrpe tarda menos de un segundo, pero si la red esta saturada o el servidor caido es necesario ponerlo)
+		projectInfoLocalFolder = "",		--@var: projectInfoLocalFolder | Path donde dejar los archivos locales de projectInfo.
+		projectsIndexFileName = "",			--@var: projectsIndexFileName | Archivo de index de proyectos.
+		
+		projects = #(),						--@var: projects | Array de structs de proyectos	
+		
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: string | getGlobalSettingsFile | Devuelve la ruta del archivo de settings globales.
+		------------------------------------------------
+		fn getGlobalSettingsFile = 
+		(
+			if this.globalSettingsFile == "" then this.fillLocalGlobalSettingsFile()				
+			this.globalSettingsFile			
+		),
+		
+		------------------------------------------------
+		--@fn: string | getProjectInfoExe | Devuelve la ruta del exe de projectInfo
+		------------------------------------------------
+		fn getProjectInfoExe =
+		(
+			if this.projectInfoExe == "" then this.fillProjectInfoExe()
+			this.projectInfoExe
+		),
+		
+		------------------------------------------------
+		--@fn: string | getProjectInfoLocalFolder | Devuelve la ruta destino para los archivos de projectInfo
+		------------------------------------------------
+		fn getProjectInfoLocalFolder =
+		(
+			if this.projectInfoLocalFolder == "" then this.fillProjectInfoLocalFolder()
+			this.projectInfoLocalFolder
+		),
+		
+		------------------------------------------------
+		--@fn: string | getProjectsIndexFileName | Devuelve la ruta del archivo de indices de proyectos.
+		------------------------------------------------
+		fn getProjectsIndexFileName =
+		(
+			if this.projectsIndexFileName == "" then this.fillProjectsIndexFileName()
+			this.projectsIndexFileName
+		),
+		
+		------------------------------------------------
+		--@fn: integer | getProjectsCount | Devuelve el numero de proyectos que hay.
+		------------------------------------------------
+		fn getProjectsCount = (this.projects.count), --devuelve el numero de proyectos
+		
+		------------------------------------------------
+		--@fn: singleProject | getProjectByIndex | Devuelve el proyecto que ocupa el indice solicitado.
+		--@gets: integer | index | Indice del proyecto que se solicita.
+		------------------------------------------------
+		fn getProjectByIndex index = (this.projects[index]),
+		
+		------------------------------------------------
+		--@fn: singleProject | getProjectById | Devuelve el proyecto cuyo Id sea el solicitado.
+		--@gets: string | projectId | Id del proyecto que se solicita.
+		------------------------------------------------
+		fn getProjectById projectId =
+		(
+			_theProject = undefined
+			
+			_stop = false --flag de parada
+			for p in this.projects where not _stop and p.getId() == projectId do (_theProject = p; _stop = true)
+			
+			_theProject
+		),
+		
+		------------------------------------------------
+		--@fn: singleProject | getProjectByName | Devuelve el proyecto cuyo nombre sea el solicitado.
+		--@gets: string | projectName | Nombre del proyecto que se solicita.
+		------------------------------------------------
+		fn getProjectByName projectName =
+		(
+			_theProject = undefined
+			
+			_stop = false --flag de parada
+			for p in this.projects where not _stop and toLower (p.getName()) == toLower (projectName) do (_theProject = p; _stop = true)
+			
+			_theProject
+		),
+		
+		------------------------------------------------
+		--@fn: singleProject | getProjectByRoot | Devuelve el proyecto cuyo root local sea el solicitado.
+		--@gets: string | root | Root local del proyecto que se solicita.
+		------------------------------------------------
+		fn getProjectByRoot root =
+		(
+			_theProject = undefined
+			
+			_stop = false --flag de parada
+			for p in this.projects where not _stop and toLower (p.getRoot()) == toLower root do (_theProject = p; _stop = true)
+			
+			_theProject
+		),
+		
+		------------------------------------------------
+		--@fn: singleProject | getProjectByNetworkRoot | Devuelve el proyecto cuyo root en red sea el solicitado.
+		--@gets: string | networkRoot | Root en red del proyecto que se solicita.
+		------------------------------------------------
+		fn getProjectByNetworkRoot networkRoot =
+		(
+			_theProject = undefined
+			
+			_stop = false --flag de parada
+			for p in this.projects where not _stop and toLower (p.getNetworkRoot()) == toLower networkRoot do (_theProject = p; _stop = true)
+			
+			_theProject
+		),
+		
+		------------------------------------------------
+		--@fn: singleProject | getProjectBySvnRoot | Devuelve el proyecto cuyo root de SVN sea el solicitado.
+		--@gets: string | svnRoot | Root de SVN del proyecto que se solicita.
+		------------------------------------------------
+		fn getProjectBySvnRoot svnRoot =
+		(
+			_theProject = undefined
+			
+			_stop = false --flag de parada
+			for p in this.projects where not _stop and toLower (p.getSvnRoot()) == toLower svnRoot do (_theProject = p; _stop = true)
+			
+			_theProject
+		),
+		
+		------------------------------------------------
+		--@fn: singleProject | getProjectByPath | Devuelve el proyecto al que pertenece el path indicado.
+		--@gets: string | pathToCheck | Path del que averiguar el proyecto al que pertenece para devolverlo.
+		------------------------------------------------
+		fn getProjectByPath pathToCheck =
+		(
+			_theProject = undefined
+			
+			if theFile != "" then
+			(					
+				for p in this.projects do
+				(
+					if matchPattern pathToCheck pattern:(p.getRoot() + "*") then _theProject = p
+					else if matchPattern pathToCheck pattern:(p.getNetworkRoot() + "*") then _theProject = p
+					else if matchPattern pathToCheck pattern:(p.getSvnRoot() + "*") then _theProject = p
+				)--for
+			)--if
+				
+			_theProject
+		),
+		
+		------------------------------------------------
+		--@fn: singleProject | getFileProject | Devuelve el proyecto al que pertenece el archivo indicado.
+		--@gets: string | theFile | Archivo del que averiguar el proyecto al que pertenece para devolverlo.
+		------------------------------------------------
+		fn getFileProject theFile =
+		(
+			_theProject = undefined
+			
+			if theFile != "" then
+			(					
+				for p in this.projects do
+				(
+					if matchPattern theFile pattern:(p.getRoot() + "*") then _theProject = p
+					else if matchPattern theFile pattern:(p.getNetworkRoot() + "*") then _theProject = p
+					else if matchPattern theFile pattern:(p.getSvnRoot() + "*") then _theProject = p
+				)--for
+			)--if theFile
+				
+			_theProject
+		),
+		
+		------------------------------------------------
+		--@fn: singleProject | getCurrentFileProject | Devuelve el proyecto al que pertenece el archivo abierto.
+		------------------------------------------------		
+		fn getCurrentFileProject =
+		(
+			this.getFileProject (maxfilePath + maxFileName)
+		),
+
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | fillLocalGlobalSettingsFile | Relllena la variable del archivo local de global settings
+		------------------------------------------------
+		fn fillLocalGlobalSettingsFile =
+		(			
+			--this.globalSettingsFile = (getDir #maxroot) + @"stdplugs\stdscripts\lbTools\cnfg\globalSettings.xml"
+			this.globalSettingsFile = (getFilenamePath this.defFile) + @"cnfg\globalSettings.xml"
+		),		
+		
+		------------------------------------------------
+		--@fn: undefined | fillProjectInfoExe | Relllena la variable del exe de projectInfo
+		------------------------------------------------
+		fn fillProjectInfoExe =
+		(
+			if this.globalSettingsFile == "" then this.fillLocalGlobalSettingsFile()
+			
+			_xmlSettings = lb.xml.load (this.globalSettingsFile)
+			this.projectInfoExe = (_xmlSettings.getNode "settings/projectInfo/exe").getText()			
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | fillProjectInfoLocalFolder | Rellena la veriable del folder de destino para los archivos de projectInfo
+		------------------------------------------------
+		fn fillProjectInfoLocalFolder =
+		(
+			if this.globalSettingsFile == "" then this.fillLocalGlobalSettingsFile()
+			
+			_xmlSettings = lb.xml.load (this.globalSettingsFile)
+			this.projectInfoLocalFolder = ((getDir #maxroot) + (_xmlSettings.getNode "settings/projectInfo/destination").getText())			
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | fillProjectsIndexFileName | Rellena la veriable del nombre del archivo de projects index que tiene que buscar
+		------------------------------------------------
+		fn fillProjectsIndexFileName =
+		(
+			if this.globalSettingsFile == "" then this.fillLocalGlobalSettingsFile()
+			
+			_xmlSettings = lb.xml.load (this.globalSettingsFile)
+			this.projectsIndexFileName = (_xmlSettings.getNode "settings/projectInfo/projectsIndex").getText()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | copyProjectInfoToLocal | Llama al exe del projectInfo y copia en local los xml
+		--@obsolete: true | No se usa ya que los archivos de configuracion de los proyectos, van versionados con las tools.
+		------------------------------------------------
+		fn copyProjectInfoToLocal =
+		(			
+			hiddenDOSCommand (this.projectInfoExe + " --timeout=" + (this.projectInfoExeTimeout as string) + " --\"targetPath=" + this.projectInfoLocalFolder + "\\\" --workingPath=" + (getFilenamePath this.projectInfoExe)) ExitCode:&err
+		),		
+		
+		------------------------------------------------
+		--@fn: singleProject | newProject | Crea un nuevo proyecto y lo devuelve.
+		--@gets: treeElement | theProjectTree | Arbol de nodos procedentes de un xml con la informacion del proyecto a procesar.
+		------------------------------------------------
+		fn newProject theProjectTree =
+		(			
+			_theProject = lib_singleProject() -- projectName
+			_theProject.projectParams = this.projectParams
+			
+			_theProject.projectInfoTree = theProjectTree
+			_theProject.init()
+			
+			_theProject
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | fillProjectInfo | Rellena toda la información de los proyectos
+		------------------------------------------------
+		fn fillProjectInfo =
+		(
+			--rellena la informacion desde el global settings
+			this.fillLocalGlobalSettingsFile()
+			this.fillProjectInfoExe()
+			this.fillProjectInfoLocalFolder()
+			this.fillProjectsIndexFileName()
+			
+			--ya no hace falta copiarlos del servidor, van versionados con las tools
+			--this.copyProjectInfoToLocal() --copia los archivos xml de proyectos a local
+				
+			--una vez copiados a local los archivos, hay que procesar la información de los proyectos
+			if doesFileExist (this.projectInfoLocalFolder +  this.projectsIndexFileName) then
+			(
+				--recopila los proyectos
+				_xmlSettings = lb.xml.load (this.projectInfoLocalFolder + this.projectsIndexFileName)
+				_projects = (_xmlSettings.getNodes "projects/project")
+				
+				--recorre los proyectos rellenando sus parámetros
+				for p in _projects do
+				(
+					_newProject = this.newProject p --crea el nuevo proyecto
+					append this.projects _newProject --añade el proyecto al array de proyectos
+				)--for					
+				
+			)--if			
+		),
+		
+		------------------------------------------------
+		--@fn: string | toString | Devuelve un string con la informacion de los proyectos.
+		------------------------------------------------
+		fn toString =
+		(
+			_theString = ""
+			
+			if this.projects.count != 0 then 
+				for p in this.projects do (_theString += p.toString() + "\n")
+			
+			_theString
+		),
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+			
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+			this.projects = #()
+			this.fillProjectInfo()
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addLibrary this --añade la libreria a la principal
+		)		
+		
+	)--lib_project
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	
+	lib_project() --crea la libreria
+)

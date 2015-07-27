@@ -1,0 +1,4502 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--Descripcion: libreria de funciones de rig y sublibrerías asociadas
+------------------------------------------------------------------------------------------------------------------------------------------------
+(	
+	------------------------------------------------
+	--@attributes: attributes | solutionInfoCA | Añadimos la informacion de los nodos de la parte de la solucion para crear el esqueleto de skin, o de rig.
+	------------------------------------------------
+	CA_solutionInfo = attributes solutionInfo
+	(
+		------------------------------------------------------------------------------------------------
+		--PARAMETERS
+		------------------------------------------------------------------------------------------------
+		
+		parameters main
+		(
+			------------------------------------------------------------------------------------------------
+			--COMMON
+			------------------------------------------------------------------------------------------------
+
+			CA_version 			type:#float  		animatable:false default: 1.0				-- Control de versiones.
+			CA_description 		type:#string 		animatable:false default: "Información de la solución almacenada del rig de anim, skin o edición"  -- Descripción.
+
+			------------------------------------------------------------------------------------------------
+			--VARIABLES
+			------------------------------------------------------------------------------------------------
+			
+			solutionCategory 	type:#string 		animatable:false 							-- Puede valer, #arm, #leg, #spine...
+			solutionSubCategory type:#string 		animatable:false 							-- Indica el tipo de esqueleto. Puede valer skin, anim, AnimEdit
+			solutionName 		type:#string 		animatable:false 							-- El nombre del la solución.
+			solutionSide		type:#string		animatable:false 							-- El lado al que pertenece la solución.
+			solutionCopyNumber 	type:#integer 		animatable:false	default:0				-- El número de copia de la solución...
+			solutionVersion 	type:#float 		animatable:false	default:1.0				-- El número de versión de la solución...
+			connectionId 		type:#string 		animatable:false 							-- Tipo de conexion que lleva la solución. Puede valer, anthropomorphic, quadruped, ...
+		)
+		
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa el custAttribute, rellenando todos los datos necesarios.
+		------------------------------------------------
+		fn init =
+		(
+			-- Obtenemos el solutionRoot que le hemos pasado al custAttribute, utilizando la función, refs.dependetNodes, y pasandoselo como referencia debil.
+			_selfNode = (nodeTransformMonitor node:(refs.dependentNodes this immediateOnly:true)[1] forwardTransformChangeMsgs:false)
+			
+			-- Filtramos la cuarta parte del nombre, para rellenar los parametros type y  side respecto a estas partes.
+			_filterName = filterString _selfNode.node.name "_"
+			_filterNamePart05 = filterString _filterName[5] "-" 
+			
+			-- Obtenemos el string filtrado y lo pasamos a tipo name.
+			this.solutionCategory = _filterNamePart05[1]
+			this.solutionSubCategory = _filterName[3]
+			this.solutionSide = _filterName[4]
+		)	
+		
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+	)-- solutionInfoCA
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@attributes: paramsCA | Contiene los parametros especficos de la solución que cuelgan del solutionInfo.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	CA_params = attributes params
+	(
+		------------------------------------------------------------------------------------------------
+		--PARAMETERS
+		------------------------------------------------------------------------------------------------
+		
+		parameters main
+		(
+			------------------------------------------------------------------------------------------------
+			--PARAMETERS
+			------------------------------------------------------------------------------------------------
+
+			CA_version 			type:#float  		animatable:false default: 1.0				-- Control de versiones.
+			CA_description 		type:#string 		animatable:false default: "Información para crear solución del rig de anim"  -- Descripción.
+
+			
+			------------------------------------------------------------------------------------------------
+			--COMMON
+			------------------------------------------------------------------------------------------------
+			root 		type:#maxObject 	animatable:false							-- Objeto raiz de la solución.
+			nodes		type:#maxobjectTab 	animatable:false tabSizeVariable:true		-- Array para guardar todos los nodos de la solución.
+		)
+		
+		------------------------------------------------
+		--@fn: init | init | Inicializa el custAttribute, rellenando todos los datos necesarios.
+		------------------------------------------------
+		fn init =
+		(
+			-- Obtenemos el solutionRoot que le hemos pasado al custAttribute, utilizando la función, refs.dependetNodes, y pasandoselo como referencia debil.
+			this.root = (nodeTransformMonitor node:(refs.dependentNodes (refs.dependents this immediateOnly:true)[1])[1] forwardTransformChangeMsgs:false)
+			
+			-- Obtenemos todos los nodos necesarios para la solución y los guardamos, recorriendo la jerarquia creada por virtual parents.
+			_arrayHierarchy = lb.rig.getAllChildren this.root.node
+			
+			-- Recorremos todos los array y los añadimos como referencia debil.
+			for _o in _arrayHierarchy do append this.nodes (nodeTransformMonitor node:_o forwardTransformChangeMsgs:false)
+		)
+		
+		------------------------------------------------
+		--@fn: array{nodes} | create | Añadimos la informacion de los nodos de la parte de la solucion para crear el esqueleto de skin, o de rig.
+		------------------------------------------------
+		fn createBones =
+		(
+			_solutionInfo = (refs.dependents this)[1]
+			
+			_solName = this.root.node.solutionInfo.solutionName
+			_solution = (lb.rig.solutions.getSolutions category:(_solutionInfo.solutionCategory as name) subCAtegory:(_solutionInfo.solutionSubCategory as name) name:_solName)[1]
+			_solution.createAuxChain this.nodes this.root
+		)
+		
+		------------------------------------------------
+		--@fn: delete | undefined | Llama a la función general para borrar la solución.
+		------------------------------------------------		
+		fn delete =
+		(
+			lb.rig.solutions.deleteSolution this.root.node
+			
+		)
+	)
+	
+	------------------------------------------------
+	--@fn: attributeDef | CA_IndirectFkIkSnaps | Devuelve la definición del indirectFkIkSnaps. Llama al attributo fkIkSnap del control de fkIk.
+	------------------------------------------------
+	CA_indirectFkIk = attributes indirectFkIkSnaps 
+	(
+		parameters main
+		(
+			fkIkNode type:#maxobject		
+		)
+		
+		fn fkIkSnap =
+		(
+			if (isProperty fkIkNode.node.modifiers[1] #fkIkSnaps) then
+				fkIkNode.node.modifiers[1].fkIkSnaps.fkIkSnap()
+		)
+		
+		fn fkIkMatch =
+		(
+			if (isProperty fkIkNode.node.modifiers[1] #fkIkMatch) then
+				fkIkNode.node.modifiers[1].fkIkSnaps.fkIkMatch()
+		)
+		
+		rollout rollFkIk "FkIk Controls"
+		(
+			button btnFkIkSnap "Ninguno" width:155 height:30 
+			button btnFkIkMatch "Match Fk and Ik" width:155 height:30
+			
+			--------------------------------------------------
+			---------- Eventos del custAttribute----------	
+			--------------------------------------------------
+			on rollFkIk open do
+			(
+				if fkIkNode.node.modifiers[1].fkik > 0 then
+					btnFkIkSnap.caption = "Ik to Fk"
+				else
+					btnFkIkSnap.caption = "Fk to Ik"
+			)
+			
+			
+			--------------------------------------------------
+			-- Boton para hacer el snap de fkik
+			--------------------------------------------------
+			on btnFkIkSnap pressed do
+			(
+		-- 				DisableSceneRedraw()
+
+				undo "Fk/Ik Snap" on
+					fkIkSnap()
+
+		-- 						enableSceneRedraw()
+				completeRedraw()
+			)--on btn	
+			
+			--------------------------------------------------
+			-- Botón para hacer el match de las cadenas de fkIk
+			--------------------------------------------------
+			on btnFkIkMatch pressed do
+			(
+				DisableSceneRedraw()
+
+				undo "Match Fk and Ik" on
+					fkIkMatch()
+
+				enableSceneRedraw()
+				completeRedraw()
+			)--on btn	
+			
+		)--rollout 
+	)
+	
+	---------------------------------------------------------------------------------------------------------------------------------------------------
+	-- CA_solutionArmFkIk: Función que contiene el customAttribute del snap de fkIk
+	------------------------------------------------------------------------------------------------------------------------------------------------------
+	CA_autoStrech = attributes autoStrechIK 
+	(
+		-- Parametros Ca
+		parameters main rollout:rollAutoStrech
+		(
+			-- Controles
+			autostrech type:#float ui:(snpAutoStrech, sldAutoStrech)
+		)
+		
+		------------------------------------------------------------------------------
+		----------------------------Rollout -----------------------------------------
+		------------------------------------------------------------------------------
+		rollout rollAutoStrech "AutoStrech Controls"
+		(
+			spinner snpAutoStrech "AutoStrech_IK" range:[0,1,1]
+			slider sldAutoStrech "" range:[0,1,1]
+		)
+	)
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: solutions | Contiene la libreria de soluciones de rig
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct lib_solutions
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #rig,					--@var: category | Categoria de la libreria.
+		className = "solutions",			--@var: className | Nombre de la libreria.
+		description = "Soluciones de rig y funciones asociadas",	--@var: description | Descripcion de la libreria.
+		
+		------------------------------------------------------------------------------------------------
+		--CUSTOM ATTRIBUTES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		solutions = #(),					--@var: solutions | Array para almacenar soluciones.
+		solutionInfo = CA_solutionInfo,
+		indirectFkIkSnaps = CA_indirectFkIk,
+		params = CA_params,
+		autoStrechCA = CA_autoStrech,
+		
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		------------------------------------------------
+		--@fn: string | getAutoRigShapesPath | Devuelve el path de shapes utilizados en el autorig
+		--@gets: name | type | Puede ser de tipo #autoRig #standard
+		------------------------------------------------
+		fn getAnimShapesPath type =
+		(
+			_prjt = lb.project.getProjectById "cmn"
+			_prjt.getRoot()
+			
+			_shapesPath = if type == #autoRig then (_prjt.getRoot()) + "resource\\technical\\max\\rigging\\animation controls\\animationShapes.max" else if type == #standard then (_prjt.getRoot()) + "resource\\technical\\max\\rigging\\animation controls\\riggingShapes.max"
+				
+			_shapesPath	
+		),
+		
+		------------------------------------------------
+		--@fn: array{nodes} | getSceneSolutionRoots | Devuelve todas las soluciones en un array.
+		--@opt: string/name | category | La parte de la solución que queremos obtener, puede valer, arm, leg, spine...
+		--@opt: string/name | subCategory | Indica el tipo de esqueleto. Puede valer skin, anim, AnimEdit.
+		--@opt: string/name | side | Indica el lado que queremos obtener del solutionRoot.
+		------------------------------------------------
+		fn getSceneSolutionRoots category:#all subCategory:#all side:#all =
+		(
+			_solutionRoot = #()
+			
+			--Recorremos los nombres de todos los objetos y filtramos el nombre.
+			for o in objects where (lb.rig.solutions.hasSolutionInfo o) do
+			(
+				_isValidNode = true
+				
+				-- Comprobamos si la categoria es distinto al parametro pasado indicamos que el nodo no es valido para devolverlo.
+				if o.solutionInfo.solutionCategory != category and category != #all then _isValidNode = false
+					
+				-- Comprobamos si la subcategoria es distinto al parametro pasado indicamos que el nodo no es valido para devolverlo.
+				if o.solutionInfo.solutionSubCategory != subCategory and subCategory != #all then _isValidNode = false
+
+				-- Comprobamos si el lado es distinto al parametro pasado indicamos que el nodo no es valido para devolverlo.
+				if o.solutionInfo.solutionSide != side and side != #all then _isValidNode = false
+					
+				if _isValidNode	then append _solutionRoot o
+			)--for o in
+			
+			_solutionRoot
+		),	
+		
+		------------------------------------------------
+		--@fn: node | getBaseNode | Busca la base del personaje en la escena, sino la encuentra la mergea y le añade el linkConstraint.
+		--@opt: name | type | Tipo de base, de #anim o #animEdit
+		--@opt: boolean | merge | Se le indica para que mergee la base automáticamente sino la encuentra en la escena.
+		------------------------------------------------
+		fn getBaseNode type:#anim merge:true =
+		(
+			-- variable de amacenamiento para 'base'.
+			_base = undefined
+			_type = undefined			
+			
+			if type == #anim then _type = lb.nc.NC_classAnim
+			if type == #animEdit then _type = lb.nc.NC_classAnimEdit
+			
+			_base = (execute ("$'" + lb.nc.NC_chrPrefix + "_*_" + _type +"_"+ lb.nc.NC_locationMiddle + "_" + lb.nc.NC_ANIM_base + "_" + lb.nc.NC_nonSpecifiedCache + "_" + lb.nc.NC_controlFlag + "'"))[1]
+							
+			--si el shape no esta en la escena, hace un merge del mismo
+			if merge and type != #animEdit then	
+				if _base == undefined then
+				(				
+					_base = (lb.rig.solutions.mergeShape #base)[1] 
+					
+					lb.controller.freezeTransform _base #all
+
+					_base.wirecolor = clrRed
+					
+					if not (lb.links.pointConstraint.hasPCAttribute _base) then
+						lb.links.pointConstraint.add _base
+
+					(lb.links.addTarget _base undefined frameNo:0)
+
+					-- Instanciamos las pistas de escala entre si para que todo se maneje desde la escala.
+					_base.scale.controller[#Zero_Scale_XYZ].controller.z_scale.controller = _base.scale.controller[#Zero_Scale_XYZ].controller.y_scale.controller = _base.scale.controller[#Zero_Scale_XYZ].controller.x_scale.controller
+					
+					-- Creación de animtracks de la base
+					_sepTransform = #(#(#separator, "Separator01", false, "Transform"))
+					_sep = #(#(#separator, "Separator01", false, ""))
+						
+					lb.animInfo.setAnimTracks _base (_sepTransform + (lb.rig.solutions.prepareAnimTracks _base.position.controller[#Zero_Pos_XYZ] #all) + _sep + (lb.rig.solutions.prepareAnimTracks _base.rotation.controller[#Zero_Euler_XYZ] #all) + _sep + (lb.rig.solutions.prepareAnimTracks _base.scale.controller[#Zero_scale_XYZ] #z)) 
+						
+		-- 					lb.animation.setlocks _base.position.controller[#Weights][#Weight__pointConstraintPos] false	
+						
+					-- Creamos ya su selección set por defecto y dejamos lo locks puestos	
+					-- Montamos el nombre del selectionset de la cabeza-cuello, spine, pelvis, y root.
+					_filterName = filterString _base.name "_"
+					_objSetBaseName = _filterName[1] + "_" + _filterName[2] + "_" + _filterName[3] + "_" + _filterName[4] + "_" + lb.nc.NC_ANIM_base
+					
+					-- Añadimos las piezas a su selection set correspondiente.
+					_objectSet = #(_base)
+					lb.objectsets.add _objectSet _objSetBaseName
+						
+					setTransformLockFlags _base #{7,8}
+				)
+				
+			clearSelection()
+			gc()	
+				
+			_base
+		),
+		
+		------------------------------------------------
+		--@fn: node | getRootNode | Busca lel root del personaje en la escena, sino la encuentra devuelve undefined
+		--@opt: name | type | Tipo de base, de #anim o #animEdit o #skin
+		------------------------------------------------
+		fn getRootNode type:#anim =
+		(
+			-- variable de amacenamiento para 'base'.
+			_root = undefined
+			_type = undefined			
+			_flag = undefined
+			
+			case type of
+			(
+				#anim:
+				(
+					_type = lb.nc.NC_classAnim
+					_flag = lb.nc.NC_controlFlag
+				)
+				
+				#animEdit:
+				(
+					_type = lb.nc.NC_classAnimEdit
+					_flag = lb.nc.NC_controlFlag
+				)
+				
+				#skin:
+				(
+					_type = lb.nc.NC_classSkin
+					_flag = (lb.nc.NC_inheritFlag + lb.nc.NC_skinFlag)
+				)
+			)
+			
+			_root = (execute ("$'" + lb.nc.NC_chrPrefix + "_*_" + _type + "_"+ lb.nc.NC_locationMiddle + "_" + lb.nc.NC_ANIM_root + "_" + lb.nc.NC_nonSpecifiedCache + "_" + _flag + "'"))[1]
+				
+			_root
+		),				
+		
+		------------------------------------------------
+		--@fn: string | getFileSolutionName | Devuelve el nombre de la solución principal almacenada en el archivo pasado por parametro
+		--@gets: string | fileName | Path completo del archivo que contiene la solución.
+		------------------------------------------------
+		fn getFileSolutionName fileName =
+		(	
+			_solName = getFileNameFile fileName
+			
+			_solName = (substituteString _solName "rse_" "")
+			_solName = (substituteString _solName "rss_" "")
+			_solName = (substituteString _solName "rsa_" "")
+			_solName = (substituteString _solName "rs_" "")
+			
+			_solName
+		),
+		
+		------------------------------------------------
+		--@fn: array{bone} | getAnimEditBonesPart | Recorre objects obteniendo los huesos de skin de la escena de la parte indicada y del lado indicado, y los devuelve en un array.
+		--@gets: name | part | Indica la parte que queremos obtener y puede valer #spine #arm, #leg.
+		--@gets: string | side | Lado del esqueleto que queremos obtener; puede valer lb.nc.NC_locationLeft, lb.nc.NC_locationRight lb.nc.NC_locationMiddle.
+		--@opt: boolean | excludeIndexBones | false | Parametro opcional para obtener todos los nodos de una partes, o evitar capturar los nodos enumerados de una parte. Si solo se quiere obtener el brazo sin dedos usar TRUE.
+		------------------------------------------------
+		fn getAnimEditBonesPart part side excludeIndexBones:false =
+		(
+			-- Array para guardar los huesos de las partes correspondientes
+			_skinBones = #()
+			
+			for b in objects do
+			(
+				-- Filtramos el nombre para obtener la clase y el lado correspondiente que se le pase.
+				nameParts = filterString b.name "_" 
+				if nameParts[3] == lb.nc.NC_classSkin then 
+				(
+					if nameParts[4] == side then
+					(
+						case part of
+						(	
+							-- obtiene los huesos de la spine
+							#spine:
+							(
+								case nameParts[5] of
+								(
+									"root": append _skinBones b
+									"pelvis": append _skinBones b
+									"head": append _skinBones b
+									"neck": append _skinBones b
+									-- Para cuando obtener todas las piezas de la spine indexadas.
+									default:
+										if (findstring nameParts[5] "spine") != undefined and not excludeIndexBones then
+											append _skinBones b
+
+								)-- End of case.
+							)-- if nameparts 4
+							
+							-- Obtiene los huesos del brazo
+							#arm:
+							(	
+								case nameParts[5] of
+								(
+									"clavicle": append _skinBones b
+									"upperarm": append _skinBones b
+									"forearm": append _skinBones b
+									"hand": append _skinBones b
+									-- Para cuando obtener todas las piezas de la mano indexadas.
+									default: 
+										if (findstring nameParts[5] "finger") != undefined and not excludeIndexBones then -- si la parte 5 del nombre contiene "spine" añade el bone al array ARM.
+											append _skinBones b
+								)
+							)-- End of case.
+		-- 						
+		-- 						-- obtiene los huesos del brazo
+							#leg:
+							(
+								case nameParts[5] of
+								(
+									"pelvis": append _skinBones b
+									"thigh": append _skinBones b
+									"calf": append _skinBones b
+									"instep": append _skinBones b
+									"toeCap": append _skinBones b
+									
+									default: 
+										if (findstring nameParts[5] "toe") != undefined and not excludeIndexBones then -- si la parte 5 del nombre contiene "spine" añade el bone al array ARM.
+											append _skinBones b
+								)
+							)-- End of case.
+						)-- case part
+					)-- if side
+				)--is classSkin		
+			) -- for b
+			
+			_skinBones
+		),-- end fn		
+		
+		----------------------------------------------------------------------------------------------------------------
+		--@fn: node | getPointScripts | función para crear point donde se almacenarán todos los scriptControllers del sistema de rig.
+		----------------------------------------------------------------------------------------------------------------
+		fn getPointScripts =
+		(
+			-- Iniciamos las variables
+			_pointScripts = undefined
+			_base = undefined
+			
+			_base = (execute ("$'" + lb.nc.NC_chrPrefix + "_*_" + lb.nc.NC_classAnim +"_"+ lb.nc.NC_locationMiddle + "_" + lb.nc.NC_base + "_" + lb.nc.NC_nonSpecifiedCache + "_" + lb.nc.NC_controlFlag + "'"))[1]
+				
+			-- Buscamos el obj en la escena
+			_pointScripts = (execute ("$'" + lb.nc.NC_chrPrefix + "_*_" + lb.nc.NC_classAnim +"_"+ lb.nc.NC_locationMiddle + "_" + lb.nc.NC_pointScripts + "_" + lb.nc.NC_nonSpecifiedCache + "_" + (lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag) + "'"))[1]
+			
+			-- Si no encontramos el pointScript en la escena lo creamos. Si existe la base lo hacemos respecto a esta, sino, lo creamos en el 0,0,0 del mundo.
+			if _pointScripts == undefined then
+			(
+				if _base != undefined then
+				(
+					_pointScripts = lb.rig.createPointFromObj _base
+					_pointScripts.parent = _base
+				
+					-- Nombramos el point
+					_pointScripts.name = lb.nc.NC_chrPrefix + "_chrName_" + lb.nc.NC_classAnim +"_"+ lb.nc.NC_locationMiddle + "_" + lb.nc.NC_pointScripts + "_" + lb.nc.NC_nonSpecifiedCache + "_" + (lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag) 
+				
+					--Opciones de visualización del punto.
+					_pointScripts.Box = on
+					_pointScripts.cross = on
+					_pointScripts.size = 10
+					_pointScripts.wirecolor = yellow
+					_pointScripts.parent = _base
+				)
+				else
+				(
+					-- Creamos el point en el 0,0,0
+					_pointScripts = point size:10 cross:true box:true
+					
+					-- Nombramos el point
+					_pointScripts.name = lb.nc.NC_chrPrefix + "_chrName_" + lb.nc.NC_classAnim +"_"+ lb.nc.NC_locationMiddle + "_" + lb.nc.NC_pointScripts + "_" + lb.nc.NC_nonSpecifiedCache + "_" + (lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag) 
+					_pointScripts.wirecolor = yellow
+				)
+				
+				lb.controller.freezeTransform _pointScripts #all
+			)
+
+			_pointScripts
+		),
+		
+		------------------------------------------------
+		--@fn: array{solution} | getSolutions | Devuelve todas las soluciones en un array.
+		------------------------------------------------
+		fn getSolutions category:undefined subCategory:undefined connectionId:undefined name:undefined =
+		(
+			_solutions = #()
+			
+			for _sol in this.solutions do
+			(
+				_useThis = true
+					
+				if category != undefined and _sol.category != category then _useThis = false
+				if subCategory != undefined and _sol.subCategory != subCategory then _useThis = false
+				if connectionId != undefined and _sol.connectionId != connectionId then _useThis = false
+				if name != undefined and (toLower _sol.solName) != (toLower name) then _useThis = false
+					
+				if _useThis then append _solutions _sol
+			)
+			
+			_solutions
+		),	
+		
+		------------------------------------------------
+		--@fn: array{name} | getSolutionCategories | Devuelve las categorias de las soluciones.
+		------------------------------------------------
+		fn getSolutionCategories =
+		(
+			(makeUniqueArray (for _sol in this.solutions collect _sol.category))
+		),
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------	
+		------------------------------------------------
+		--@fn: array{name} | addScaleControllerToTongueBones | Añade el controlador de la base a los huesos de la lengua.
+		------------------------------------------------
+		fn addScaleControllerToTongueBones ast =
+		( 
+			_base = lb.rig.solutions.getBaseNode()
+			_success = false
+			
+			if _base != undefined then
+			(
+				_tongueBonNodes = (execute ("$'" + lb.nc.NC_chrPrefix + "_" + ast.name + "_" + lb.nc.NC_classFacial + "_*_tongue*-bon_x_" + (lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag) + "'")) as array
+				_tongueShpNodes = (execute ("$'" + lb.nc.NC_chrPrefix + "_" + ast.name + "_" + lb.nc.NC_classFacial + "_*_tongue*-shp_x_" + (lb.nc.NC_controlFlag + lb.nc.NC_inheritFlag) + "'")) as array
+					
+				_tongueBonNodes = lb.misc.sortNodesByName _tongueBonNodes
+				_tongueHlpNodes = lb.misc.sortNodesByName _tongueBonNodes
+				
+				for o in _tongueShpNodes do
+				(
+					o.scale.controller[#Zero_Scale_XYZ].controller.x_scale.controller[#Float_script].controller.addNode "base" _base 
+					o.scale.controller[#Zero_Scale_XYZ].controller.x_scale.controller[#Float_script].controller.SetExpression "base = (lb.rig.getAnimNode lb.nc.NC_ANIM_base)[1] if base != undefined then ((scale.value + base.scale.x) - 2) else 0"
+					
+					o.scale.controller[#Zero_Scale_XYZ].controller.y_scale.controller[#Float_script].controller.addNode "base" _base 
+					o.scale.controller[#Zero_Scale_XYZ].controller.y_scale.controller[#Float_script].controller.SetExpression "base = (lb.rig.getAnimNode lb.nc.NC_ANIM_base)[1] if base != undefined then ((scale.value + base.scale.y) - 2) else 0"
+					
+					o.scale.controller[#Zero_Scale_XYZ].controller.z_scale.controller[#Float_script].controller.addNode "base" _base 
+					o.scale.controller[#Zero_Scale_XYZ].controller.z_scale.controller[#Float_script].controller.SetExpression "base = (lb.rig.getAnimNode lb.nc.NC_ANIM_base)[1] if base != undefined then ((scale.value + base.scale.z) - 2) else 0"
+				)
+				
+				_success = true
+			)-- if
+			
+			_success
+		),
+		
+		-----------------------------------------------------------------------------------------------------
+		--@fn: boolean | hasSolutionInfo | Indica si el objeto obj tiene solutionInfo definido
+		--@gets: node | obj | Objeto para comprobar el attributo.
+		-----------------------------------------------------------------------------------------------------
+		fn hasSolutionInfo obj =
+		(
+			(lb.customAttributes.hasAttribute obj #solutionInfo)
+		),
+		
+		------------------------------------------------
+		--@fn: string | addAttributeHolder | Añade un modificador attibuteHolder vacio al objeto indicado.
+		--@gets: node | obj | Objeto al que se añade el attributHolder.
+		--@gets: string | attribName | Nombre que se le dará al modificador attributeHolder, string.
+		------------------------------------------------		
+		fn addAttributeHolder obj attribName =
+		(
+			addModifier obj (EmptyModifier ()) ui:on -- añade modificador attributeHolder vacio al objeto indicado en obj.
+			
+			obj.modifiers[#Attribute_Holder].name = attribName -- Renombra Attibute Holder con el string indicado en attribName.
+			
+			modPanel.setCurrentObject obj.modifiers[attribName] -- Marcamos el modicifador attributeHolder añadido como activo porque no se refresca el nombre en la lista.
+			
+			attribName
+		),
+	
+		------------------------------------------------
+		--@fn: boolean | create | Crea la solución. Devuelve true si lo consigo o false sino. 
+		--@gets: node | solutionRoot | Padre de la solución de la categoria.
+		------------------------------------------------
+		fn addSolutionInfo solutionRoot solutionName solutionParameters solutionVersion =
+		(
+			if solutionRoot.custAttributes[#solutionInfo] != undefined then 
+				custAttributes.delete solutionRoot (custAttributes.getdef solutionRoot.solutionInfo) baseobject:false
+			
+			custAttributes.add solutionRoot (lb.rig.solutions.solutionInfo) #unique baseobject:false
+			
+			custAttributes.add solutionRoot.solutionInfo solutionParameters #unique baseobject:false
+			
+			-- Rellenamos los parametros especificos, nombre de solución,versión y connectionID
+			solutionRoot.solutionInfo.solutionName = solutionName	
+			solutionRoot.solutionInfo.solutionVersion = solutionVersion	
+			solutionRoot.solutionInfo.connectionId = "anthropomorphic"	
+				
+			-- Los inicializamos con los parametros que puede rellenar	
+			solutionRoot.solutionInfo.init()
+			solutionRoot.solutionInfo.params.init()
+		),	
+		
+		fn prepareAnimTracks track trackType default:undefined linkConstraint: false =
+		(
+			_tracks = #()
+			_linkConstraint = ""
+			
+			if linkConstraint then
+				_linkConstraint = "link_params:"
+			
+			case classof track.controller of
+			(
+				Position_XYZ:
+				(
+					_contrName = substituteString (toLower track.name) " " "_"
+					
+					if trackType == #x or trackType == #all then
+						_tracks += #(#(track.controller[#x_position], ("transform:" + _linkConstraint + "position:" + _contrName + ":x_position"), true, "x_position", (if default == undefined then track.controller[1].value)))
+							
+					if trackType == #y or trackType == #all then
+						_tracks += #(#(track.controller[#y_position], ("transform:" + _linkConstraint + "position:" + _contrName + ":y_position"), true, "y_position", (if default == undefined then track.controller[2].value)))
+			
+					if trackType == #z or trackType == #all then
+						_tracks += #(#(track.controller[#z_position], ("transform:" + _linkConstraint + "position:" + _contrName + ":z_position"), true, "z_position", (if default == undefined then track.controller[3].value)))
+				)
+				
+				Euler_XYZ:
+				(
+					_contrName = substituteString (toLower track.name) " " "_"
+					
+					if trackType == #x or trackType == #all then
+						_tracks += #(#(track.controller[#x_rotation], ("transform:" + _linkConstraint + "rotation:" + _contrName + ":x_rotation"), true, "x_rotation", (if default == undefined then track.controller[1].value)))
+							
+					if trackType == #y or trackType == #all then
+						_tracks += #(#(track.controller[#y_rotation], ("transform:" + _linkConstraint + "rotation:" + _contrName + ":y_rotation"), true, "y_rotation", (if default == undefined then track.controller[2].value)))
+			
+					if trackType == #z or trackType == #all then
+						_tracks += #(#(track.controller[#z_rotation], ("transform:" + _linkConstraint + "rotation:" + _contrName + ":z_rotation"), true, "z_rotation", (if default == undefined then track.controller[3].value)))
+				)
+				
+				ScaleXYZ:
+				(
+					_contrName = substituteString (toLower track.name) " " "_"
+					
+					if trackType == #x or trackType == #all then
+						_tracks += #(#(track.controller[#x_scale], ("transform:" + _linkConstraint + "scale:" + _contrName + ":x_scale"), true, "x_scale", (if default == undefined then track.controller[1].value)))
+							
+					if trackType == #y or trackType == #all then
+						_tracks += #(#(track.controller[#y_scale], ("transform:" + _linkConstraint + "scale:" + _contrName + ":y_scale"), true, "y_scale", (if default == undefined then track.controller[2].value)))
+			
+					if trackType == #z or trackType == #all then
+						_tracks += #(#(track.controller[#z_scale], ("transform:" + _linkConstraint + "scale:" + _contrName + ":z_scale"), true, "z_scale", (if default == undefined then track.controller[3].value)))
+				)
+			)
+			
+			_tracks
+		),
+		
+		------------------------------------------------
+		--@fn: array{bone} | createFkIkChains | Crea las cadenas de huesos de fkIk duplicando la cadena de huesos que se le pase, con su respectiva jerarquia. Después de la rellena el struct correspondiente de la cadena de huesos.
+		--@gets: array{bone} | boneChain | Indica la parte que queremos obtener y puede valer #spine #arm, #leg.
+		--@opt: name | chainType | false | Parametro opcional por si queremos crear solo la cadena de #fk, #ik, #bb  #skin (breakBones, rompeHuesos). #ALL para crear las 4 cadenas, parametro por defecto, 
+		------------------------------------------------
+		fn createFkIkChains boneChain chainType:#all =
+		(
+			_bonesCloned = #()
+			_tempBon = #()
+			_filterParts = undefined
+			_animEditBase = this.getBaseNode type:#animEdit
+			
+			-- Recorremos los huesos que se han pasado por parametro y filtramos para solo capturar los huesos, por si
+			-- se nos ha quedado algún point. Alamcenamos temporalmente en _tempBon
+			for b in boneChain where (classOf b.baseObject == boneGeometry) do
+				append _tempBon b
+				
+			-- Sobreescribimos boneChian para trabajar con ella de nuevo
+			boneChain = _tempBon
+			
+			-- Vaciamos para dejarlo limpio.
+			_tempBon = #()
+			
+			-- Por cada tipo de parametro pasado duplicamos los huesos, los renombramos y los almacenamos en "boneChain"
+			-- que utilizaremos más tarde para recorrerlos.		
+			----------------------------------------------------------------
+			-- #RIG - Se clonan los huesos para formar la cadena de rig.
+			----------------------------------------------------------------		
+			if chainType == #all or chainType == #anim then
+			(
+				maxOps.CloneNodes boneChain newNodes: &_tempBon
+								
+				for b in _tempBon do
+				(
+					_filterParts = filterString b.name "_"
+					_nameParts = _filterParts[1] + "_" + _filterParts[2] + "_" + lb.nc.NC_classAnim + "_" + _filterParts[4] + "_"  + _filterParts[5]+ "_"  + _filterParts[6] + "_"  + lb.nc.NC_controlFlag
+					b.name = _nameParts	
+				)
+					
+				-- Aplicamos el color determinado respecto al lado del personaje.
+				if _filterParts[4] == lb.nc.NC_locationLeft then
+					lb.rig.applyGradient _tempBon clrBlue clrBlueEnd
+				else if _filterParts[4] == lb.nc.NC_locationRight then
+					lb.rig.applyGradient _tempBon clrGreen clrGreenEnd
+				else if _filterParts[4] == lb.nc.NC_locationMiddle then
+					lb.rig.applyGradient _tempBon clrBaseSpine clrRedEnd
+				
+				
+				_bonesCloned = ( _bonesCloned + _tempBon)
+				
+			)
+			
+			----------------------------------------------------------------
+			-- #FK - Se clonan los huesos para formar la cadena de Fk.
+			----------------------------------------------------------------
+			if chainType == #all or chainType == #fk then
+			(
+				-- Borramos la clavicula y los dedos ya que no trabajaremos con ellas en las cadenas de fk y de ik.
+				_bonToDel = #()
+				
+				for i = 1 to boneChain.count do
+					if (findString  boneChain[i].name "clavicle") != undefined or (findString  boneChain[i].name "pelvis") != undefined  or (findString  boneChain[i].name "finger") != undefined /*or (findString  boneChain[i].name "toe") != undefined */then		
+						append _bonToDel i
+				
+				for i =  _bonToDel.count to 1 by -1 do
+					deleteItem boneChain _bonToDel[i]
+				
+				maxOps.CloneNodes boneChain newNodes: &_tempBon
+				
+				-- La declaramos fuera para luego utilizarla e indicar la posición 
+				-- de los sideFins van hacia adelante o hacia atrás respecto al lado R o L.
+				_filterParts = undefined
+				
+				-- Renombramos toda la cadena de tipo FK
+				for b in _tempBon do
+				(
+					_filterParts = filterString b.name "_"
+					_nameParts = _filterParts[1] + "_" + _filterParts[2] + "_" + lb.nc.NC_classAnim + "_" + _filterParts[4] + "_"  + (_filterParts[5] + "Fk")+ "_"  + _filterParts[6] + "_"  + (lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag)
+					b.name = _nameParts
+				)
+				
+				-- Cambiamos parametros del color, tamaño y sideFins.		
+		-- 				_tempBon.width = 1
+		-- 				_tempBon.height = 1
+		-- 				_tempBon.taper = 90
+				_tempBon.wirecolor = green 
+				
+				
+				if _filterParts[4] == lb.nc.NC_locationLeft then
+				(
+					_tempBon.backfin = on
+					_tempBon.backfinsize = (3 * _animEditBase.scale[1])
+				)
+				else
+				(
+					_tempBon.frontfin = on
+					_tempBon.frontfinsize = (3 * _animEditBase.scale[1])
+				)
+				
+
+				_bonesCloned = ( _bonesCloned + _tempBon)
+			)
+			
+			----------------------------------------------------------------
+			-- #IK - Se clonan los huesos para formar la cadena de Ik.
+			----------------------------------------------------------------
+			if chainType == #all or chainType == #ik then
+			(
+				-- Borramos la clavicula y los dedos ya que no trabajaremos con ellas en las cadenas de fk y de ik.
+				_bonToDel = #()
+				
+				for i = 1 to boneChain.count do
+					if (findString  boneChain[i].name "clavicle") != undefined or (findString  boneChain[i].name "pelvis") != undefined  or (findString  boneChain[i].name "finger") != undefined /*or (findString  boneChain[i].name "toe") != undefined */then		
+						append _bonToDel i
+				
+				for i =  _bonToDel.count to 1 by -1 do
+					deleteItem boneChain _bonToDel[i]
+			
+				maxOps.CloneNodes boneChain newNodes: &_tempBon
+				
+				for b in _tempBon do
+				(
+					_filterParts = filterString b.name "_"
+					_nameParts = _filterParts[1] + "_" + _filterParts[2] + "_" + lb.nc.NC_classAnim + "_" + _filterParts[4] + "_"  + (_filterParts[5] + "Ik")+ "_"  + _filterParts[6] + "_"  + (lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag)
+					b.name = _nameParts
+				)
+				
+		-- 				_tempBon.width = 2
+		-- 				_tempBon.height = 2
+		-- 				_tempBon.taper = 90
+				_tempBon.wirecolor = red 
+				
+				if _filterParts[4] == lb.nc.NC_locationLeft then
+				(
+					_tempBon.frontfin = on
+					_tempBon.frontfinsize = (3 * _animEditBase.scale[1])
+				)
+				else
+				(
+					_tempBon.backfin = on
+					_tempBon.backfinsize = (3 * _animEditBase.scale[1])
+				)
+								
+				
+				_bonesCloned = ( _bonesCloned + _tempBon)
+				
+				for b in _bonesCloned do
+					lb.customAttributes.deleteAttribute b
+				
+				_bonesCloned
+			)
+			
+			----------------------------------------------------------------
+			-- #BReakBones - Se clonan los huesos para formar la cadena de rompeHuesos (bb = breakBones).
+			----------------------------------------------------------------
+			if chainType == #all or chainType == #bb then
+			(
+				-- Borramos la clavicula y los dedos ya que no trabajaremos con ellas en las cadenas de bb.
+				_bonToDel = #()
+				
+				for i = 1 to boneChain.count do
+					if (findString  boneChain[i].name "clavicle") != undefined or (findString  boneChain[i].name "pelvis") != undefined  or (findString  boneChain[i].name "finger") != undefined or (findString  boneChain[i].name "instep") != undefined or (findString  boneChain[i].name "toeCap") != undefined  /*or (findString  boneChain[i].name "toe") != undefined */then		
+						append _bonToDel i
+				
+				for i =  _bonToDel.count to 1 by -1 do
+					deleteItem boneChain _bonToDel[i]
+			
+				maxOps.CloneNodes boneChain newNodes: &_tempBon
+				
+				for b in _tempBon do
+				(
+					_filterParts = filterString b.name "_"
+					_nameParts = _filterParts[1] + "_" + _filterParts[2] + "_" + lb.nc.NC_classAnim + "_" + _filterParts[4] + "_"  + (_filterParts[5] + "Bb")+ "_"  + _filterParts[6] + "_"  + (lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag)
+					b.name = _nameParts
+				)
+				
+		-- 				_tempBon.width = 2
+		-- 				_tempBon.height = 2
+		-- 				_tempBon.taper = 90
+				_tempBon.wirecolor = yellow 
+				
+				_tempBon.sidefins = on
+				_tempBon.sidefinssize = (3 * _animEditBase.scale[1])
+
+				_bonesCloned = ( _bonesCloned + _tempBon)
+				
+				for b in _bonesCloned do
+					lb.customAttributes.deleteAttribute b
+				
+				_bonesCloned
+			)
+			
+			----------------------------------------------------------------
+			-- #Skin - Se clonan los huesos para formar la cadena de rompeHuesos (bb = breakBones).
+			----------------------------------------------------------------
+			if chainType == #all or chainType == #skin then
+			(
+				-- Borramos la clavicula y los dedos ya que no trabajaremos con ellas en las cadenas de skin.
+				_bonToDel = #()
+						
+				maxOps.CloneNodes boneChain newNodes: &_tempBon
+				
+				for b in _tempBon do
+				(
+					_filterParts = filterString b.name "_"
+					_nameParts = _filterParts[1] + "_" + _filterParts[2] + "_" + lb.nc.NC_classSkin + "_" + _filterParts[4] + "_"  + (_filterParts[5])+ "_"  + _filterParts[6] + "_"  + (lb.nc.NC_inheritFlag + lb.nc.NC_skinFlag)
+					b.name = _nameParts
+				)
+				
+				_tempBon.wirecolor = orange 
+				
+				_tempBon.sidefins = off
+
+
+				_bonesCloned = ( _bonesCloned + _tempBon)
+				
+				for b in _bonesCloned do
+					lb.customAttributes.deleteAttribute b
+				
+				_bonesCloned
+			)
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | addStrechSystem | Crea las cadenas de huesos de fkIk duplicando la cadena de huesos que se le pase, con su respectiva jerarquia. Después de la rellena el struct correspondiente de la cadena de huesos.
+		--@gets: node | bone | Indica la parte que queremos obtener y puede valer #spine #arm, #leg.
+		--@opt: boolean | invertSign | false | Parametro opcional por si queremos crear solo la cadena de #fk, #ik, #bb  #skin (breakBones, rompeHuesos). #ALL para crear las 4 cadenas, parametro por defecto, 
+		------------------------------------------------
+		mapped fn addStrechSystem bone invertSign:false =
+		(
+			bone.scale.controller[#Zero_Scale_XYZ].controller.x_scale.controller = float_list()
+			_fltScrpt = bone.scale.controller[#Zero_Scale_XYZ][#X_Scale].available.controller = float_script()
+			bone.scale.controller[#Zero_Scale_XYZ][#X_Scale].controller.setName 2 "LockScale"
+			_fltScrpt.AddObject ((lb.nc.getNamePart bone.name 5) + "Anim_scaX") bone.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Bezier_float]
+			_fltScrpt.script = "1 - " + ((lb.nc.getNamePart bone.name 5) + "Anim_scaX.value")
+
+			_floatExpr = bone.children[1].position.controller[#Zero_Pos_XYZ][#X_Position].controller = float_list()
+			_floatExpr =  bone.children[1].position.controller[#Zero_Pos_XYZ][#X_Position].available.controller = Float_Expression()	
+			bone.children[1].position.controller[#Zero_Pos_XYZ][#X_Position].controller.setName 2 "Strech_FltExpr_X"
+			_floatExpr.AddScalarConstant ((lb.nc.getNamePart bone.children[1].parent.name 5) + "Anim_length") bone.children[1].parent.length
+			_floatExpr.AddScalarTarget ((lb.nc.getNamePart bone.children[1].parent.name 5) + "Anim_scaX") bone.children[1].parent.scale.controller[#Zero_Scale_XYZ][#X_Scale][#Bezier_float]
+
+			if not invertSign then
+				_floatExpr.setExpression ("((" + (lb.nc.getNamePart bone.children[1].parent.name 5) + "Anim_scaX * " + (lb.nc.getNamePart bone.children[1].parent.name 5) + "Anim_length) - " + ((lb.nc.getNamePart bone.children[1].parent.name 5) + "Anim_length)"))
+			else
+				_floatExpr.setExpression ("-((" + (lb.nc.getNamePart bone.children[1].parent.name 5) + "Anim_scaX * " + (lb.nc.getNamePart bone.children[1].parent.name 5) + "Anim_length) - " + ((lb.nc.getNamePart bone.children[1].parent.name 5) + "Anim_length)"))
+		),
+
+		------------------------------------------------
+		--@fn: array{shape} | mergeShape | Mergea el shape de animación del archivo donde tenemos todas guardadas.
+		--@gets: name | part | Puede valer #ARM, #LEG #ELBOW, #KNEE, #BREAKELBOW, #BREAKKNEE # BASE #FKIK
+		--@opt: string | side | false | Parametro opcional para obtener el lado derecho o izquierdo.
+		------------------------------------------------		
+		fn mergeShape part side:undefined =
+		(
+			_shapesPath = lb.rig.solutions.getAnimShapesPath #autoRig
+				
+			if _shapesPath == undefined then _shapesPath = getOpenFileName caption:"Shapes Path not found, please select it" 
+			
+			_shapesToMerge = #()
+			
+			_nameShapes = getMAXFileObjectNames _shapesPath
+			
+			for s in _nameShapes do
+			(
+				-- Filtramos el nombre para obtener la clase y el lado correspondiente que se le pase.
+				_nameParts = filterString s "_" 
+				
+				if _nameParts[4] == side then
+				(
+					case part of
+					(	
+						#arm: 
+						(
+							if _nameParts[5] == lb.nc.NC_ANIM_mergeHandIk then
+								append _shapesToMerge s
+						)
+						
+						#leg: 
+						(
+							if _nameParts[5] == lb.nc.NC_ANIM_mergeFootStep or _nameParts[5] == "pivotInside" or _nameParts[5] == "pivotOutside" or _nameParts[5] == "pivotFootHeel" then
+								append _shapesToMerge s
+						)
+					)
+				)
+				else		
+					case part of
+					(	
+						#base: 
+						(
+							if _nameParts[5] == lb.nc.NC_ANIM_mergeBase then
+								append _shapesToMerge s
+						)
+						
+						#fkIk:
+						(
+							if _nameParts[5] == lb.nc.NC_ANIM_mergefkIk then
+								append _shapesToMerge s
+						)
+						
+						#elbow: 
+						(
+							if _nameParts[5] == lb.nc.NC_ANIM_mergeElbow then
+								append _shapesToMerge s
+						)
+						
+						#knee: 
+						(
+							if _nameParts[5] == lb.nc.NC_ANIM_mergeKnee then
+								append _shapesToMerge s
+						)
+						
+						#breakElbow: 
+						(
+							if _nameParts[5] == lb.nc.NC_ANIM_mergeBreakElbow then
+								append _shapesToMerge s
+						)
+
+						#breakKnee: 
+						(
+							if _nameParts[5] == lb.nc.NC_ANIM_mergeBreakKnee then
+								append _shapesToMerge s
+						)
+					)-- case
+			)-- for
+			
+			mergeMAXFile _shapesPath _shapesToMerge #mergeDups
+		 
+			-- Convertimos el array de strings  de los shapes a mergear en objetos para guardarlos de nuevo y poder operar con ellos.
+			executeString = "#("
+			
+			for i=1 to _shapesToMerge.count do
+			(
+				if i != _shapesToMerge.count then
+					executeString += "$'" + _shapesToMerge[i] + "',"
+				else
+					executeString += "$'" + _shapesToMerge[i] + "')"
+			)
+			
+			_shapesToMerge = execute executeString
+			
+			_shapesToMerge
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | doesSolutionExist | Indica si una solucion existe
+		--@gets: solution | solutionToFind | Solucion que se está buscando para ver si existe
+		------------------------------------------------
+		fn doesSolutionExist solutionToFind = 
+		(
+			((this.getSolutions category:solutionToFind.category subCategory:solutionToFind.subCategory name:solutionToFind.solName).count != 0)
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | deleteSolution | Borra lasolución que le pasemos.
+		--@gets: solution | solutionRoot | Solucion que se está buscando para ver si existe
+		------------------------------------------------
+		fn deleteSolution solutionRoot =
+		(
+			_base = lb.rig.solutions.getBaseNode merge:false
+			
+			_animSolutions = lb.rig.solutions.getSceneSolutionRoots subCategory:lb.nc.NC_classAnim
+			
+			if _animSolutions.count < 2 and _base != undefined then delete _base
+			
+			_root = solutionRoot.solutionInfo.params.root
+			_nodes = solutionRoot.solutionInfo.params.nodes
+			
+			-- Recolectamos todos los nodos por referencia para evitar fallos a la hora de borrar objeto por obj. Borramos los array de golpe.
+			_nodes = for _o in _nodes collect _o.node
+			
+			delete _nodes
+			delete _root.node
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | addSolution | Añade una solucion al array de soluciones.
+		--@gets: solution | newSolution | Solucion que se quiere añadir.
+		------------------------------------------------
+		fn addSolution newSolution =
+		(
+			--Si la solucion ya existe la borra primero para que no se duplique
+			if this.doesSolutionExist newSolution then this.removeSolution newSolution
+				
+			_tempSolutions = this.solutions
+			
+			if _tempSolutions.count == 0 then
+				append _tempSolutions newSolution
+			else if _tempSolutions.count == 1 then
+			(
+				if newSolution.index >= _tempSolutions[1].index then
+					append _tempSolutions newSolution
+				else
+					_tempSolutions = #(newSolution) + _tempSolutions
+			)
+			else
+			(
+				_tempSolutions = #()
+				
+				_added = false
+				
+				for i = 1 to this.solutions.count - 1 do
+				(
+					append _tempSolutions this.solutions[i] 
+					
+					if newSolution.index >= this.solutions[i].index and newSolution.index < this.solutions[i+1].index then 
+					(
+						append _tempSolutions newSolution
+						
+						_added = true
+					)
+				)
+				
+				append _tempSolutions this.solutions[this.solutions.count]
+				
+				if not _added then append _tempSolutions newSolution
+			)
+			
+			this.solutions = _tempSolutions
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | removeSolution| Elimina una solucion.
+		--@gets: solution | solutionToFind | Solucion que se está buscando para ver si existe
+		------------------------------------------------
+		fn removeSolution solutionToFind =
+		(
+			for i = this.solutions.count to 1 by -1 where (this.solutions[i].category == solutionToFind.category) and (this.solutions[i].subCategory == solutionToFind.subCategory) and (this.solutions[i].solName == solutionToFind.solName) do
+				deleteItem (this.solutions) i
+		),
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			-- ejecución al crearse
+		)		
+	)--lib_solutions
+
+	-----------------------------------------------------------------------------------------------------------------------------------------------	
+	--@struct: auxPart | Contiene la libreria de auxPart.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct lib_auxPart
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #rig,					--@var: category | Categoria de la libreria.
+		className = lb.getFileLibName (getThisScriptFilename() as string),	--@var: className | Nombre de la libreria.
+		description = "Libreria auxPart",	--@var: description | Descripcion de la libreria.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		------------------------------------------------------------------------------------------------
+		--@fn: undefined |  createClavicle |  Creación de los huesos auxiliares de las claviculas.
+		--@gets: node | side | pasarle el lado correspondiente "lb.nc.NC_locationLeft" o "lb.nc.NC_locationRight".
+		------------------------------------------------------------------------------------------------
+		fn createClavicle side =
+		(
+			max create mode
+			--Huesos de skin necesarios para la creación de huesos.
+			_neck = (lb.rig.getSkinNode lb.nc.NC_ANIM_neck)[1]
+			_upperarm = (lb.rig.getSkinNode lb.nc.NC_ANIM_upperarm side:side)[1]
+			_success = false
+			_base = lb.rig.solutions.getBaseNode type:#AnimEdit
+			
+			_createAuxClavicleStrech = #()		--Array vacio para rellenarlo con los huesos creados posteriormente.
+			
+			if _neck != undefined and _upperarm != undefined then
+			(
+				_dist = distance _neck _upperarm		--devuelve la distancia entre dos huesos.
+				
+				--Creación de los huesos necesarios.
+				_createAuxClavicle = lb.rig.createNewBone [_upperarm.transform.pos.x, _upperarm.transform.pos.y, (_upperarm.transform.pos.z)] _neck.transform.pos _upperarm
+				
+				_createAuxClavicle.width = (2 * _base.scale[1])
+				_createAuxClavicle.height = (2 * _base.scale[1])
+				_createAuxClavicle.taper = 90
+				
+				_createAuxClavicleEnd = lb.rig.smartCreateEnd _createAuxClavicle
+				
+				--Rellenando array.
+				append _createAuxClavicleStrech _createAuxClavicle
+				append _createAuxClavicleStrech _createAuxClavicleEnd
+				
+				--Configuración de naming, color, etz....
+				for _o in _createAuxClavicleStrech do _o.wirecolor =  color 252 252 0
+				
+				_filterName = filterString _upperarm.name "_"
+				_createAuxClavicle.name = _filterName[1] + "_" + _filterName[2] + "_" + _filterName[3] + "_" + side + "_" + "clavicle-aux-bon-x" + "_" + _filterName[6] + "_" + lb.nc.NC_inheritFlag + lb.nc.NC_skinFlag
+				_createAuxClavicleEnd.name = _filterName[1] + "_" + _filterName[2] + "_" + _filterName[3] + "_" + side + "_" + "clavicle-aux-bon-end" + "_" + _filterName[6] + "_" + lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag
+				
+				--Creación del streching y configuración, tamaño, naming, Linkajes, etz...
+				_clavicleStrech = lb.rig.createStretchBoneChain _createAuxClavicleStrech
+				
+				_clavicleStrech[1].parent = _upperarm.parent		--linkajes
+				_clavicleStrech[2].parent = _neck
+				
+				for _o in _clavicleStrech do 
+				(
+					_o.size = 3	* _base.scale[1]   --Tamaño de los point.
+					_filterName = filterString _o.name "_"
+					_filterPart = filterString _filterName[5] "-"
+					_filterPoint = filterString _filterPart[4] "P"
+					_o.name = _filterName[1] + "_" + _filterName[2] + "_" + _filterName[3] + "_" + _filterName[4] + "_" + _filterPart[1] + "-" + _filterPart[2] + "-" + "hlp" + "-" + _filterPoint[1] + "_" + _filterName[6] + "_" +  _filterName[7]
+					lb.controller.freezeTransform _o #all
+				)
+				
+				--Gestión de los objetos en su capa correcta.
+				_typeLayer = _neck.layer.name
+				_lyChr = layermanager.getLayerFromName _typeLayer
+				for _o in _createAuxClavicleStrech do _lyChr.addNode _o
+				for _o in _clavicleStrech do _lyChr.addNode _o
+					
+				_success = true
+			)
+			
+			-------------------------------------------------------
+			-- SKIN_CONNECTION_INFO
+			-------------------------------------------------------
+			lb.skinConnectionInfo.add _createAuxClavicle #headSystem true --añadido headSystem en el hueso de skin.
+
+			_success
+		),
+		
+		------------------------------------------------------------------------------------------------
+		--@fn: undefined |  createShoulder  |  Creación de los huesos auxiliares de los hombros.
+		--@gets: node | side | pasarle el lado correspondiente "lb.nc.NC_locationLeft" o "lb.nc.NC_locationRight".
+		------------------------------------------------------------------------------------------------
+		fn createShoulder side =
+		(
+			max create mode
+			_upperarm = (lb.rig.getSkinNode lb.nc.NC_ANIM_upperarm side:side)[1]
+			_base = lb.rig.solutions.getBaseNode type:#AnimEdit
+			
+			_success = false
+			
+			_createAuxShoulder = #()		--Array vacio para rellenarlo con los huesos creados posteriormente.
+			
+			if _upperarm != undefined then
+			(
+				
+				--Creación de los huesos necesarios.
+				_createAuxShoulderFront = lb.rig.createNewBone _upperarm.transform.pos [_upperarm.transform.pos.x, (_upperarm.transform.pos.y + (_upperarm.length/3)), _upperarm.transform.pos.z] _upperarm
+				_createAuxShoulderBack = lb.rig.createNewBone _upperarm.transform.pos [_upperarm.transform.pos.x, (_upperarm.transform.pos.y + -(_upperarm.length/3)), _upperarm.transform.pos.z] _upperarm
+				
+				--Rellenando array.
+				append _createAuxShoulder _createAuxShoulderFront
+				append _createAuxShoulder _createAuxShoulderBack
+				
+				--Configuración de naming, color, etz....
+				-- Multiplicamos un tamaño por defecto de huesos para si escalamos el personaje se mantenga.
+				_createAuxShoulder.width = (3 * _base.scale[1])
+				_createAuxShoulder.height = (3 * _base.scale[1])
+				_createAuxShoulder.taper = 90
+				_createAuxShoulder.length = (3 * _base.scale[1])	
+					
+				for _o in _createAuxShoulder do _o.wirecolor =  color 255 112 0
+				_filterName = filterString _upperarm.name "_"
+				_createAuxShoulderFront.name = _filterName[1] + "_" + _filterName[2] + "_" + _filterName[3] + "_" + side + "_" + "shoulder-front-bon-x" + "_" + _filterName[6] + "_" + lb.nc.NC_skinFlag
+				_createAuxShoulderBack.name = _filterName[1] + "_" + _filterName[2] + "_" + _filterName[3] + "_" + side + "_" + "shoulder-back-bon-x" + "_" + _filterName[6] + "_" + lb.nc.NC_skinFlag
+				
+				_createPointShoulder = lb.rig.createPointFromObj _createAuxShoulderFront		--Creación del point que llevara el constraint.
+				
+				--Configuración del point naming, tamaño, color, etz...
+				_filterName = filterString _createPointShoulder.name "_"
+				_createPointShoulder.size = (3 * _base.scale[1])
+				_createPointShoulder.name = _filterName[1] + "_" + _filterName[2] + "_" + _filterName[3] + "_" + side + "_" + "shoulder-front-hlp-x" + "_" + _filterName[6] + "_" + lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag
+				_createPointShoulder.cross = off
+				_createPointShoulder.wirecolor = color 252 252 0
+				
+				for _o in _createAuxShoulder do 
+				(
+					_o.parent = _createPointShoulder
+					lb.controller.freezeTransform _o #all
+				)
+				_createPointShoulder.parent = _upperarm
+				lb.controller.freezeTransform _createPointShoulder #all
+				
+				-- Añadimos constraint de orientación y sus target.
+				lb.rig.addConstraint _createPointShoulder #rot _upperarm.parent  "OC_Shoulder" keepInitOffset: true
+				_createPointShoulder.rotation.controller.OC_Shoulder.controller.appendTarget _upperarm 50
+				
+				--Gestión de los objetos en su capa correcta.
+				_typeLayer = _upperarm.layer.name
+				_lyChr = layermanager.getLayerFromName _typeLayer
+				for _o in _createAuxShoulder do _lyChr.addNode _o
+				for _o in _createPointShoulder do _lyChr.addNode _o
+					
+				_success = true
+			)
+			
+			_success
+		),
+		
+		------------------------------------------------------------------------------------------------
+		--@fn: undefined |  createElbow  |  Creación de los huesos de los codos.
+		--@gets: node | side | pasarle el lado correspondiente "lb.nc.NC_locationLeft" o "lb.nc.NC_locationRight".
+		------------------------------------------------------------------------------------------------
+		fn createElbow side =
+		(
+			max create mode
+			_forearm = (lb.rig.getSkinNode lb.nc.NC_ANIM_forearm side:side)[1]
+			_base = lb.rig.solutions.getBaseNode type:#AnimEdit
+
+			_success = false
+			
+			if _forearm != undefined then
+			(
+				--Creación de los huesos necesarios.
+				_createAuxElbow = lb.rig.createNewBone _forearm.transform.pos [_forearm.transform.pos.x, (_forearm.transform.pos.y + (_forearm.length/3)), _forearm.transform.pos.z] _forearm
+				
+				--Configuración de naming, color, etz....
+				_createAuxElbow.wirecolor =  color 255 112 0
+				_filterName = filterString _forearm.name "_"
+				_createAuxElbow.name = _filterName[1] + "_" + _filterName[2] + "_" + _filterName[3] + "_" + side + "_" + "elbow-x-bon-x" + "_" + _filterName[6] + "_" + lb.nc.NC_skinFlag
+				
+				-- Multiplicamos un tamaño por defecto de huesos para si escalamos el personaje se mantenga.
+				_createAuxElbow.width = (3 * _base.scale[1])
+				_createAuxElbow.height = (3 * _base.scale[1])
+				_createAuxElbow.taper = 90
+				_createAuxElbow.length = (3 * _base.scale[1])
+
+					
+				_createAuxElbowPoint = lb.rig.createPointFromObj _createAuxElbow		--Creación del point que llevara el constraint.
+				
+				--Configuración del point naming, tamaño, color, etz...
+				_filterName = filterString _createAuxElbowPoint.name "_"
+				_createAuxElbowPoint.size = (3 * _base.scale[1])	
+					
+				_createAuxElbowPoint.name = _filterName[1] + "_" + _filterName[2] + "_" + _filterName[3] + "_" + side + "_" + "elbow-x-hlp-x" + "_" + _filterName[6] + "_" + lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag
+				_createAuxElbowPoint.cross = off
+				_createAuxElbowPoint.wirecolor = color 252 252 0
+				
+				_createAuxElbow.parent = _createAuxElbowPoint
+				_createAuxElbowPoint.parent = _forearm
+				lb.controller.freezeTransform _createAuxElbow #all
+				lb.controller.freezeTransform _createAuxElbowPoint #all
+				
+				-- Añadimos constraint de orientación y sus target.
+				lb.rig.addConstraint _createAuxElbowPoint #rot _forearm.parent  "OC_Elbow" keepInitOffset: true
+				_createAuxElbowPoint.rotation.controller.OC_Elbow.controller.appendTarget _forearm 50
+				_createAuxElbowPoint.rotation.controller.OC_Elbow.controller.weight[1] = 50
+				
+				--Gestión de los objetos en su capa correcta.
+				_typeLayer = _forearm.layer.name
+				_lyChr = layermanager.getLayerFromName _typeLayer
+				for _o in _createAuxElbow do _lyChr.addNode _o
+				for _o in _createAuxElbowPoint do _lyChr.addNode _o
+					
+				_success = true
+			)
+			
+			_success
+		),
+		
+		------------------------------------------------------------------------------------------------
+		--@fn: undefined | createFinger |  Creación de los huesos de los dedos.
+		--@gets: node | side | pasarle el lado correspondiente "lb.nc.NC_locationLeft" o "lb.nc.NC_locationRight".
+		------------------------------------------------------------------------------------------------
+		fn createFinger side =
+		(
+			_forearm = (lb.rig.getSkinNode lb.nc.NC_ANIM_forearm side:side)[1]
+			_hand = (lb.rig.getSkinNode lb.nc.NC_ANIM_hand side:side)[1]
+			_base = lb.rig.solutions.getBaseNode type:#AnimEdit
+
+			_success = false
+			
+			if _forearm != undefined then
+			(
+				_fingersAll = #() 
+				_fingers = #() --Array que contiene los huesos de los dedos.
+				_asset = (lb.asset.getSceneAssets())[1]
+				
+				for ch in _hand.children where classof ch == boneGeometry do 			--Obtenemos todos los hijos en un array.
+					_fingersAll += lb.rig.getAllChildren ch useVirtualHierarchy:false
+					
+				for o in _fingersAll do
+					if o.children.count > 0 then		--Gestiona el array _fingersAll para crear otro array sin los huesos End.
+						append _fingers o
+					
+				--Recorre los huesos de los dedos para crear la parte extra. 
+				for _o in _fingers do
+				(
+					--Creación de los huesos necesarios.
+					_createAuxFinger = lb.rig.createNewBone _o.transform.pos [_o.transform.pos.x, (_o.transform.pos.y + (_o.length/2)), _o.transform.pos.z] _o
+					
+					--Configuración de naming, color, etz....
+					_createAuxFinger.wirecolor =  color 255 112 0
+						
+					-- Multiplicamos un tamaño por defecto de huesos para si escalamos el personaje se mantenga.
+					_createAuxFinger.width = (3 * _base.scale[1])
+					_createAuxFinger.height = (3 * _base.scale[1])
+					_createAuxFinger.taper = 90
+					_createAuxFinger.length = (3 * _base.scale[1])
+						
+					_filterName = filterString _o.name "_"
+					_createAuxFinger.name = _filterName[1] + "_" + _filterName[2] + "_" + _filterName[3] + "_" + side + "_" + _filterName[5] + "-x-bon-x" + "_" + _filterName[6] + "_" + lb.nc.NC_skinFlag
+					lb.controller.freezeTransform _createAuxFinger #all
+					_createAuxFinger.transform = _o.transform
+						
+					_createAuxFingerPoint = lb.rig.createPointFromObj _o	--Creación del point que llevara el constraint.
+					
+					--Configuración del point naming, tamaño, color, etz...
+					_filterName = filterString _createAuxFingerPoint.name "_"
+					_filterPart = filterString _filterName[5] "#"
+					_createAuxFingerPoint.size = (3 * _base.scale[1])
+					_createAuxFingerPoint.name = _filterName[1] + "_" + _filterName[2] + "_" + _filterName[3] + "_" + side + "_" + _filterPart[1] + "-x-hlp-x" + "_" + _filterName[6] + "_" + lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag
+					_createAuxFingerPoint.cross = off
+					_createAuxFingerPoint.size = _createAuxFinger.length*2
+					_createAuxFingerPoint.wirecolor = color 252 252 0
+					
+					lb.controller.freezeTransform _createAuxFingerPoint #all
+					_createAuxFinger.parent = _createAuxFingerPoint
+					_createAuxFingerPoint.rotation.controller[#Zero_euler_xyz].controller[#Z_rotation].value = -90 --rota el point para dejarlo bien colocado según la posición Upper/Front
+					_createAuxFingerPoint.parent = _o
+					lb.controller.freezeTransform _createAuxFinger #all
+					lb.controller.freezeTransform _createAuxFingerPoint #all
+					
+					-- Añadimos constraint de orientación y sus target.
+					lb.rig.addConstraint _createAuxFingerPoint #rot _o.parent  "OC_Finger" keepInitOffset: true
+					_createAuxFingerPoint.rotation.controller.OC_Finger.controller.appendTarget _o 50
+					_createAuxFingerPoint.rotation.controller.OC_Finger.controller.weight[1] = 50
+					
+					--Gestión de los objetos en su capa correcta.
+					_typeLayer = _o.layer.name
+					_lyChr = layermanager.getLayerFromName _typeLayer
+					for _o in _createAuxFinger do _lyChr.addNode _o
+					for _o in _createAuxFingerPoint do _lyChr.addNode _o
+				)
+					
+				_success = true
+			)
+			
+			_success
+		),
+		
+		------------------------------------------------------------------------------------------------
+		--@fn: undefined | createKnee |  Creación de los huesos de la rodilla.
+		--@gets: node | side | pasarle el lado correspondiente "lb.nc.NC_locationLeft" o "lb.nc.NC_locationRight".
+		------------------------------------------------------------------------------------------------
+		fn createKnee side =
+		(
+			max create mode
+			_calf = (lb.rig.getSkinNode lb.nc.NC_ANIM_calf side:side)[1]
+			_base = lb.rig.solutions.getBaseNode type:#AnimEdit
+
+			_success = false
+			
+			if _calf != undefined then
+			(
+			
+				--Creación de los huesos necesarios.
+				_createAuxCalf = lb.rig.createNewBone _calf.transform.pos [_calf.transform.pos.x, (_calf.transform.pos.y + -(_calf.length/3)), _calf.transform.pos.z] _calf
+				
+				--Configuración de naming, color, etz....
+				_createAuxCalf.wirecolor =  color 255 112 0
+					
+				-- Multiplicamos un tamaño por defecto de huesos para si escalamos el personaje se mantenga.
+				_createAuxCalf.width = (3 * _base.scale[1])
+				_createAuxCalf.height = (3 * _base.scale[1])
+				_createAuxCalf.taper = 90
+				_createAuxCalf.length = (3 * _base.scale[1])
+					
+				_filterName = filterString _calf.name "_"
+				_createAuxCalf.name = _filterName[1] + "_" + _filterName[2] + "_" + _filterName[3] + "_" + side + "_" + "calf-x-bon-x" + "_" + _filterName[6] + "_" + lb.nc.NC_skinFlag
+				
+				_createAuxCalfPoint = lb.rig.createPointFromObj _createAuxCalf		--Creación del point que llevara el constraint.
+				
+				--Configuración del point naming, tamaño, color, etz...
+				_filterName = filterString _createAuxCalfPoint.name "_"
+				_createAuxCalfPoint.size = (3 * _base.scale[1])
+				_createAuxCalfPoint.name = _filterName[1] + "_" + _filterName[2] + "_" + _filterName[3] + "_" + side + "_" + "calf-x-hlp-x" + "_" + _filterName[6] + "_" + lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag
+				_createAuxCalfPoint.cross = off
+				_createAuxCalfPoint.wirecolor = color 252 252 0
+				
+				_createAuxCalf.parent = _createAuxCalfPoint
+				_createAuxCalfPoint.parent = _calf
+				lb.controller.freezeTransform _createAuxCalf #all
+				lb.controller.freezeTransform _createAuxCalfPoint #all
+				
+				-- Añadimos constraint de orientación y sus target.
+				lb.rig.addConstraint _createAuxCalfPoint #rot _calf.parent  "OC_Calf" keepInitOffset: true
+				_createAuxCalfPoint.rotation.controller.OC_Calf.controller.appendTarget _calf 50
+				_createAuxCalfPoint.rotation.controller.OC_Calf.controller.weight[1] = 50
+				
+				--Gestión de los objetos en su capa correcta.
+				_typeLayer = _calf.layer.name
+				_lyChr = layermanager.getLayerFromName _typeLayer
+				for _o in _createAuxCalf do _lyChr.addNode _o
+				for _o in _createAuxCalfPoint do _lyChr.addNode _o
+			)
+			
+			_success = true
+		),
+		
+		------------------------------------------------------------------------------------------------
+		--@fn: undefined | createToes |  Creación de los huesos del pie.
+		--@gets: node | side | pasarle el lado correspondiente "lb.nc.NC_locationLeft" o "lb.nc.NC_locationRight".
+		------------------------------------------------------------------------------------------------
+		fn createToes side =
+		(
+			max create mode
+			--Huesos de skin necesarios para la creación de huesos.
+			_instep = (lb.rig.getSkinNode lb.nc.NC_ANIM_instep side:side)[1]
+			_toeCap = (lb.rig.getSkinNode lb.nc.NC_ANIM_toeCap side:side)[1]
+			_base = lb.rig.solutions.getBaseNode type:#AnimEdit
+
+			
+			_success = false
+			
+			if _instep != undefined and _toeCap != undefined then
+			(
+				_createAuxFootStrech = #()		--Array vacio para rellenarlo con los huesos creados posteriormente.
+				
+				_dist = distance _toeCap _instep		--devuelve la distancia entre dos huesos.
+				
+				--Creación de los huesos necesarios.
+				_createAuxFoot = lb.rig.createNewBone _instep.transform.pos _toeCap.transform.pos _instep
+				_createAuxFootEnd = lb.rig.smartCreateEnd _createAuxFoot
+				_createAuxFootEnd.length = (3 * _base.scale[1])
+				
+				--Rellenando array.
+				append _createAuxFootStrech _createAuxFoot
+				append _createAuxFootStrech _createAuxFootEnd
+				
+				-- Multiplicamos un tamaño por defecto de huesos para si escalamos el personaje se mantenga.
+				_createAuxFootStrech.width = (3 * _base.scale[1])
+				_createAuxFootStrech.height = (3 * _base.scale[1])
+				_createAuxFootStrech.taper = 90
+				
+				--Configuración de naming, color, etz....
+				for _o in _createAuxFootStrech do _o.wirecolor =  color 252 252 0
+				
+				_filterName = filterString _instep.name "_"
+				_createAuxFoot.name = _filterName[1] + "_" + _filterName[2] + "_" + _filterName[3] + "_" + side + "_" + "foot-aux-bon-x" + "_" + _filterName[6] + "_" + lb.nc.NC_inheritFlag + lb.nc.NC_skinFlag
+				_createAuxFootEnd.name = _filterName[1] + "_" + _filterName[2] + "_" + _filterName[3] + "_" + side + "_" + "foot-aux-bon-end" + "_" + _filterName[6] + "_" + lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag
+				
+				--Creación del streching y configuración, tamaño, naming, Linkajes, etz...
+				_footStrech = lb.rig.createStretchBoneChain _createAuxFootStrech
+				
+				_footStrech[1].parent =	 _instep 	--linkajes.
+				_footStrech[2].parent = _toeCap	
+				_footStrech[2].transform = _toeCap.transform
+				if side == lb.nc.NC_locationLeft then
+					in coordSys Local move _footStrech[2] [(_toeCap.length/2),0,0]	--Mover el point al centro del hueso toeCap.
+				
+				if side == lb.nc.NC_locationRight then
+					in coordSys Local move _footStrech[2] [(-(_toeCap.length/2)),0,0]	--Mover el point al centro del hueso toeCap.
+				
+				for _o in _footStrech do 
+				(
+					_o.size = (3 * _base.scale[1])	   --Tamaño de los point.
+					_filterName = filterString _o.name "_"
+					_filterPart = filterString _filterName[5] "-"
+					_filterPoint = filterString _filterPart[4] "P"
+					_o.name = _filterName[1] + "_" + _filterName[2] + "_" + _filterName[3] + "_" + _filterName[4] + "_" + _filterPart[1] + "-" + _filterPart[2] + "-" + "hlp" + "-" + _filterPoint[1] + "_" + _filterName[6] + "_" +  _filterName[7]
+					lb.controller.freezeTransform _o #all
+				)
+				
+				--Gestión de los objetos en su capa correcta.
+				_typeLayer = _instep.layer.name
+				_lyChr = layermanager.getLayerFromName _typeLayer
+				for _o in _createAuxfootStrech do _lyChr.addNode _o
+				for _o in _footStrech do _lyChr.addNode _o
+				
+				_success = true
+			)
+			
+			_success
+		),
+		
+		------------------------------------------------------------------------------------------------
+		--@fn: undefined | createPelvis |  Creación de los huesos de la pelvis.
+		--@gets: node | side | pasarle el lado correspondiente "lb.nc.NC_locationLeft" o "lb.nc.NC_locationRight".
+		------------------------------------------------------------------------------------------------
+		fn createPelvis side =
+		(
+			max create mode
+			--Huesos de skin necesarios para la creación de huesos.
+			_pelvis = (lb.rig.getSkinNode lb.nc.NC_ANIM_pelvis)[1]
+			_thigh = (lb.rig.getSkinNode lb.nc.NC_ANIM_thigh side:side)[1]
+			_spine00 = (lb.rig.getSkinNode (lb.nc.NC_ANIM_spine + "00"))[1]
+			_base = lb.rig.solutions.getBaseNode type:#AnimEdit
+
+			_success = false
+			
+			if _pelvis != undefined and _thigh != undefined then
+			(
+				_createAuxMusclePelvisStrech = #()		--Array vacio para rellenarlo con los huesos creados posteriormente.
+				
+				_dist = distance _pelvis _thigh		--devuelve la distancia entre dos huesos.
+				
+				--Creación de los huesos necesarios.
+				_createAuxMusclePelvis = lb.rig.createNewBone _pelvis.transform.pos _thigh.transform.pos _pelvis
+				_createAuxMusclePelvisEnd = lb.rig.smartCreateEnd _createAuxMusclePelvis
+				_createAuxMusclePelvisEnd.length = (3 * _base.scale[1])
+				
+				--Rellenando array.
+				append _createAuxMusclePelvisStrech _createAuxMusclePelvis
+				append _createAuxMusclePelvisStrech _createAuxMusclePelvisEnd
+				
+				-- Multiplicamos un tamaño por defecto de huesos para si escalamos el personaje se mantenga.
+				_createAuxMusclePelvisStrech.width = (3 * _base.scale[1])
+				_createAuxMusclePelvisStrech.height = (3 * _base.scale[1])
+				_createAuxMusclePelvisStrech.taper = 90
+
+				
+				--Configuración de naming, color, etz....
+				for _o in _createAuxMusclePelvisStrech do _o.wirecolor =  color 252 252 0
+				
+				_filterName = filterString _thigh.name "_"
+				_createAuxMusclePelvis.name = _filterName[1] + "_" + _filterName[2] + "_" + _filterName[3] + "_" + side + "_" + "musclePelvis-aux-bon-x" + "_" + _filterName[6] + "_" + lb.nc.NC_inheritFlag + lb.nc.NC_skinFlag
+				_createAuxMusclePelvisEnd.name = _filterName[1] + "_" + _filterName[2] + "_" + _filterName[3] + "_" + side + "_" + "musclePelvis-aux-bon-end" + "_" + _filterName[6] + "_" + lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag
+				
+				--Creación del streching y configuración, tamaño, naming, Linkajes, etz...
+				_MusclePelvisStrech = lb.rig.createStretchBoneChain _createAuxMusclePelvisStrech
+				
+				_MusclePelvisStrech[1].parent = _spine00				--linkajes.
+				_MusclePelvisStrech[1].transform = _pelvis.transform
+				_MusclePelvisStrech[2].parent = _thigh
+				_MusclePelvisStrech[2].transform = _thigh.transform
+				
+				if side == lb.nc.NC_locationRight then
+				(
+					in coordSys Local move _MusclePelvisStrech[1] [(_pelvis.length/2),(_pelvis.length*1.2),0]	--Mover el point para ajustar el musclePelvis.
+					in coordSys Local move _MusclePelvisStrech[2] [(-(_thigh.length/2)),0,0]	--Mover el point para ajustar el musclePelvis.
+				)
+				if side == lb.nc.NC_locationLeft then
+				(
+					in coordSys Local move _MusclePelvisStrech[1] [(_pelvis.length/2),-(_pelvis.length*1.2),0]	--Mover el point para ajustar el musclePelvis.
+					in coordSys Local move _MusclePelvisStrech[2] [(_thigh.length/2),0,0]	--Mover el point para ajustar el musclePelvis.
+				)
+				
+				for _o in _MusclePelvisStrech do 
+				(
+					_o.size = (3 * _base.scale[1])	   --Tamaño de los point.
+					_filterName = filterString _o.name "_"
+					_filterPart = filterString _filterName[5] "-"
+					_filterPoint = filterString _filterPart[4] "P"
+					_o.name = _filterName[1] + "_" + _filterName[2] + "_" + _filterName[3] + "_" + _filterName[4] + "_" + _filterPart[1] + "-" + _filterPart[2] + "-" + "hlp" + "-" + _filterPoint[1] + "_" + _filterName[6] + "_" +  _filterName[7]
+					lb.controller.freezeTransform _o #all
+				)
+				
+				--Gestión de los objetos en su capa correcta.
+				_typeLayer = _pelvis.layer.name
+				_lyChr = layermanager.getLayerFromName _typeLayer
+				for _o in _createAuxMusclePelvisStrech do _lyChr.addNode _o
+				for _o in _MusclePelvisStrech do _lyChr.addNode _o
+					
+				_success = true
+			)
+			
+			_success
+		),
+		
+		------------------------------------------------------------------------------------------------
+		--@fn: undefined | createDorsal |  Creación de los huesos de dorsal.
+		--@gets: node | side | pasarle el lado correspondiente "lb.nc.NC_locationLeft" o "lb.nc.NC_locationRight".
+		------------------------------------------------------------------------------------------------
+		fn createDorsal side =
+		(
+			max create mode
+			--Huesos de skin necesarios para la creación de huesos.
+			_spine01 = (lb.rig.getSkinNode (lb.nc.NC_ANIM_spine + "01"))[1]
+			_upperarm = (lb.rig.getSkinNode lb.nc.NC_ANIM_upperarm side:side)[1]
+			_base = lb.rig.solutions.getBaseNode type:#AnimEdit
+
+			_success = false
+			
+			if _spine01 != undefined and _upperarm != undefined then
+			(
+				_createAuxMuscleDorsalStrech = #()		--Array vacio para rellenarlo con los huesos creados posteriormente.
+				
+				_dist = distance _spine01 _upperarm		--devuelve la distancia entre dos huesos.
+				
+				--Creación de los huesos necesarios.
+				_createAuxMuscleDorsal = lb.rig.createNewBone _spine01.transform.pos _upperarm.transform.pos _spine01
+				_createAuxMuscleDorsalEnd = lb.rig.smartCreateEnd _createAuxMuscleDorsal
+				_createAuxMuscleDorsalEnd.length = (3 * _base.scale[1])
+				
+				--Rellenando array.
+				append _createAuxMuscleDorsalStrech _createAuxMuscleDorsal
+				append _createAuxMuscleDorsalStrech _createAuxMuscleDorsalEnd
+				
+				-- Multiplicamos un tamaño por defecto de huesos para si escalamos el personaje se mantenga.
+				_createAuxMuscleDorsalStrech.width = (3 * _base.scale[1])
+				_createAuxMuscleDorsalStrech.height = (3 * _base.scale[1])
+				_createAuxMuscleDorsalStrech.taper = 90
+				
+				--Configuración de naming, color, etz....
+				for _o in _createAuxMuscleDorsalStrech do _o.wirecolor =  color 252 252 0
+				
+				_filterName = filterString _upperarm.name "_"
+				_createAuxMuscleDorsal.name = _filterName[1] + "_" + _filterName[2] + "_" + _filterName[3] + "_" + side + "_" + "muscleDorsal-aux-bon-x" + "_" + _filterName[6] + "_" + lb.nc.NC_inheritFlag + lb.nc.NC_skinFlag
+				_createAuxMuscleDorsalEnd.name = _filterName[1] + "_" + _filterName[2] + "_" + _filterName[3] + "_" + side + "_" + "muscleDorsal-aux-bon-end" + "_" + _filterName[6] + "_" + lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag
+				
+				--Creación del streching y configuración, tamaño, naming, Linkajes, etz...
+				_MuscleDorsalStrech = lb.rig.createStretchBoneChain _createAuxMuscleDorsalStrech
+				
+				_MuscleDorsalStrech[1].parent = _spine01				--linkajes.
+				_MuscleDorsalStrech[1].transform = _spine01.transform
+				_MuscleDorsalStrech[2].parent = _upperarm
+				_MuscleDorsalStrech[2].transform = _upperarm.transform
+				if side == lb.nc.NC_locationRight then
+					in coordSys Local move _MuscleDorsalStrech[1] [0, 0, (-(_spine01.length))]	--Mover el point para ajustar el muscleDorsal.
+				
+				if side == lb.nc.NC_locationLeft then
+					in coordSys Local move _MuscleDorsalStrech[1] [0, 0, (_spine01.length)]	--Mover el point para ajustar el muscleDorsal.
+				
+				for _o in _MuscleDorsalStrech do 
+				(
+					_o.size = (3 * _base.scale[1])	   --Tamaño de los point.
+					_filterName = filterString _o.name "_"
+					_filterPart = filterString _filterName[5] "-"
+					_filterPoint = filterString _filterPart[4] "P"
+					_o.name = _filterName[1] + "_" + _filterName[2] + "_" + _filterName[3] + "_" + _filterName[4] + "_" + _filterPart[1] + "-" + _filterPart[2] + "-" + "hlp" + "-" + _filterPoint[1] + "_" + _filterName[6] + "_" +  _filterName[7]
+					lb.controller.freezeTransform _o #all
+				)
+				
+				--Gestión de los objetos en su capa correcta.
+				_typeLayer = _spine01.layer.name
+				_lyChr = layermanager.getLayerFromName _typeLayer
+				for _o in _createAuxMuscleDorsalStrech do _lyChr.addNode _o
+				for _o in _MuscleDorsalStrech do _lyChr.addNode _o
+					
+				_success = true
+			)	
+			
+			_success
+		),
+		
+		------------------------------------------------------------------------------------------------
+		--@fn: undefined | createFingerAux |  Creación de los huesos auxiliares para los pulgares.
+		--@gets: node | side | pasarle el lado correspondiente "lb.nc.NC_locationLeft" o "lb.nc.NC_locationRight".
+		------------------------------------------------------------------------------------------------
+		fn createFingerAux side =
+		(
+			max create mode
+			--Huesos de skin necesarios para la creación de huesos.
+			_finger01 = lb.rig.getSkinNode (lb.nc.NC_ANIM_finger + "01") side:side
+			_finger11 = lb.rig.getSkinNode (lb.nc.NC_ANIM_finger + "11") side:side
+			
+			_base = lb.rig.solutions.getBaseNode type:#AnimEdit
+			
+			_success = false
+			
+			if _finger01[1] != undefined and _finger11[1] != undefined then
+			(
+				_createFingerAuxStrech = #()		--Array vacio para rellenarlo con los huesos creados posteriormente.
+				
+				_dist = distance _finger01[1] _finger11[1]		--devuelve la distancia entre dos huesos.
+				
+				--Creación de los huesos necesarios.
+				_createFingerAux = lb.rig.createNewBone _finger01[1].transform.pos _finger11[1].transform.pos _finger01[1]
+				_createFingerAuxEnd = lb.rig.smartCreateEnd _createFingerAux
+				_createFingerAuxEnd.length = (3 * _base.scale[1])
+				
+				--Rellenando array.
+				append _createFingerAuxStrech _createFingerAux
+				append _createFingerAuxStrech _createFingerAuxEnd
+				
+				-- Multiplicamos un tamaño por defecto de huesos para si escalamos el personaje se mantenga.
+				_createFingerAuxStrech.width = (3 * _base.scale[1])
+				_createFingerAuxStrech.height = (3 * _base.scale[1])
+				_createFingerAuxStrech.taper = 90
+
+				--Configuración de naming, color, etz....
+				for _o in _createFingerAuxStrech do _o.wirecolor = color 255 112 0
+				
+				_filterName = filterString _finger11[1].name "_"
+				_createFingerAux.name = _filterName[1] + "_" + _filterName[2] + "_" + _filterName[3] + "_" + side + "_" + "FingerThumb-aux-bon-x" + "_" + _filterName[6] + "_" + lb.nc.NC_skinFlag
+				_createFingerAuxEnd.name = _filterName[1] + "_" + _filterName[2] + "_" + _filterName[3] + "_" + side + "_" + "FingerThumb-aux-bon-end" + "_" + _filterName[6] + "_" + lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag
+				
+				--Creación del streching y configuración, tamaño, naming, Linkajes, etz...
+				_fingerAuxStrech = lb.rig.createStretchBoneChain _createFingerAuxStrech
+				
+				_createFingerAux.rotation.controller.LookAt_Constraint.controller.pickupnode = _fingerAuxStrech[2]
+				
+				_fingerAuxStrech[1].parent = _finger01[1]				--linkajes.
+				_fingerAuxStrech[1].transform = _finger01[1].transform
+				_fingerAuxStrech[2].parent = _finger11[1]
+				_fingerAuxStrech[2].transform = _finger11[1].transform
+				
+				for _o in _fingerAuxStrech do 
+				(
+					_o.size = (3 * _base.scale[1])--Tamaño de los point.
+					_filterName = filterString _o.name "_"
+					_filterPart = filterString _filterName[5] "-"
+					_filterPoint = filterString _filterPart[4] "P"
+					_o.name = _filterName[1] + "_" + _filterName[2] + "_" + _filterName[3] + "_" + _filterName[4] + "_" + _filterPart[1] + "-" + _filterPart[2] + "-" + "hlp" + "-" + _filterPoint[1] + "_" + _filterName[6] + "_" +  _filterName[7]
+					lb.controller.freezeTransform _o #all
+				)
+				
+				--Gestión de los objetos en su capa correcta.
+				_typeLayer = _finger01[1].layer.name
+				_lyChr = layermanager.getLayerFromName _typeLayer
+				for _o in _createFingerAuxStrech do _lyChr.addNode _o
+				for _o in _fingerAuxStrech do _lyChr.addNode _o
+				
+				_success = true
+			)
+			
+			_success
+		),
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addLibrary this --añade la libreria a la principal
+		)	
+	)--lib_auxPart
+	
+	-----------------------------------------------------------------------------------------------------------------------------------------------	
+	--@struct: layout | Contiene la libreria de layout.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct lib_layout
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #rig,					--@var: category | Categoria de la libreria.
+		className = lb.getFileLibName (getThisScriptFilename() as string),	--@var: className | Nombre de la libreria.
+		description = "Libreria layout",	--@var: description | Descripcion de la libreria.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		------------------------------------------------------------------------------
+		--@fn: undefined | getObjectColor | función para obtener las piezas para cambiar el color.
+		--@gets: string | nameObj |  pasa el nombre del objeto.
+		--@gets: string | flag |  pasa el flag.  (NC_controlFlag), (NC_hiddenFlag).
+		------------------------------------------------------------------------------
+		fn replaceNamePartLayout nameObj flag =
+		(
+			if flag == true then
+				lb.nc.replaceNamePart nameObj 7 lb.nc.NC_controlFlag
+			
+			if flag == false then
+				lb.nc.replaceNamePart nameObj 7 lb.nc.NC_hiddenFlag
+		),
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		------------------------------------------------------------------------------
+		--@fn: undefined | getObjectFacialLayout | función para obtener las piezas del tipo que se le pase.
+		--@gets: type | obj |  pasa el objeto seleccionadas.  
+		--@gets: type | type |  pasa el tipo de objeto.  (HAIR, MUSTACHE, GLASS, EYEBROWN).
+		------------------------------------------------------------------------------
+		fn getObjectFacialLayout obj type =
+		(
+			_nodes = #()
+			_selection = obj 
+			
+			if classof obj != array then 
+				_selection = #(obj)
+			_asset = (lb.asset.getAssetsFromNodes _selection)[1]	--paso el objeto para que me coja el asset.
+			
+			--Recorro el asset y comparo la 5º parte del nombre para localizar la cabeza.
+			for _o in _asset.animNodesAll where ((lb.nc.getNamePart _o.name 5) == "skin-head") do
+			(
+				_child = #()
+				_child = _o.children	--obtengo los hijos de la cabeza y los meto en un array.
+				
+				--Recorro los hijos de la cabeza y cojo los que tengan hair en la 5º parte del nombre.
+				for _ch in _child do
+				(
+					_filterName = (lb.nc.getNamePart _ch.name 5)
+					_filterPart = (filterString _filterName "-")[1]
+					
+					if type  == _filterPart then
+						append _nodes _ch
+				)
+			)
+			_nodes
+		),
+		
+		------------------------------------------------------------------------------
+		--@fn: undefined | getObjectColorLayout | función para obtener las piezas para cambiar el color.
+		--@gets: string | type |  pasa el tipo de objeto.  (SHIRT, TROUSER, HAIR, SHOES, SKIN).
+		------------------------------------------------------------------------------
+		fn getObjectColorLayout type =
+		(
+			_nodesArray = #()
+			
+			_assetArray = lb.asset.getAssetsFromNodes (getCurrentSelection()) --obtención del asset según la selección.
+			_asset = _assetArray[1]
+			
+			for _o in _asset.animNodesAll do 	--Recorrer los objetos de anim del asset.
+			(		
+				_filterName = FilterString _o.name "_"
+				_filterPart = FilterString _filterName[5] "-"
+				
+				if _filterPart[1] == type then
+					append _nodesArray _o
+			)
+			_nodesArray
+		),
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addLibrary this --añade la libreria a la principal
+		)	
+	)--lib_layout
+	
+	-----------------------------------------------------------------------------------------------------------------------------------------------	
+	--@struct: layout | Contiene la libreria de layout.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct lib_puppet
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #rig,					--@var: category | Categoria de la libreria.
+		className = lb.getFileLibName (getThisScriptFilename() as string),	--@var: className | Nombre de la libreria.
+		description = "Libreria de Gestión de Puppet",	--@var: description | Descripcion de la libreria.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		------------------------------------------------
+		--@fn: undefined | showPuppets | función que utilizaremos para ocultar o desocultar puppets.
+		------------------------------------------------		
+		fn showPuppets obj modifierName state =
+		(
+			for i=1 to obj.modifiers.count do
+			(
+				if modifierName == obj.modifiers[i].name then 
+				(
+					if state then
+					(
+						obj.modifiers[i].enabledInViews = true
+						obj.modifiers[i].enabled = true
+					)
+					else 
+					(
+						obj.modifiers[i].enabledInViews = false
+						obj.modifiers[i].enabled = false
+					)
+				)
+			)
+		),
+
+		------------------------------------------------
+		--@fn: undefined | attachPuppet | atacha un puppet a un hueso
+		------------------------------------------------
+		fn attachPuppet puppetNode removePuppet:false =
+		(		
+			_success = false
+
+			------------------------------------------------
+			--averigua cual es el target al que hacer attach del puppet
+
+			_targetNodeNamePattern = lb.nc.replaceNamePart puppetNode.name 1 "*"
+			_targetNodeNamePattern = lb.nc.replaceNamePart _targetNodeNamePattern 2 "*"
+			_targetNodeNamePattern = lb.nc.replaceNamePart _targetNodeNamePattern 3 lb.nc.NC_classAnim
+			_targetNodeNamePattern = lb.nc.replaceNamePart _targetNodeNamePattern 6 "*"
+			_targetNodeNamePattern = lb.nc.replaceNamePart _targetNodeNamePattern 7 "*"
+
+			_targetNode = undefined
+			for o in objects where MatchPattern o.name pattern:_targetNodeNamePattern do _targetNode = o
+			------------------------------------------------
+
+			------------------------------------------------
+			--si encuentra un target
+			if _targetNode != undefined then
+			(
+				------------------------------------------------
+				--averigua que nombre tendra el modificador de puppet
+
+				_puppetName = lb.nc.getNamePart puppetNode.name 2
+
+				if MatchPattern _puppetName pattern:(lb.nc.NC_puppetPresetGenericPattern) then _puppetName = substituteString _puppetName (filterString _puppetName "{}")[1] lb.nc.NC_puppetModName
+				else _puppetName = lb.nc.NC_puppetModName + "{std-std}"
+
+				------------------------------------------------
+
+				------------------------------------------------
+				--si ya existe un puppet con ese nombre en el objeto y se pide eliminarlo lo quita antes
+
+				if removePuppet then
+				(
+					for i=_targetNode.modifiers.count to 1 by -1 where _targetNode.modifiers[i].name == _puppetName do
+						deletemodifier _targetNode _targetNode.modifiers[i]
+				)
+
+				------------------------------------------------
+
+				------------------------------------------------
+				--hay que desactivar los otros puppets antes de detachar este y hay que activar el que se va a detachar
+
+				_otherPuppetModifiers = #()
+				_otherPuppetModifiersEnabledStates = #()
+				_otherPuppetModifiersEnabledInViewsStates = #()
+
+				for m in _targetNode.modifiers where MatchPattern m.name pattern:lb.nc.NC_puppetPattern do
+				(
+					append _otherPuppetModifiers m
+					append _otherPuppetModifiersEnabledStates m.enabled
+					append _otherPuppetModifiersEnabledInViewsStates m.enabledInViews
+
+					m.enabled = m.enabledInViews = false
+				)--for
+
+				------------------------------------------------
+
+				------------------------------------------------
+				--proceso de attach
+
+				_puppetMod = Edit_Poly()
+				addModifier _targetNode _puppetMod before:(_targetNode.modifiers.count+1)
+				_puppetMod.name = _puppetName
+				
+				if puppetNode.objectOffsetScale.x < 0 and puppetNode.objectOffsetScale.x > 0 then lb.geometry.flipNormals (#(puppetNode))
+ 					
+				-- Borrado de los polígonos originales del hueso y attach con la geometría nueva 						
+				lb.modifiers.selectNodeModifierByName _targetNode _puppetName
+						
+				_puppetMod.setSelection #Vertex #{1.._puppetMod.GetNumVertices()}		
+				_puppetMod.ButtonOp #DeleteVertex
+	
+				lb.modifiers.selectNodeModifierByName _targetNode _puppetName		
+				
+				_puppetLayer = puppetNode.layer
+
+				_puppetMod.attach puppetNode
+				_success = true
+
+				_puppetLayerNodes = lb.layer.getLayerNodes _puppetLayer
+				if _puppetLayerNodes.count == 0 then lb.layer.deleteLayerByName _puppetLayer.name
+
+				------------------------------------------------
+
+				------------------------------------------------
+				--vuelve a dejar los puppets como estaban, todos.
+
+				for i=1 to _otherPuppetModifiers.count do
+				(
+					_otherPuppetModifiers[i].enabled = _otherPuppetModifiersEnabledStates[i]
+					_otherPuppetModifiers[i].enabledInViews = _otherPuppetModifiersEnabledInViewsStates[i]
+				)--for
+
+				------------------------------------------------
+
+			)--if
+			------------------------------------------------
+
+			_success
+		),
+		
+		------------------------------------------------
+		--@fn: node | detachPuppet | detacha el puppet con el nombre que se le indique y lo devuelve
+		------------------------------------------------		
+		fn detachPuppet obj puppetName removePuppet:false =
+		(
+			_detachedPuppet = undefined
+			
+			--Recopila los modificadores de puppet en un array
+			_puppetMod = undefined
+			
+			_puppetMod = lb.modifiers.getNodeModifierByName obj puppetName
+		
+			--Si hemos decidido detachar como clones y hay objetos detachados. Entonces copiaremos el objeto y lo reatacharemos al hueso otra vez.
+			if _puppetMod != undefined then
+			(
+				------------------------------------------------
+				--Sacamos del nombre del hueso al que pertenece este modificador.
+				_objNamePart = lb.nc.getNamePart obj.name 5
+				------------------------------------------------
+				
+				------------------------------------------------
+				--Construimos el nombre del elemento que vamos a detachar como malla 
+				_puppetDetachedName = lb.nc.replaceNamePart obj.name 3 lb.nc.NC_classPuppet   
+				_puppetDetachedName = lb.nc.replaceNamePart _puppetDetachedName 6 lb.nc.NC_notSpecifiedFlag
+				------------------------------------------------
+
+				------------------------------------------------
+				--hay que poner el nombre del puppet en la parte 2 del nombre, junto al nombre del asset entre {}
+				--de hecho hay que poner el nombre del puppet entre {} sustituyendo al del preset
+
+				_assetName = lb.nc.getNamePart obj.name 2
+				_assetName = (filterString _assetName "{}")[1]
+				
+				_puppetPresetPart = (filterString puppetName "{}")[2]
+				if _puppetPresetPart == undefined then _puppetPresetPart = "std-std"
+
+				_assetName = _assetName + "{" + _puppetPresetPart + "}"
+				
+				_puppetDetachedName = lb.nc.replaceNamePart _puppetDetachedName 2 _assetName
+
+				------------------------------------------------
+
+				------------------------------------------------
+				--hay que desactivar los otros puppets antes de detachar este y hay que activar el que se va a detachar
+
+				_otherPuppetModifiers = #()
+				_otherPuppetModifiersEnabledStates = #()
+				_otherPuppetModifiersEnabledInViewsStates = #()
+
+				for m in obj.modifiers where MatchPattern m.name pattern:lb.nc.NC_puppetPattern and m != _puppetMod do
+				(
+					append _otherPuppetModifiers m
+					append _otherPuppetModifiersEnabledStates m.enabled
+					append _otherPuppetModifiersEnabledInViewsStates m.enabledInViews
+
+					m.enabled = m.enabledInViews = false
+				)--for
+
+				_puppetModEnabledState = _puppetMod.enabled
+				_puppetModEnabledInViewsState = _puppetMod.enabledInViews
+
+				_puppetMod.enabled = _puppetMod.enabledInViews = true
+
+				------------------------------------------------
+
+				------------------------------------------------
+				--Detachamos a un objeto con el nombre especificado por puppetName
+
+				_detachedPuppet = snapshot obj
+				_detachedPuppet.name = _puppetDetachedName
+
+				--mete el puppet en la capa correspondiente
+				_layer = lb.layer.getLayerbyName ((lb.nc.getNamePart obj.name 1) + "_" + _assetName)
+				if _layer == undefined then _layer = lb.layer.newLayer name:((lb.nc.getNamePart obj.name 1) + "_" + _assetName)
+				_layer.addNode _detachedPuppet
+
+				------------------------------------------------
+
+				------------------------------------------------
+				--vuelve a dejar los puppets como estaban, todos.
+
+				for i=1 to _otherPuppetModifiers.count do
+				(
+					_otherPuppetModifiers[i].enabled = _otherPuppetModifiersEnabledStates[i]
+					_otherPuppetModifiers[i].enabledInViews = _otherPuppetModifiersEnabledInViewsStates[i]
+				)--for
+
+				_puppetMod.enabled = _puppetModEnabledState
+				_puppetMod.enabledInViews = _puppetModEnabledInViewsState
+
+				------------------------------------------------
+
+				if removePuppet then deletemodifier obj _puppetMod
+				
+				--Cambia las propiedades del puppet detachado
+				_detachedPuppet.wirecolor = obj.wirecolor
+				_detachedPuppet.boneEnable = false
+				_detachedPuppet.pivot = [0,0,0]
+				_detachedPuppet.parent = undefined
+				WorldAlignPivot _detachedPuppet
+			)		
+			
+			_detachedPuppet
+		),	
+		
+		------------------------------------------------
+		--@fn: node | detachPuppets | detacha los puppets con los nombres indicados
+		------------------------------------------------		
+		fn detachPuppets obj puppetNames:#() removePuppets:false =
+		(
+			_detachedPuppets = #()
+
+			--si no se le pasan nombres de puppets busca todos los que tenga el objeto
+			if puppetNames.count == 0 then
+				puppetNames = for m in obj.modifiers where matchpattern m.name pattern:lb.nc.NC_puppetPattern and classof m == Edit_Poly collect m.name
+			
+			for _puppetName in puppetNames do
+			(
+				_detachedPuppet = this.detachPuppet obj _puppetName removePuppet:removePuppets
+				if _detachedPuppet != undefined then append _detachedPuppets _detachedPuppet
+			)--for
+
+			_detachedPuppets
+		),
+
+		------------------------------------------------
+		--@fn: undefined | deletePuppets | elimina los puppets con los nombres indicados
+		------------------------------------------------		
+		fn deletePuppets obj puppetNames:#() =
+		(
+			if puppetNames.count == 0 then
+				puppetNames = for m in obj.modifiers where matchpattern m.name pattern:lb.nc.NC_puppetPattern and classof m == Edit_Poly collect m.name
+				
+			for i=obj.modifiers.count to 1 by -1 do
+			(
+				if findItem puppetNames (obj.modifiers[i].name) != 0 then deleteModifier obj (obj.modifiers[i])
+			)--for
+		),
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addLibrary this --añade la libreria a la principal
+		)	
+	)--lib_puppet
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: rig | Contiene la libreria de funciones comunes de rig
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct lib_rig
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #rig,					--@var: category | Categoria de la libreria.
+		className = lb.getFileLibName (getThisScriptFilename() as string),	--@var: className | Nombre de la libreria.
+		description = "Librería de funciones comunes de rig",	--@var: description | Descripcion de la libreria.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		solutions = lib_solutions(), 			--@var: solutions | Librería de soluciones de rig
+		auxPart = lib_auxPart(),
+		layout = lib_layout(),
+		puppet = lib_puppet(),
+		
+		------------------------------------------------------------------------------------------------
+		--CUSTOM ATTRIBUTES
+		------------------------------------------------------------------------------------------------
+
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: array | getConnectBone | Busca el nodo/os del personaje en la escena, sino la encuentra devuelve undefined.
+		--@gets: string | skinBone | Hueso de skin cuyo hueso equivalente de animación.
+		--@returns: object | Devuelve el hueso si lo encuentra o undefined si no.
+		------------------------------------------------
+		fn getConnectBone skinBone =
+		(
+			_objName = lb.nc.replaceNamePart skinBone.name 3 lb.nc.NC_classAnim
+			_objName = lb.nc.getSimpleObjectName _objName
+			_targetList = (execute ("$'" + _objName + "_*'"))
+			
+			_target = undefined
+			for i=1 to _targetList.count do
+			(
+				if (classof _targetList[i].baseObject == BoneGeometry) then
+				(
+					_target = _targetList[i]
+					
+					--Break Casero :P
+					i =  _targetList.count + 1
+				)
+			)
+			_target
+		),
+		
+		------------------------------------------------
+		--@fn: array | getAnimNode | Busca el nodo/os del personaje en la escena, sino la encuentra devuelve undefined.
+		--@gets: string | nameNode | Nombre de pieza que queremos buscar.
+		--@gets: string | side | Pasarle el lado que nos interese (lb.nc.NC_locationLeft, lb.nc.NC_locationRight).
+		------------------------------------------------
+		fn getAnimNode nameNode type:lb.nc.NC_classAnim side:undefined =
+		(
+			-- variable de amacenamiento para 'nodo de animación'.
+			_animNode = undefined 
+			
+			if side == undefined then side = "*" 
+			
+			_animNode = (execute ("$'" + lb.nc.NC_chrPrefix + "_*_" + type +"_"+ side + "_" + nameNode + "_" + lb.nc.NC_nonSpecifiedCache + "_" + "*" + "'")) as array
+			
+			_animNode
+		),
+		
+		------------------------------------------------
+		--@fn: array | getAnimNode | Busca el nodo/os del personaje en la escena, sino la encuentra devuelve undefined.
+		--@gets: string | nameNode | Nombre de pieza que queremos buscar.
+		--@gets: string | side | Pasarle el lado que nos interese (lb.nc.NC_locationLeft, lb.nc.NC_locationRight).
+		------------------------------------------------
+		fn getSkinNode nameNode side:undefined =
+		(
+			-- variable de amacenamiento para 'nodo de animación'.
+			_skinNode = undefined 
+			
+			if side == undefined then side = "*" 
+			
+			_skinNode = (execute ("$'" + lb.nc.NC_chrPrefix + "_*_" + lb.nc.NC_classSkin +"_"+ side + "_" + nameNode + "_" + lb.nc.NC_nonSpecifiedCache + "_" + "*" + "'")) as array
+			
+			_skinNode
+		),
+		
+		------------------------------------------------
+		--@fn: node | getFacialParent | Busca la pieza padre del facial del personaje en la escena, sino la encuentra devuelve undefined
+		--@opt: string | category | true | Puede valer lb.nc.NC_classFacial, o lb.nc.NC_classanimEdit
+		------------------------------------------------
+		fn getFacialParent category:lb.nc.NC_classFacial =
+		(
+			-- variable de amacenamiento para 'base'.
+			_facialParent = (execute ("$'" + lb.nc.NC_chrPrefix + "_*_" + category + "_" + lb.nc.NC_locationMiddle + "_" + lb.nc.NC_ANIM_facialParent + "_" + lb.nc.NC_nonSpecifiedCache + "_" + lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag + "'"))[1]
+							
+			_facialParent		
+		),
+		
+		------------------------------------------------
+		--@fn: node | getFacialBase | Busca la base del personaje en la escena, sino la encuentra la mergea y le añade el linkConstraint.
+		
+		------------------------------------------------
+		fn getFacialBase category:lb.nc.NC_classAnimEdit =
+		(
+			
+			-- variable de amacenamiento para 'base'.
+			_base = (execute ("$'" + lb.nc.NC_chrPrefix + "_*_" + category +"_"+ lb.nc.NC_locationMiddle + "_" + lb.nc.NC_ANIM_base + "_" + lb.nc.NC_nonSpecifiedCache + "_" + lb.nc.NC_controlFlag + "'"))[1]
+				
+			_base		
+		),	
+		
+		------------------------------------------------
+		--@fn: node | getAllChildren | Devuelve todos los hijos de una pieza de forma recursiva
+		--@gets: node | obj | Objeto del cual obtener su virtual parent.
+		------------------------------------------------
+		fn getAllChildren obj =
+		(
+			-- start collecting direct children of <obj>
+			_children = for _o in obj.children collect _o
+
+			-- add children and their children etc recursively
+			for i = 1 to _children.count do
+				join _children (this.getAllChildren _children[i])
+
+			-- return array containing children
+			_children
+		),
+		
+		------------------------------------------------
+		--@fn: node | getVirtualParent | Devuelve el virtual parent del objeto indicado.
+		--@gets: node | obj | Objeto del cual obtener su virtual parent.
+		------------------------------------------------
+		fn getVirtualParent obj =
+		(
+			vParent = undefined
+			
+			if (lb.customAttributes.hasAttribute obj lb.customAttributes.virtualNodesCA.name) then --si existe pare virtual
+				if obj.vParentNode != undefined then
+					if isValidNode obj.vParentNode.node then
+						vParent = obj.vParentNode.node
+				
+			vParent
+		),
+				
+		------------------------------------------------
+		--@fn: array{node}| getVirtualChildren | Devuelve los hijos virtuales del objeto indicado. Si tiene hijos reales los tiene en cuenta tambien.
+		--@gets: node | obj | Objeto del cual obtener sus hijos virtuales.
+		--@opt: boolean | ignoreHidden | true | Por defecto ignora los hijos tanto reales como virtuales si estan ocultos.
+		------------------------------------------------
+		fn getVirtualChildren obj ignoreHidden:true =
+		(
+			children = #()
+			childrenTMP = #()
+			
+			if (lb.customAttributes.hasAttribute obj #virtualNodes) then
+				if obj.vChildrenNode != undefined then
+					for i=1 to obj.vChildrenNode.count where isValidNode obj.vChildrenNode[i].node do --busca los hijos virtuales
+						appendIfUnique childrenTMP obj.vChildrenNode[i].node
+			
+			for o in obj.children do appendIfUnique childrenTMP o
+				
+			for o in childrenTMP do
+				if ignoreHidden then
+				(
+					if not o.isHidden then
+						appendIfUnique children o
+				)
+				else
+					appendIfUnique children o
+				
+							
+			children --devuelve los hijos encontrados
+		),
+
+		----------------------------------------------------------------------------------------------------------------
+		--devuelve un array de arrays con los subniveles a partir de la jerarquia hacia abajo de un nodo pasado
+		----------------------------------------------------------------------------------------------------------------
+		fn getHierarchySubLevelsFromNode initialNode depth:0 useVirtualHierarchy:true =
+		(
+			hSubLevels = #(#(initialNode))
+			stop = false --flag de parada
+				
+			parents = hSubLevels[1]
+			_children = #()
+			
+			levelCont = 1	
+			
+			--recorre la jerarquia hacia abajo mientras encuentre nodos			
+			while not stop do
+			(
+				for obj in parents do--where obj.children.count != 0 do
+				(
+					tempChildren = #()
+					
+					if (lb.customAttributes.hasAttribute obj #virtualNodes) and useVirtualHierarchy then
+						if obj.vChildrenNode != undefined then
+							for i=1 to obj.vChildrenNode.count where obj.vChildrenNode[i].node != undefined do --busca los hijos virtuales
+								appendIfUnique tempChildren obj.vChildrenNode[i].node
+								
+					--if tempChildren.count == 0 then
+					for ch in obj.children do
+						appendIfUnique tempChildren ch
+						
+					if tempChildren.count != 0 then
+						_children += tempChildren
+					
+				)--for parents
+				
+				if _children.count != 0 then --si ha obtenido hijos los añade al array de sublevels para formar un nuevo nivel
+				(
+					append hSubLevels _children
+					parents = hSubLevels[hSubLevels.count]
+					_children = #()
+					levelCont += 1
+					
+					if depth != 0 and (levelCont >= depth) then stop = true
+				)
+				else
+					stop = true
+				
+			)--while			
+			
+			hSubLevels
+		),
+
+		----------------------------------------------------------------------------------------------------------------
+		-- devuelve un array de arrays con las jerarquias encontradas en los nodos pasados por parametro
+		-- si alguna parte de las jerarquias queda fuera de los nodos pasados, la ignora
+		----------------------------------------------------------------------------------------------------------------
+		fn getHierarchiesFromNodes nodes useVirtualHierarchy:true ignoreHidden:true =
+		(
+			hierarchies = #()
+			
+			if classof nodes == Array then --si nodes es un array de nodos
+			(
+				i = 1
+				for obj in nodes where isValidNode obj do
+				(
+					isHierarchyInit = false
+					
+					if (obj.parent == undefined or (findItem nodes obj.parent == 0)) then
+					(
+						if useVirtualHierarchy and (lb.customAttributes.hasAttribute obj lb.customAttributes.virtualNodesCA.name) then
+						(
+							if (obj.virtualNodes.vParentNode == undefined or (findItem nodes obj.virtualNodes.vParentNode.node == 0)) then
+								isHierarchyInit = true
+						)
+						else
+							isHierarchyInit = true
+					)--if
+					
+					if isHierarchyInit then
+					(
+						hierarchies[i] = #()
+						appendIfUnique hierarchies[i] obj
+						
+						for o in hierarchies[i] do --recorre los nodos de una jerarquia
+						(
+							--intenta añadir a la jerarquia los hijos virtuales
+							if useVirtualHierarchy and (lb.customAttributes.hasAttribute o lb.customAttributes.virtualNodesCA.name) then
+							(
+								if o.virtualNodes.vChildrenNode.count != 0 then
+								(
+									for ch in o.virtualNodes.vChildrenNode where (findItem nodes ch.node != 0) do --añade los hijos virtuales al array si estan dentro de los nodos pasados
+										if not ch.node.ishidden then
+											appendIfUnique hierarchies[i] ch.node
+								)
+							)
+							
+							for ch in o.children where (findItem nodes ch != 0) do --añade los hijos al array si estan dentro de los nodos pasados
+								if not ignoreHidden or not ch.ishidden then
+								(
+									--si uno de los hijos reales tiene otro padre virtual diferente a el mismo, no lo añade
+									if useVirtualHierarchy and (lb.customAttributes.hasAttribute ch lb.customAttributes.virtualNodesCA.name) then
+									(
+										if ch.virtualNodes.vParentNode != undefined then
+										(
+											if ch.virtualNodes.vParentNode.node.name == ch.parent.name then
+												appendIfUnique hierarchies[i] ch
+										)
+										else
+											appendIfUnique hierarchies[i] ch
+									)
+									else
+										appendIfUnique hierarchies[i] ch
+								)
+						)
+						
+						i +=1
+					)--if isHierarchyInit
+				)--for nodes
+			)--if classof
+			
+			hierarchies
+		),
+
+		---------------------------------------------------------------------------------------------------------------
+		----------------------------------- FUNCTION getAllBrothers -------------------------------------------
+		---------------------------------------------------------------------------------------------------------------
+		--busca los hermanos directos, si no tiene busca los indirectos
+		fn getAllBrothers obj =
+		(
+			tempBrothers = #()
+			parent = undefined
+					
+			virtualParent = undefined
+			if (lb.customAttributes.hasAttribute obj #virtualNodes) then --si existe pare virtual
+				if obj.vParentNode != undefined then
+					virtualParent = obj.vParentNode.node
+				
+			if virtualParent != undefined and not isDeleted virtualParent and not virtualParent.ishidden then
+			(
+				parent = virtualParent
+			)		
+			else	if obj.parent != undefined and not obj.parent.ishidden then --si no hay padre virtual busca el padre real
+				parent = obj.parent
+
+			if parent != undefined then -- si ha encontrado padre busca los hijos del padre
+			(
+				tempBrothers = getVirtualChildren parent
+				
+				if tempBrothers.count < 2 then
+				(
+					tempBrothers = this.getAllBrothers parent
+					
+					if tempBrothers.count > 1 then
+					(
+						children = #()
+						for i=1 to tempBrothers.count do
+							join children (getVirtualChildren tempBrothers[i])
+						
+						if children.count > 1 then
+							tempBrothers = children
+					)
+				)
+			)
+			
+			tempBrothers
+		),
+
+		---------------------------------------------------------------------------------------------------------------
+		------------------------------------- FUNCTION getOppositeObject -------------------------------------
+		---------------------------------------------------------------------------------------------------------------
+		-- devuelve el objeto opuesto al pasado en OBJ.  Si no se encuentra
+		-- opuesto se devuelve UNDEFINED
+		fn getOppositeObject obj = 
+		(
+			_oppositeObject = undefined
+			
+			-- Es necesario que se cumpla en Naming Convention para poder encontrar el opuesto
+			if lb.nc.ncOK obj.name then
+			(
+				_oppositeObjName = lb.nc.getOppositeObjectName obj.name
+				
+				-- si se ha encontrado opuesto recopilamos el original y el opuesto
+				if _oppositeObjName != undefined then
+					_oppositeObject = execute ("$'" + _oppositeObjName + "'")
+			)
+			
+			_oppositeObject
+		),
+
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		------------------------------------------------------------------------------
+		--@fn: undefined | createBoneSkin | Función para crear los huesos.
+		--@gets: node | obj |  Pasa la selección de objetos.
+		--@opt: number | bonSide | Le pasamos el tamaño de los huesos, por defecto según el BBox del objeto, podemos pasarle un número.
+		--@opt: string | type | configuramos la 3º parte del naming, por defecto #skin, otra opción, #anim.
+		--@gets: node | position |  Pasa a donde queremos que se coloque, por defecto según el pivote del #obj, otra opción Bounding Box #BBox.
+		------------------------------------------------------------------------------
+		fn createBoneFromObj obj bonSize:#BBox type:#skin position:#obj =
+		(
+			_bones = #()
+			for o in obj do
+			(
+				_bone = lb.rig.createnewbone o.transform.pos o.transform.pos o	-- Crea el hueso en la ubicación del obj.
+				
+				-- Configuramos opción bonsize, por defecto coge el tamaño según el Bounding Box, podemos pasarle un número.
+				if bonSize == #BBox then
+				(
+					_BBox = nodeLocalBoundingBox o
+					_dist = distance _BBox[1]  _BBox[2]
+					bonSize = _dist/4
+				)
+				
+				_bone.length = _bone.width = _bone.height = bonSize		--
+				_bone.taper = 90										-- Opciones varias del hueso.
+				_bone.sidefins = off									--
+				
+				-- Ajustamos posición según opción de position.
+				if position == #obj then _bone.transform = o.transform
+				else if position == #BBox then _bone.pos = o.center
+				
+				-- Renombra el NAMING de los hueso creados.
+				_bone.name = o.name
+				
+				if lb.nc.ncOK _bone.name then
+				(
+					-- Condición para configurar la opción type, Color  y Flag7 y añadirlo a un array.
+					if type == #skin then 
+					(
+						_bone.name = lb.nc.replaceNamePart _bone.name 3 lb.nc.NC_classSkin
+						_bone.name = lb.nc.replaceNamePart _bone.name 7 (lb.nc.NC_inheritFlag + lb.nc.NC_skinFlag)
+						_bone.wirecolor = orange
+					)
+					else if type == #anim then 
+					(
+						_bone.name = lb.nc.replaceNamePart _bone.name 3 lb.nc.NC_classAnim
+						_bone.name = lb.nc.replaceNamePart _bone.name 7 lb.nc.NC_controlFlag
+						_filterPart = lb.nc.getNamePart _bone.name 4
+						
+						if (_filterPart == lb.nc.NC_locationMiddle) or (_filterPart == lb.nc.NC_locationNotSpecified) then _bone.wirecolor = yellow
+						else if _filterPart == lb.nc.NC_locationRight then _bone.wirecolor = green	
+						else if _filterPart == lb.nc.NC_locationLeft then _bone.wirecolor = blue
+					)
+					
+					append _bones _bone --añade los huesos que se vayan creando en un array.
+					
+					--gestiona los huesos "r" para hacerlos simétricos  a "l".
+					_filterName = lb.nc.getNamePart _bone.name 4
+					if _filterName == lb.nc.NC_locationRight then
+					(
+						_bone.objectoffsetscale.x = -1	-- para huesos invertidos
+						lb.rig.flipAxis #(_bone) false true true
+					)
+					
+					_filterPart = lb.nc.getNamePart _bone.name 5
+					_bone.name = lb.nc.replaceNamePart _bone.name 5 (_filterPart + "-x-bon-x")
+					_bone.name = lb.nc.replaceNamePart _bone.name 6 lb.nc.NC_nonSpecifiedCache
+				)
+				
+				lb.controller.freezeTransform _bone #all	-- Freezear los huesos.
+			)
+			_bones
+		),
+		
+		------------------------------------------------
+		--crea un objeto de tipo connect en la pieza pasada por parámetro y lo devuelve
+		--necesita la pieza donde crearlo
+		--replace indica si sustituirlo si existe ya
+		------------------------------------------------
+		fn createConnectNodeInObject originObject replace:true =
+		(
+			_connectNode = undefined
+
+			if isValidNode originObject and lb.nc.ncOK originObject.name then
+			(
+				_connectNodeName = lb.nc.replaceNamePart originObject.name 3 lb.nc.NC_classConnect
+				_connectNodeName = lb.nc.replaceNamePart _connectNodeName 6 lb.nc.NC_tcCache
+				_connectNodeName = lb.nc.replaceNamePart _connectNodeName 7 (lb.nc.NC_frozenFlag + lb.nc.NC_extraFlag)
+				
+				if replace then
+				(
+					_oldConnectNode = getNodeByName _connectNodeName
+					if isValidNode _oldConnectNode then delete _oldConnectNode
+				)
+
+				_connectNode = Point()
+				_connectNode.name = _connectNodeName
+				_connectNode.box = true
+				_connectNode.cross = true
+				_connectNode.drawOnTop
+				_connectNode.wirecolor = color 255 0 112
+				_connectNode.transform = originObject.transform
+				_connectNode.pos = originObject.center
+				originObject.layer.addNode _connectNode
+
+				_bb = nodeGetBoundingBox originObject (originObject.parent.transform)
+				--_distance = (distance _bb[1] _bb[2])*2
+				_distance = (abs(_bb[1].x - _bb[2].x) + abs(_bb[1].y - _bb[2].y) + abs(_bb[1].z - _bb[2].z))/2.0
+				_connectNode.size = _distance
+
+				_connectNode.parent = originObject
+				lb.controller.freezeTransform _connectNode #all
+			)--if
+
+			_connectNode
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | snapByShape | Obtiene la posición de los vértices del shape de orig y se lo pasa al shape de destino
+		--@gets: node | shpDest | Shape donde establece la posición de los vertices
+		--@gets: node | shpOrig | Shape donde obtiene la posición de los vertices
+		------------------------------------------------
+		fn snapByShape shpOrig shpDest =
+		(
+			for i = 1 to (numKnots shpDest) do
+			(
+				_posVert = getKnotPoint shpOrig 1 i
+				_inTangentVert = getInVec shpOrig 1 i
+				_outTangentVert = getOutVec shpOrig 1 i
+				
+				setKnotPoint shpDest 1 i _posVert
+				setInVec shpDest 1 i _inTangentVert
+				setOutVec shpDest 1 i _outTangentVert
+			)
+			
+			updateShape shpDest
+		),
+		
+		------------------------------------------------
+		--@fn: array{node}| createBonesFromHierarchy | Crea una jerarquia de huesos respecto a un objeto con jerarquia de hijos.
+		--@gets: node | obj | Objeto del cual se generan los objetos.
+		--@opt: node | boneParent | true | Sirve para emparentar la jerarquia entre si, o emparentar el primer hueso.
+		--@opt: string | boneName | true | Sirve para pasarle el nombre del hueso 
+		------------------------------------------------
+		fn createBonesFromHierarchy obj virtualChildren:false boneParent:undefined boneName:undefined = 
+		(
+			_newBones = #()
+			_childrens = obj.children
+			
+			-- Por defecto renombramos los huesos
+			if boneName == undefined then
+				boneName = obj.name
+			
+			-- Utilizamos la jerarquia real por defecto, sino utilizamos la jeraquia de los vitualChildren.
+			if virtualChildren then _childrens = this.getVirtualChildren obj
+			
+			-- Recorremos los hijos del OBJ y llamamos recursivamente a la función para que vaya recorriendo a su vez a los hijos de los hijos.
+			for _ch in _childrens do
+			(
+				_newBon = (this.createNewBone obj.pos _ch.pos obj)
+				
+				_newBones += #(_newBon)
+				
+				_newBonCh = (lb.rig.createBonesFromHierarchy _ch boneParent:_newBon boneName:_ch.name)
+				
+				_newBones += _newBonCh	
+
+				-- Emparentamos los huesos por defecto, según la jerarquia original de objetos.
+				if isvalidNode boneParent then
+					_newBon.parent = boneParent
+			
+				if boneName != undefined then
+					_newBon.name = boneName
+			)
+			
+			_newBones
+		),
+
+		----------------------------------------------------------------------------------------------------------------
+		-- crea un hueso desde el punto startPoint hasta el punto endPoint tomando como referencia el hueso indicado en RefBone.
+		-- STARTPOINT: punto inicial del hueso.
+		-- ENDPOINT: punto final del hueso.
+		-- REFBONE: hueso de referencia.
+		-- Devuelve NEWBONE.
+		----------------------------------------------------------------------------------------------------------------
+		fn createNewBone startPoint endPoint referenceNode =
+		(
+			newBone = undefined
+			
+			newBone = BoneSys.createBone startPoint endPoint referenceNode.transform[3] -- creación de 'newBone' en coordenadas absolurtas 0,0,0 en dirección Z positiva y con na longitud igual a 'newLength'.
+			newBone.showFrozenInGray = off
+			
+			-- cambio de visualización del hueso.
+			if referenceNode.objectoffsetscale.x == -1 then -- para huesos invertidos
+			(
+				in coordSys local newBone.rotation = eulerangles 0 0 180
+				newBone.objectOffsetScale =  referenceNode.objectOffsetScale -- iguala objectOffsetScale con hueso X
+			)
+					
+			newBone
+		),	
+
+		----------------------------------------------------------------------------------------------------------------
+		-- función para añadir constraints de posicion y de rotación.
+		-- SOURCE: objeto al que va a asignarse el constraint.
+		-- TARGET: target del constraint.
+		-- CONSTRAINTNAME: nombre que se le aplicará al constrint, se pasa un String.
+		-- TYPE: "pos" "rot"
+		----------------------------------------------------------------------------------------------------------------
+		fn createConstraint source target constraintName pos:false rot:false scl:false keepPos:false keepRot:false keepScl:false =
+		(
+			success = false
+			
+			try
+			(
+				if pos then -- comprobación del parametro posCons para aplicar constraint en posición.
+				(
+					source.pos.controller.Available.controller = Position_Constraint () -- añade controlador position constraint.
+					source.pos.controller.setName (source.pos.controller.count) constraintName -- cambia el nombre del constrolador constraint.
+					
+					source.pos.controller[source.pos.controller.count].appendTarget target 100.0 -- añade target al constraint.
+					source.pos.controller[source.pos.controller.count].relative = keepPos --keepOffset
+				)
+				
+				if rot then -- comprobación del parametro rotCons para aplicar constraint en rotación.
+				(
+					source.rotation.controller.Available.controller = Orientation_Constraint () -- añade controlador ratación constraint.
+					source.rotation.controller.setName (source.rotation.controller.count) constraintName -- cambia el nombre del constrolador constraint.
+					
+					source.rotation.controller[source.rotation.controller.count].appendTarget target 100.0 -- añade target al constraint.
+					source.rotation.controller[source.rotation.controller.count].relative = keepRot --keepOffset
+				)
+				
+				if scl then -- comprobación del parametro rotCons para aplicar constraint en escala.
+				(
+					
+				)
+				
+				success = true
+			)
+			catch()
+			
+			success
+		),
+
+		----------------------------------------------------------------------------------------------------------------
+		-- crea un point cuya transformacion es identica  a la del objeto pasado por parametro
+		-- sourceObj: objeto al que crea el point.
+		-- classType: parametro para definir el tipo de Objeto.
+		-- sufix: String que se añade al la parte del nombre que define el objeto.
+		-- crossOp: parámetro opcional para desactivar en la viscualización del point la Cruz.
+		-- boxOp: parámetro opcional para desactivar en la visualización del point la Caja.
+		-- Devuelve POINTOBJ.
+		----------------------------------------------------------------------------------------------------------------
+		fn createPointFromObj sourceObj classType:"" sufix:"" crossOp:on boxOp:on orientToWorld:false =
+		(
+			pointObj = undefined
+			
+			if isValidNode sourceObj then -- si el objeto original es un nodo valido
+			(	
+				pointObj = Point pos:sourceObj.pos size:7 cross:crossOp box:boxOp -- crea un point
+					
+				pointObj.wirecolor = sourceObj.wirecolor -- adopta el color del bone indicado en baseBone..
+				
+				if not orientToWorld then
+					pointObj.transform = sourceObj.transform -- asume las transformaciones del bone indicado en baseBone.
+				
+				if lb.nc.ncOK sourceObj.name then
+				(
+					nameParts = filterString sourceObj.name "_"
+					pointObj.name = substituteString sourceObj.name ("_" + nameParts[5] + "_") ("_" + nameParts[5] + "#" + (if sufix == "" then "Point" else sufix) + "_")
+					if classType != "" then
+						pointObj.name = substituteString pointObj.name ("_" + nameParts[3] + "_") ("_" + classType + "_")
+				)
+				
+				--si además el objeto origen es un hueso, almacena algunas propiedades más
+				if classof sourceObj.baseObject == BoneGeometry then
+				(
+					setUserProp pointObj "length" sourceObj.length
+					setUserProp pointObj "height" sourceObj.height
+					setUserProp pointObj "width" sourceObj.width
+					setUserProp pointObj "taper" sourceObj.taper
+					
+					setUserProp pointObj "invertedBone" (sourceObj.objectOffsetScale.x == -1)
+					setUserProp pointObj "objectOffsetScale" sourceObj.objectOffsetScale
+					
+					if orientToWorld then
+						setUserProp pointObj  "endPointPos" ((sourceObj.transform[1]*sourceObj.length) + sourceObj.transform[4])
+					
+				)
+			)
+				
+			pointObj
+		),	
+
+		----------------------------------------------------------------------------------------------------------------
+		-- crea un bone cuya transformacion es identica  a la del point pasado por parametro
+		-- sourcePoint: point del que crea el bone
+		-- Devuelve newbone.
+		----------------------------------------------------------------------------------------------------------------
+		fn createBoneFromPoint sourcePoint classType:"" sufix:"" =
+		(
+			newBone = undefined
+			
+			if isValidNode sourcePoint and (classof sourcePoint == Point) then -- si el objeto original es un nodo valido
+			(	
+				inverted = getUserProp sourcePoint "invertedBone"
+				
+				if inverted != undefined then --si el point tiene elmacenada informacion de huesos
+				(
+					--crea el punto donde termina el hueso
+					endPoint = copy sourcePoint
+					endPoint.name = "auxPoint"
+					endPoint.parent = undefined
+					endPoint.wirecolor = color 0 0 0
+					
+					boneLength = getUserProp sourcePoint "length"
+					if inverted then boneLength = -boneLength
+					
+					endPointPos = getUserProp sourcePoint "endPointPos"
+					
+					if endPointPos != undefined then
+						endPoint.pos = execute endPointPos
+					else
+						in coordsys local move endPoint [boneLength,0,0]
+					
+					--crea el hueso				
+					newBone = this.createNewBone sourcePoint.pos endPoint.pos sourcePoint
+					
+					if newBone != undefined then --si ha conseguido crear el hueso le pone las propiedades adecuadas
+					(
+						if endPointPos == undefined then
+							newBone.transform = sourcePoint.transform
+						
+						newBone.height = getUserProp sourcePoint "height"
+						newBone.width = getUserProp sourcePoint "width"
+						newBone.taper = getUserProp sourcePoint "taper"
+						
+						offsetScale = filterString (getUserProp sourcePoint "objectOffsetScale") "[,]"
+						newBone.objectOffsetScale = [offsetScale[1] as float, offsetScale[2] as float, offsetScale[3] as float]
+						
+						newBone.wirecolor = sourcePoint.wirecolor
+						
+						--renombra el hueso
+						if lb.nc.ncOK sourcePoint.name then
+						(
+							nameParts = filterString sourcePoint.name "_"
+							part5 = (filterString nameParts[5] "#")[1]
+							
+							newBone.name = substituteString sourcePoint.name nameParts[5] part5
+													
+							if classType != "" then
+								newBone.name = substituteString newBone.name ("_" + nameParts[3] + "_") ("_" + classType + "_")
+							newBone.name = substituteString newBone.name ("_" + part5 + "_") ("_" + part5 + sufix + "_")
+						)
+						
+					)--if newbone
+					
+					delete endPoint --elimina el punto auxiliar
+				)--if inverted
+			)--if isValidNode
+			
+			newBone
+		),
+
+		----------------------------------------------------------------------------------------------------------------
+		--devuelve un array de Points jerarquizado igual que la jerarquia a partir de la cual se generan
+		----------------------------------------------------------------------------------------------------------------
+		fn createPointsFromHierarchy hierarchy classType:"" sufix:"" orientToWorld:false =
+		(
+			pointsHierarchy = #()
+			
+			if classof hierarchy == Array then --si hierarchy es un array de nodos
+			(
+				for obj in hierarchy do --crea todos los puntos para todas las jerarquias
+					append pointsHierarchy (this.createPointFromObj obj classType:classType sufix:sufix orientToWorld:orientToWorld)
+				
+				--a continuacion se jerarquizan los puntos igual que los objetos de los que se generaron
+				for i=1 to hierarchy.count do
+				(
+					index = findItem hierarchy hierarchy[i].parent
+					
+					if index != 0 then
+						pointsHierarchy[i].parent = pointsHierarchy[index]
+				)
+			)
+			
+			pointsHierarchy
+		),
+
+		----------------------------------------------------------------------------------------------------------------
+		--devuelve un array de Bones jerarquizado igual que la jerarquia de points a partir de la cual se generan
+		----------------------------------------------------------------------------------------------------------------
+		fn createBonesFromPointHierarchy hierarchy classType:"" sufix:"" =
+		(
+			bonesHierarchy = #()
+			
+			if classof hierarchy == Array then --si hierarchy es un array de nodos
+			(
+				reorientFinalBone = false
+				
+				for i=1 to hierarchy.count do
+					if (getUserProp hierarchy[i] "invertedBone") == undefined then
+					(
+						if i < hierarchy.count then
+						(
+							setUserProp hierarchy[i] "length" (distance hierarchy[i] hierarchy[i+1])
+							setUserProp hierarchy[i] "endPointPos" hierarchy[i+1].transform[4]
+						)
+						else
+						(
+							setUserProp hierarchy[i] "length" 8
+							reorientFinalBone = true
+						)
+						
+						setUserProp hierarchy[i] "height" 8
+						setUserProp hierarchy[i] "width" 8
+						setUserProp hierarchy[i] "taper" 90
+						
+						setUserProp hierarchy[i] "invertedBone" (hierarchy[i].objectOffsetScale.x == -1)
+						setUserProp hierarchy[i] "objectOffsetScale" hierarchy[i].objectOffsetScale
+					)
+				
+				for pt in hierarchy do --crea todos los puntos para todas las jerarquias
+					append bonesHierarchy (createBoneFromPoint pt classType:classType sufix:sufix)
+				
+				--a continuacion se jerarquizan los puntos igual que los objetos de los que se generaron
+				for i=1 to hierarchy.count do
+				(
+					index = findItem hierarchy hierarchy[i].parent
+					
+					if index != 0 then
+						bonesHierarchy[i].parent = bonesHierarchy[index]
+				)
+				
+				--if reorientFinalBone then
+				--(
+					finalBone = bonesHierarchy[bonesHierarchy.count]
+					finalBone.transform = (matrix3 finalBone.parent.transform[1] finalBone.parent.transform[2] finalBone.parent.transform[3] finalBone.transform[4])
+				--)
+			)
+			
+			bonesHierarchy
+		),
+
+		--------------------------------------------------------------------------------------
+		--	Añade controlador Path Constraint al objeto pasado por parametro
+		--------------------------------------------------------------------------------------
+		fn addPathConstraint obj pathSpline follow:on upsideDown:on =
+		(
+			pathConstraint = undefined
+			
+			if ((isValidNode obj) and (isValidNode pathSpline)) then
+				if (lb.filter.boneFilter obj or lb.filter.pointFilter obj) and (lb.filter.splineFilter pathSpline) then
+				(
+					--se freezean los objetos necesitados
+					lb.controller.freezeTransform obj #all 
+					lb.controller.freezeTransform pathSpline #all
+					
+					--se añade el pathConstraint al objeto y borramos la animacion que crea
+					pathConstraint = obj.pos.controller.available.controller = Path_Constraint()
+					deleteKeys pathConstraint #allKeys
+					
+					--variable para guarar la pista Zero e intercambiarla
+					obj.position.controller.cut 3
+					obj.position.controller.paste 2
+					
+					--añadimos un target dentro del pathConstraint y activamos todas las opciones
+					pathConstraint.appendTarget pathSpline 50.0
+					pathConstraint.follow = follow
+					pathConstraint.allowUpsideDown = upsideDown
+				)
+				
+			pathConstraint
+		),
+
+		---------------------------------------------------------------------------------------------------------------
+		------------------------------------ FUNCTION linkVirtualParent ----------------------------
+		---------------------------------------------------------------------------------------------------------------
+		--añade el atributo nodos virtuales a un objeto
+		fn initVirtualParent obj =
+		(
+			if not (lb.customAttributes.hasAttribute obj #virtualNodes) then --si no esta definida la propiedad, la crea
+			(
+				custAttributes.add obj lb.customAttributes.virtualNodesCA #unique baseobject:false
+				obj.vChildrenNode = #()
+			)
+		),
+
+		------------------------------------------------
+		--@fn: array{Point} | createStretchBoneChain | Crea un sistema de pseudomusculos con huesos que hacen stretch. Devuelve los puntos de control del sistema
+		--@gets: array{BoneGeometry} | boneChain | Aarray con la cadena de huesos sobre la que aplicar el sistema.
+		------------------------------------------------
+		fn createStretchBoneChain boneChain =
+		(
+			controlPoints = #() --array deonde almacenar los puntos de control del sistema
+			
+			p = point box:true cross:false size:5 name:"pointChain-00" --punto de referencia
+					
+			-- creamos todos los points de la cadena y los colocamos
+			for i = 1 to (boneChain.count) do
+				if classof boneChain[i] == BoneGeometry then 
+				(
+					refName = boneChain[i].name
+					nameParts = filterString refName "_"
+					
+					pnt = instance p
+					pnt.wirecolor = [255,255,0]
+					
+					append controlPoints pnt
+					
+					if lb.nc.ncOK boneChain[i].name then
+						controlPoints[i].name = substituteString refName ("_" + nameParts[5] + "_") ("_" + nameParts[5] + "-hlp" + "_")
+					
+					controlPoints[i].transform =  boneChain[i].transform
+					
+					if i > 1 then
+						controlPoints[i].parent = controlPoints[1]
+					
+					lb.nc.setFlags controlPoints[i] #(lb.nc.NC_frozenFlag, lb.nc.NC_hiddenFlag) -- cambia los últimos flags por los especificados.
+					lb.controller.freezeTransform controlPoints[i] #all
+				)
+			
+			delete p --borramos el point de referencia
+			
+			--emparentamos el primer hueso al primer point
+			boneChain[1].parent = controlPoints[1]	
+				
+			-- asignamos los controladores a cada hueso
+			for i = 1 to (boneChain.count) do
+				if classof boneChain[i] == BoneGeometry then 
+				(
+					lb.controller.freezeTransform boneChain[i] #all --freeze del hueso
+					
+					posCon = boneChain[i].position.controller.available.controller = position_constraint()
+					posCon.appendTarget controlPoints[i] 50
+					
+					if i != boneChain.count then
+					(					
+						lookAtCon = boneChain[i].rotation.controller.available.controller = lookat_constraint()
+						
+						if boneChain[i].objectOffsetScale == [-1,1,1] then
+							lookAtCon.target_axisFlip = on
+								
+						lookAtCon.appendtarget controlPoints[i+1] 50
+						lookAtCon.lookat_vector_length = 0
+						lookAtCon.upnode_world = off
+						lookAtCon.pickupnode = controlPoints[i] 				
+					)
+				)
+				
+			controlPoints
+		),
+		
+		------------------------------------------------
+		--@fn: boolean | addConstraint | Añade constraints a un objeto de tipo position, orientation, lookAt o scale. Devuelve TRUE si tiene exito y FALSE si no.
+		--@gets: node | obj | Objeto al que va a asignarse el constraint.
+		--@gets: string | constraint | Tipo del constraint a crear: "pos" "rot" "lookAt" "sca"
+		--@gets: node | target | Objeto target del constraint.
+		--@gets: string | constName | Nombre para el nuevo controlador de constraint.
+		--@opt: boolean | keepInitOffset | false | Indica si mantener el offset inicial del objeto respecto al target.
+		------------------------------------------------
+		mapped fn addConstraint obj constraint target constName keepInitOffset:false =
+		(
+			_success = false
+			
+			case constraint of
+			(
+				#pos:
+				(
+					obj.pos.controller.Available.controller = Position_Constraint () -- añade controlador position constraint.
+					obj.pos.controller.setName (obj.pos.controller.count) constName -- cambia el nombre del constrolador constraint.
+					
+					obj.pos.controller[obj.pos.controller.count].appendTarget target 100.0 -- añade target al constraint.
+					obj.pos.controller[obj.pos.controller.count].relative = keepInitOffset --keepOffset
+					
+					_success = true
+				)
+			
+				#rot:
+				(
+					obj.rotation.controller.Available.controller = Orientation_Constraint () -- añade controlador ratación constraint.
+					obj.rotation.controller.setName (obj.rotation.controller.count) constName -- cambia el nombre del constrolador constraint.
+					
+					obj.rotation.controller[obj.rotation.controller.count].appendTarget target 100.0 -- añade target al constraint.
+					obj.rotation.controller[obj.rotation.controller.count].relative = keepInitOffset --keepOffset
+				)
+				
+				#lookAt:
+				(
+					obj.rotation.controller.Available.controller = lookAt_Constraint () -- añade controlador ratación constraint.
+					obj.rotation.controller.setName (obj.rotation.controller.count) constName -- cambia el nombre del constrolador constraint.
+					
+					obj.rotation.controller[obj.rotation.controller.count].appendTarget target 100.0 -- añade target al constraint.
+					obj.rotation.controller[obj.rotation.controller.count].relative = keepInitOffset --keepOffset
+					
+					_success = true
+				)
+				
+				#sca:
+				(
+					_success = true
+				)
+			)
+			
+			_success
+		),
+
+		------------------------------------------------
+		--@fn: undefined | linkVirtualParent | Asigna a un grupo de objetos, otro como padre virtual.
+		--@gets: Array{node} | children | Array de objetos que serán los hijos del padre virtual.
+		--@gets: node | parent | Nodo que será el padre virtual de los objetos.
+		------------------------------------------------
+		fn linkVirtualParent children parent =
+		(
+			if children != undefined do
+			(
+				if children.count > 0 do
+				(
+					this.initVirtualParent parent --si no esta definida la propiedad, la crea
+					
+					for i=1 to children.count do --recorre los hijos y les asigna el padre virtual
+					(
+						this.initVirtualParent children[i] --si no esta definida la propiedad, la crea
+											
+						children[i].vParentNode = (nodeTransformMonitor node:parent forwardTransformChangeMsgs:false forwardFlagNodesMessages:false forwardEnumDependents:false)
+						appendIfUnique parent.vChildrenNode (nodeTransformMonitor node:children[i] forwardTransformChangeMsgs:false forwardFlagNodesMessages:false forwardEnumDependents:false)
+
+					)--for
+				)--if count
+			)--id not undefined
+			
+			select parent --deja seleccionado el padre virtual
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | unlinkVirtualParent | Elimina el padre virual a un grupo de objetos.
+		--@gets: array{node} | children | Array de objetos a los que quitar el padre virtual.
+		------------------------------------------------
+		fn unlinkVirtualParent children =
+		(
+			if children != undefined do
+			(
+				if children.count > 0 do
+				(
+					for i=1 to children.count do --recorre los hijos y les desasigna el padre vitual
+					(
+						if (lb.customAttributes.hasAttribute children[i] #virtualNodes) then
+						(
+							if children[i].vParentNode != undefined then
+							(
+								parent = children[i].vParentNode.node
+								
+								if (lb.customAttributes.hasAttribute parent #virtualNodes) then
+								(
+									indexToDelete = 0
+									for j=1 to parent.vChildrenNode.count do
+										if parent.vChildrenNode[j].node.name == children[i].name then
+											indexToDelete = j
+										
+									if indexToDelete != 0 then --borra el hijovirtual del padre virtual
+										deleteItem parent.vChildrenNode indexToDelete
+									
+									if parent.vParentNode == undefined and parent.vChildrenNode.count == 0 then
+										custAttributes.delete parent (custAttributes.getdef parent.virtualNodes) baseobject:false
+								)
+														
+								children[i].vParentNode = undefined
+							)
+
+							if children[i].vChildrenNode.count == 0 then
+								custAttributes.delete children[i] (custAttributes.getdef children[i].virtualNodes) baseobject:false
+
+						)--if fvirtual nodes
+					)--for
+				)--if count
+			)--if not undefined
+		),
+
+		------------------------------------------------
+		--@fn: undefined | flipVis | Invierte la visualizacion en el objeto pasado, en los ejes indicados.
+		--@gets: Array{node} | objs | Objetos a los cuales invertir la visualizacion.
+		--@gets: boolean | Xflag | Indica si hay que invertir la visualizacion en X
+		--@gets: boolean | Yflag | Indica si hay que invertir la visualizacion en Y
+		--@gets: boolean | Zflag | Indica si hay que invertir la visualizacion en Z
+		------------------------------------------------
+		fn flipVis objs Xflag Yflag Zflag =
+		(
+			for o in objs do
+			(
+				if Xflag then
+				(
+					if  (o.objectoffsetscale[1] as integer) == 1 then
+						o.objectoffsetscale = [-1, o.objectoffsetscale[2], o.objectoffsetscale[3]]
+					else
+						o.objectoffsetscale = [1, o.objectoffsetscale[2], o.objectoffsetscale[3]]
+				)
+				
+				if Yflag then
+				(
+					if  (o.objectoffsetscale[2] as integer) == 1 then
+						o.objectoffsetscale = [o.objectoffsetscale[1], -1, o.objectoffsetscale[3]]
+					else
+						o.objectoffsetscale = [o.objectoffsetscale[1], 1, o.objectoffsetscale[3]]
+				)
+				
+				if Zflag then
+				(
+					if  (o.objectoffsetscale[3] as integer) == 1 then
+						o.objectoffsetscale = [o.objectoffsetscale[1], o.objectoffsetscale[2], -1]
+					else
+						o.objectoffsetscale = [o.objectoffsetscale[1], o.objectoffsetscale[2], 1]
+				)
+			)
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | flipAxis | Invierte en el objeto pasado, en los ejes indicados.
+		--@gets: Array{node} | objs | Objetos a los cuales  invertir los ejes.
+		--@gets: boolean | Xflag | Indica si hay que invertir el eje X
+		--@gets: boolean | Yflag | Indica si hay que invertir el eje Y
+		--@gets: boolean | Zflag | Indica si hay que invertir el eje Z
+		------------------------------------------------
+		fn flipAxis objs Xflag Yflag Zflag =
+		(
+			objsParents = #()
+			objsChildrens = #()
+			
+			for o in objs do
+			(
+				append objsParents o.parent
+				
+				chlds = #()
+				for chl in o.children do
+					append chlds chl
+				
+				append objsChildrens chlds
+			)
+			
+			for o in objs do
+			(
+				o.parent = undefined
+				for chl in o.children do
+					chl.parent = undefined
+			)
+			
+			for o in objs do
+			(
+				if Xflag then
+					o.transform = matrix3 -o.transform[1] o.transform[2] o.transform[3] o.transform[4]
+				if Yflag then
+					o.transform = matrix3 o.transform[1] -o.transform[2] o.transform[3] o.transform[4]
+				if Zflag then
+					o.transform = matrix3 o.transform[1] o.transform[2] -o.transform[3] o.transform[4]
+			)
+			
+			for i=1 to objs.count do
+			(
+				objs[i].parent = objsParents[i]
+				for chl in objsChildrens[i] do
+				(
+					chl.parent = objs[i]
+					lb.controller.freezeTransform chl #all
+				)
+			)
+			
+			for o in objs do
+			(
+				lb.controller.freezeTransform o #all
+			-- 			o.scale.controller[#Frozen_scale].value = [1,1,1] -- ESTA LINEA NO DEBE DE PONERSE
+				-- Es decir, ahora mismo tenemos muchas herramientas que tiran de esta funcion que sireve para flipear ejes. Es necesario que invierta
+				--la escala para simetria en lados opuestos con el Chbox.
+			)				
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | jumpToVirtualParent | Selecciona el padre virtual, si no existe selecciona el padre real y si no tiene, no selecciona nada.
+		--@gets: Array{node} | children | Objetos cuyos padres virtuales se quieren seleccionar.
+		------------------------------------------------
+		fn jumpToVirtualParent children =
+		(
+			if children.count > 0 then
+			(--si el array de hijos no esta vacio
+
+				parents = #()
+				
+				for i=1 to children.count do
+				(--recorre los nodos seleccionados buscando sus padres virtuales
+					flag = false
+					
+					if (lb.customAttributes.hasAttribute children[i] #virtualNodes) then --si existe pare virtual
+					(
+						if children[i].vParentNode != undefined then
+							virtualParent = children[i].vParentNode.node
+						
+						if virtualParent != undefined and not isDeleted virtualParent and not virtualParent.ishidden then
+						(
+							appendIfUnique parents virtualParent
+							flag = true
+						)
+
+						if not flag and children[i].parent != undefined then --si el padre virtual ha sido borrado o esta oculto
+								if not children[i].parent.ishidden then
+								(
+									appendIfUnique parents children[i].parent
+									flag = true
+								)
+						
+					)
+					else if children[i].parent != undefined then --si solo existe el padre real
+						if not children[i].parent.ishidden then
+						(
+							appendIfUnique parents children[i].parent
+							flag = true
+						)
+						
+					if not flag then--si no tiene padre
+						appendIfUnique parents children[i]
+				)
+				
+				if parents.count > 0 then --selecciona los padres virtuales
+				(
+					select parents
+				)
+			)--if selection > 0
+		),
+		
+		
+		------------------------------------------------
+		--@fn: undefined | jumpToVirtualChildren | Selecciona los hijos virtuales y reales si hay.
+		--@gets: Array{node} | parents | Objetos cuyos hijos virtuales se quieren seleccionar.
+		------------------------------------------------
+		fn jumpToVirtualChildren parents =
+		(
+			if parents.count > 0 then
+			(--si hay algo seleccionado		
+				--parents = selection
+				children = #()
+				
+				for i=1 to parents.count do
+				(--recorre los nodos seleccionados buscando sus hijos virtuales
+					tempChildren = this.getVirtualChildren parents[i]
+					
+					if tempChildren.count > 0 then
+						join children tempChildren
+					else
+						appendIfUnique children parents[i]
+				)--for parents
+				
+				if children.count > 0 then --selecciona los hijos virtuales
+					select children
+				
+			)--if selection > 0
+		),
+
+		---------------------------------------------------------------------------------------------------------------
+		--------------------------------- FUNCTION JumpToVirtualBrotherR -----------------------------------
+		---------------------------------------------------------------------------------------------------------------
+		--salta al siguiente hermano virtual si existe, sino salta al siguiente hermano real y sino no salta
+		fn jumpToVirtualBrotherR sel =
+		(
+			brothersToSel = #()
+			
+			for obj in sel do
+			(
+				objBrothers = getAllBrothers obj
+				
+				objBrothers = lb.misc.sortNodesByName objBrothers
+				
+				index = findItem objBrothers obj
+				
+				if index != 0 then
+				(
+					if index == objBrothers.count then
+						appendIfUnique brothersToSel objBrothers[1]
+					else
+						appendIfUnique brothersToSel objBrothers[index + 1]
+				)
+			)
+			
+			select brothersToSel		
+		),
+
+		---------------------------------------------------------------------------------------------------------------
+		--------------------------------- FUNCTION JumpToVirtualBrotherL -----------------------------------
+		---------------------------------------------------------------------------------------------------------------
+		--salta al siguiente hermano virtual si existe, sino salta al siguiente hermano real y sino no salta
+		fn jumpToVirtualBrotherL sel =
+		(
+			brothersToSel = #()
+			
+			for obj in sel do
+			(
+				objBrothers = getAllBrothers obj
+				
+				objBrothers = lb.misc.sortNodesByName objBrothers
+				
+				index = findItem objBrothers obj
+				
+				if index != 0 then
+				(
+					if index == 1 then
+						appendIfUnique brothersToSel objBrothers[objBrothers.count]
+					else
+						appendIfUnique brothersToSel objBrothers[index - 1]
+				)
+			)
+			
+			select brothersToSel		
+		),
+
+		---------------------------------------------------------------------------------------------------------------
+		-------------------------------- FUNCTION jumpToAllBrothers ------------------------------------------
+		---------------------------------------------------------------------------------------------------------------
+		--Selecciona todos los hermanos virtuales o no siempre que esten visibles
+		fn jumpToAllBrothers sel =
+		(
+			brothers = #()
+			
+			for x in sel do
+				join brothers (getAllBrothers x)
+			
+			select brothers
+		),
+
+		---------------------------------------------------------------------------------------------------------------
+		-------------------------------- FUNCTION JumpToChildrenHierarchy ----------------------------------
+		---------------------------------------------------------------------------------------------------------------
+		--Salta a los hijos virtuales si existen, tambien salta a los hijos reales de forma recursiva
+		fn jumpToChildrenHierarchy sel =
+		(
+			if sel.count > 0 then
+			(--si hay algo seleccionado		
+				
+				children = #()
+				join children sel
+				
+				for x in children where isValidNode x do
+				(
+					tempChildren = (getVirtualChildren x)
+					for ch in tempChildren where isValidNode ch do
+						appendIfUnique children ch				
+				)
+							
+				if children.count > 0 then --selecciona los hijos virtuales pseudorecursivamente
+				(
+					clearSelection()
+					select children
+				)
+				
+			)--if selection > 0
+		),	
+
+		---------------------------------------------------------------------------------------------------------------
+		------------------------------------- FUNCTION HideShowPuppet ----------------------------------------
+		---------------------------------------------------------------------------------------------------------------
+		--Oculta y desoculta el puppet
+		--sel: seleccion de objetos
+		--allFlag: flag qu e indica si tiene que ocultar/desocultar las piezas seleccionadas o todas las de/del personaje/s al que pertenecen
+		--unifyFlag: flag para igualar la visibilidad de los Puppets de los personajes si hay algunos ocultos y otros no
+		fn hideShowPuppet sel allFlag unifyFlag =
+		(
+			if sel.count > 0 then --si hay huesos seleccionados
+			(lb.nc.NC_classAnim
+				nodesToWork = getCurrentSelection()
+				
+				--tiene que operar sobre todos los nodos con puppet de los personajes a lso que pertenecen las piezas seleccionadas
+				if allFlag then
+				(
+					auxAssets = lb.asset.getAssetsFromNodes nodesToWork --obtiene los assets a partir de los nodos seleccionados
+					nodesToWork =#() --vacia el array de nodos con el que trabajar
+					
+					for ast in auxAssets do --recolecta los nodos animables de rig de cada asset
+						nodesToWork += lb.asset.getAssetAnimNodes ast lb.nc.NC_classAnim
+				)
+				
+				enable = undefined
+				--recorre todos los nodos buscando los modificadores puppet y habilitandolos o desabilitandolos
+				for obj in nodesToWork do
+					for m in obj.modifiers where findString m.name "Puppet" != undefined do
+					(
+						if unifyFlag then
+						(
+							if enable == undefined then enable = not m.enabled
+							m.enabled = enable
+						)
+						else
+							m.enabled = not m.enabled
+					)--for
+				
+			)--if sel
+		),
+
+		---------------------------------------------------------------------------------------------------------------
+		----------------------------------- FUNCTION applyGradient ---------------------------------------------
+		---------------------------------------------------------------------------------------------------------------
+		--aplica un gradiente de color al array pasado por parametro entre el color start y end
+		fn applyGradient nodes start_color end_color =
+		(
+			local level = #()
+		  
+			for i = 1 to nodes.count do --calcula la profundidad de todas las ramas de jerarquia
+			(
+			  local node = nodes[i]
+			  local n    = 0
+			  do
+			  (
+				n    = n + 1
+				node = node.parent
+			  ) while (node != undefined)
+			  level[i] = n
+			)
+
+			local minLevel = level[1]
+			local maxLevel = minLevel
+
+			for i = 1 to nodes.count do --calcula la rama mas profunda y la menos profunda
+			(
+				if ( minLevel > level[i] ) do minLevel = level[i]
+				if ( maxLevel < level[i] ) do maxLevel = level[i]
+			)
+
+			local span = maxLevel - minLevel --calcula la diferencia de profundidad entre la rama maa profunda
+														  -- y la menos profunda
+			if ( span < 1 ) do span = 1
+
+			local colorDiff = end_color - start_color --diferencia de color entre los colores del gradiente
+			local colorDiffDistrib = colorDiff/span --diferencia de color entre cada salto del gradiente
+			
+			for i= 1 to nodes.count do --calcula que color ponerle a cada nodo
+			(
+				nodes[i].wirecolor = start_color + (level[i] - minLevel) * colorDiffDistrib 
+			)
+			
+			end_color = start_color + (maxLevel - minLevel) * colorDiffDistrib
+		),
+
+		----------------------------------------------------------------------------------------------------------------
+		--aplica el gradiente a los nodos pasados por parametro
+		--obtiene las jerarquias presentes en esos nodos y aplica el gradiente a cada una de ellas
+		--necesita una rray de colores y un array del porcentaje de 0.0 a 1.0 en el que debe ir cada color
+		--useVirtualHierarchy indica si esta a true que use las jerarquias con virtualparents y virtual childrens tambien
+		----------------------------------------------------------------------------------------------------------------
+		fn applyGradientRamp nodes colors percents useVirtualHierarchy:true =
+		(
+			if classof nodes == Array and classof colors == Array and classof percents == Array then
+			(
+				local hierarchiesNumLevels = #()
+				local hierarchiesNodesLevels = #()
+				
+				local hierarchies = getHierarchiesFromNodes nodes useVirtualHierarchy:useVirtualHierarchy
+				
+				for h in hierarchies do --recorre las jerarquias y reconoce que nodos pertenecen a cada nivel
+				(
+					levels = 1
+					hLevels = #()
+					thisLevelNodes = #()
+					
+					for i=1 to h.count do --recorre cada nodo de la jerarquia
+					(
+						if useVirtualHierarchy and (lb.customAttributes.hasAttribute h[i] lb.customAttributes.virtualNodesCA.name) then
+						(
+							if h[i].virtualNodes.vParentNode != undefined then
+							(
+								if findItem thisLevelNodes h[i].virtualNodes.vParentNode.node != 0 then
+								(
+									levels += 1
+									thisLevelNodes = #()
+								)--if3
+							)
+							else if findItem thisLevelNodes h[i].parent != 0 then
+							(
+								levels += 1
+								thisLevelNodes = #()
+							)--if2
+						)
+						else if findItem thisLevelNodes h[i].parent != 0 then
+						(
+							levels += 1
+							thisLevelNodes = #()
+						)--if1
+						
+						hLevels[i] = levels
+						append thisLevelNodes h[i]
+					)
+					
+					append hierarchiesNumLevels levels
+					append hierarchiesNodesLevels hLevels
+				)
+				
+				--aplica los colores por niveles
+				for i=1 to hierarchies.count do
+				(			
+					numLevels = hierarchiesNumLevels[i]
+					
+					for j=1 to hierarchies[i].count do
+					(				
+						actualNode = 	hierarchies[i][j]
+						actualNodeLevel = hierarchiesNodesLevels[i][j]
+						
+						for i=2 to percents.count do
+							if actualNodeLevel == 1 then 
+							(
+								actualNode.wirecolor = colors[1]
+							)
+							else if (numLevels*percents[i-1]) < actualNodeLevel and actualNodeLevel <= (numLevels*percents[i]) then
+							(
+								colorDiff = colors[i] - colors[i-1]
+								colorDiffDistrib = colorDiff/(numLevels*(percents[i] - percents[i-1]))
+								
+								newColor = colors[i] + (actualNodeLevel - (numLevels*percents[i]))*colorDiffDistrib 
+								actualNode.wirecolor = newColor
+							)
+					)
+				)--for hierarchies
+				
+			)--if classof	
+		),--fn
+
+		------------------------------------------------
+		--@fn: undefined | disableControllers | Baja el peso de todos los controladores de un objeto.
+		--@gets: node | obj | Objeto al que va se le va abajar el peso del los controladores
+		------------------------------------------------
+		mapped fn setControllersWeight obj connection =
+		(
+			if connection then
+				connection = 100
+			else 
+				connection = 0
+			
+			if (lb.controller.isTransformFrozen obj #all) then
+			(
+				if classOf obj.position.controller == position_list then
+					for i = 1 to obj.position.controller.count do
+						obj.position.controller.weight[i] = connection
+				
+				if classOf obj.rotation.controller == rotation_list then
+					for i = 1 to obj.rotation.controller.count do
+						obj.rotation.controller.weight[i] = connection
+
+				if classOf obj.scale.controller == scale_list then
+					for i = 1 to obj.scale.controller.count do
+						obj.scale.controller.weight[i] = connection			
+			)
+		),
+			
+		------------------------------------------------
+		--@fn: undefined | rotatePivotOnly | Rota el punto de pivote de un objeto.
+		--@gets: node | obj | Objeto al que va se le va abajar el peso del los controladores
+		--@gets: eulerAngles | rotation | Rotación que debemos pasarle en euler angles
+		------------------------------------------------
+		fn rotatePivotOnly obj rotation = 
+		( 
+			local rotValInv = inverse (rotation as quat)
+			
+			animate off in coordsys local obj.rotation*=RotValInv
+			
+			obj.objectoffsetrot*=RotValInv
+			
+			obj.objectoffsetpos*=RotValInv	
+		),
+
+		---------------------------------------------------------------------------------------------------------------
+		------------------------------------- FUNCTION SmartCreateEnd ----------------------------------------
+		---------------------------------------------------------------------------------------------------------------
+		--crea un bone end
+		fn SmartCreateEnd originBone =
+		(
+			local End
+			
+			--Create End Bone
+			--for x in selBones do
+			--(
+				with Animate Off   --with Animate Off bracket open
+				(   
+					if (classOf originBone.baseObject == BoneGeometry) do --si es un hueso
+					(
+						
+						local parentBone  = originBone
+						local parentTrans = parentBone.transform
+						local parentPos   = parentTrans.translation
+						local newbone = undefined
+										
+						with redraw off 					
+						(
+							newBone=BoneSys.createBone parentPos (parentPos+6) parentBone.dir
+							newBone.transform = parentTrans
+							newBone.objectOffsetScale = originBone.objectOffsetScale
+							if parentBone.objectoffsetscale[1] == -1 then
+							(
+								in coordSys Local move newBone [-parentBone.length,0,0]
+								newBone.objectoffsetscale[1] = -1
+							)
+							else
+								in coordSys Local move newBone [parentBone.length,0,0]
+												
+							newBone.parent    = parentBone
+							
+							newBone.width     = parentBone.width
+							newBone.height    = parentBone.height
+							newBone.taper     = 90
+							newBone.length    = (parentBone.width+parentBone.height)/2
+							newBone.wirecolor = parentBone.wirecolor
+								
+							newBone.sidefins = false
+							newBone.frontfin = false
+							newBone.backfin = false
+							
+							-- Cambia el nombre del hueso
+							objNameArray = filterString parentBone.name "_"
+							finalName = parentBone.name
+							if objNameArray.count == 7 then
+								finalName = objNameArray[1] + "_" + objNameArray[2]  + "_" + objNameArray[3] + "_" + objNameArray[4] + "_" + objNameArray[5] + "End" + "_" + objNameArray[6] + "_" + objNameArray[7]--"x"
+							newBone.name = finalName
+							
+							if newBone != undefined then
+								lb.controller.freezeTransform newBone #all
+
+							End = newBone
+							
+						)
+						
+					)--if classof bone
+				) -- with Animate Off bracket close
+			--)
+								
+			--redrawViews()
+			
+			End			
+		),
+
+		----------------------------------------------------------------------------------------------------------------
+		-- Comprueba que el objeto pasado por parametro es un hueso
+		fn pickBoneTest obj =
+		(
+			(classof obj.baseObject) == BoneGeometry
+		),--fn pickObjTest	
+
+		---------------------------------------------------------------------------------------------------------------
+		------------------------------------- FUNCTION fixIKplane ----------------------------------------------
+		----------------------------------------------------------------------------------------------------------------
+		--pone los huesos pasados por parametro en un array, en el mismo plano de ik
+		fn fixIKplane IkStart IkEnd =
+		(
+			success = false --flag para guardar si ha tenido exito la operacion o no
+			newBones = #()
+			
+			
+			parentBone = IkEnd.parent --inicializa parentBone
+			limit = 2
+			cont = 1
+			
+			while (cont < limit) and (parentBone != undefined) do
+			(
+				parentBone = parentBone.parent --va subiendo en la jerarquia hasta el tercer ancestro
+				cont += 1
+			)
+						
+			if parentBone != undefined then
+				if parentBone == IkStart then
+				(--comienza a alinear los huesos con un plano de ik
+					
+					childrenBckp = #() --array para hacer bckp de los hijos de los huesos
+					IkMiddle = IkEnd.parent --alnmacena el hueso del medio
+					
+					childs = #()
+					for chl in IkMiddle.children do --almacena los hijos del hueso inicial
+					(
+						append childs chl
+						chl.parent = undefined
+					)
+					append childrenBckp childs
+					
+					childs = #()
+					for chl in IkStart.children do --almacena los hijos de hueso del medio
+					(
+						append childs chl
+						chl.parent = undefined
+					)
+					append childrenBckp childs
+					
+					IkStartParent = IkStart.parent --salva el padre del hueso inicial
+					
+					invertStart = if IkStart.objectoffsetscale[1] == -1 then true else false --comprueba si tiene que invertir el nuevo hueso
+					invertMiddle = if IkMiddle.objectoffsetscale[1] == -1 then true else false --comprueba si tiene que invertir el nuevo hueso
+					
+					--calcula el ik plane
+					startPos = IkStart.pos --punto1 del plano
+					middlePos = IkMiddle.pos --punto2 del plano
+					endPos = IkEnd.pos --punto3 del plano
+					
+					v1 = endPos - startPos --vector1
+					v2 = middlePos - startPos --vector2
+					
+					newDir = normalize(cross v1 v2) --vector ortogonal que sirve de direccion a los huesos
+					
+					--crea los nuevos huesos y elimina los antiguos
+					Ik_Start = BoneSys.createBone startPos middlePos newDir
+					Ik_Start.wirecolor = IkStart.wirecolor
+					Ik_Start.height = IkStart.height
+					Ik_Start.width = IkStart.width
+					Ik_Start.taper = IkStart.taper
+					Ik_Start.name = IkStart.name
+					
+					if invertStart then --si tiene que invertir
+					(
+						this.flipAxis #(IkStart) true true false
+						this.flipVis #(IkStart) true false false
+					)
+					
+					IkStart.transform = Ik_Start.transform
+					delete Ik_Start 
+					
+					--crea los nuevos huesos y elimina los antiguos
+					Ik_Middle = BoneSys.createBone middlePos endPos newDir
+					Ik_Middle.wirecolor = IkMiddle.wirecolor
+					Ik_Middle.height = IkMiddle.height
+					Ik_Middle.width = IkMiddle.width
+					Ik_Middle.taper = IkMiddle.taper
+					Ik_Middle.name = IkMiddle.name
+					
+					if invertStart then --si tiene que invertir
+					(
+						this.flipAxis #(IkMiddle) true true false
+						this.flipVis #(IkMiddle) true false false
+					)
+
+					IkMiddle.transform = Ik_Middle.transform
+					delete Ik_Middle
+
+					for chl in childrenBckp[1] do --restablece la jerarquia
+						if isValidNode chl then
+						(
+							chl.parent = IkMiddle
+							lb.controller.freezeTransform chl #All
+						)
+					
+					for chl in childrenBckp[2] do --restablece la jerarquia
+						if isValidNode chl then
+						(
+							chl.parent = IkStart
+							lb.controller.freezeTransform chl #All
+						)
+					
+			-- 				--jerarquiza los nuevos huesos
+			-- 				Ik_Middle.parent = Ik_Start
+			-- 				Ik_Start.parent = IkStartParent
+					
+					--freezea los nuevos huesos
+					lb.controller.freezeTransform IkMiddle #All
+					lb.controller.freezeTransform IkStart #All
+					
+			-- 				newBones = #(IkStart, IkMiddle, IkEnd)
+						
+					success = true
+				)					
+			
+			-- 		print newBones	
+				
+					success
+			-- 		success --devuelve si ha tenido exito o no
+		),
+
+		---------------------------------------------------------------------------------------------------------------
+		------------------------------------- FUNCTION checkOffset --------------------------------------------
+		---------------------------------------------------------------------------------------------------------------
+		--devuelve la longitud correcta que debe tener un hueso si tiene offset, si no tiene offset o no es un hueso devuelve undefined
+		fn checkOffset boneToCheck minOffset maxOffset =
+		(
+			newLength = undefined
+		
+			if (classOf boneToCheck.baseObject == BoneGeometry) then --si es un hueso
+			(
+				boneLength = boneToCheck.length --longitud actual del hueso
+				for i=1 to boneToCheck.children.count do
+				(
+					--calcula la distsancia del hueso hacia un hijo y comprueba el offset con la longitud del hueso
+					dis = distance boneToCheck.transform.pos boneToCheck.children[i].transform.pos
+					offset = abs (dis - boneLength)					
+					if offset > minOffset and offset < maxOffset then
+					(
+						newLength = dis
+						i = boneToCheck.children.count
+					)
+				)
+			)
+			
+			newLength --devuelve la longitud que seria correcta
+		),
+
+		---------------------------------------------------------------------------------------------------------------
+		------------------------------------- FUNCTIONs for MIRROR BONES ---------------------------------
+		---------------------------------------------------------------------------------------------------------------
+		---------------------------------------------------------------------------------------------------------------
+		--a: hueso pasado por parametro
+		--created: huesos invertidos creados
+		fn getEndPoint a created=
+		(
+			if ( classOf(a) == BoneGeometry ) then
+			(
+			   [a.length,0,0] * a.objectTransform
+			)
+			else
+			(
+			   (a.transform).translation
+			)
+		),
+
+		---------------------------------------------------------------------------------------------------------------
+		--created: huesos invertidos creados
+		--selected: huesos originales seleccionados
+		fn unMirror created selected=
+		(
+			with redraw off
+			(
+				for i = 1 to created.count do
+				(
+					if not isDeleted created[i] then
+						delete created[i]
+				)
+				created.count = 0;
+				clearSelection()
+				for x in selected do
+					if not isDeleted x then
+						selectMore x
+			)
+		),
+		
+		---------------------------------------------------------------------------------------------------------------
+		--axisFactor: eje del viewport sobre el que hace la simetria
+		--offset: offset en el eje seleccionado para separar los huesos nuevos
+		--created: huesos creados
+		fn mirrorSelectedBones axisFactor created isBone mantainOffset =
+		(
+			-- define the bone structure that contains the bone and its level in the hierarchy
+			struct BoneLevel (index, level)
+			local bones     = #()
+
+			offset = [0,0,0]
+			if mantainOffset then
+			(
+				offset[1] = selection[1].pos.x
+				offset[2] = selection[1].pos.y
+				offset[3] = selection[1].pos.z
+			)		
+			
+			-- fill the array of bone structures. intialize the hierarchy level with 0
+			for i = 1 to selection.count do
+			(
+				bones[i] = BoneLevel i 0		
+			)
+			
+			-- calculate the hierarchy level for each bone in bones array. the hierarchy level
+			-- is the number of ancestors between the current bone and the root node
+			for i = 1 to bones.count do
+			(
+				local node = selection[bones[i].index]
+				local n    = 0
+				do
+				(
+					n    = n + 1
+					node = node.parent
+				) while (node != undefined)
+				bones[i].level = n
+			)
+
+			-- sort the bones array by the hierarchy level
+			qsort bones (fn myLevel v1 v2 = (v1.level - v2.level))
+		
+			-- prepare the storage for the new bones and their parents
+			local parents = #()
+			local root    = selection[bones[1].index].transform.translation
+			created.count = 0
+			
+			-- loop through the sorted selection so that the hierarchy is browsed from top to bottom
+			for i = 1 to bones.count do
+			(
+				local original = selection[bones[i].index] 
+				if (classof original != BoneGeometry) do -- not a real bone
+				(
+					append parents undefined --no parent will be assigned. undefined is added only to keep the numbering
+					continue
+				)
+				
+				-- take the start point, end point and the Z axis from the original bone				
+				local boneStart  = original.pos
+				local boneEnd    = this.getEndPoint original created
+				local boneZ      = original.dir
+				
+				-- apply mirroring to the start and end points
+				for k = 1 to 3 do
+				(
+					if ( axisFactor[k] < 0 ) do
+					(
+					  boneStart[k] = 2.0*root[k] - boneStart[k] - 2*offset[k]
+					  boneEnd[k] = 2.0*root[k] - boneEnd[k] - 2*offset[k]
+					  boneZ[k] = -boneZ[k]
+					)
+				)
+
+				-- create the reflection of the original bone				
+				local reflection
+				
+				reflection = bonesys.createbone boneStart boneEnd boneZ
+				
+				-- copy all applicable parameters from the original bone to the reflection
+				reflection.backfin 					= original.backfin
+				reflection.backfinendtaper		= original.backfinendtaper
+				reflection.backfinsize				= original.backfinsize 
+				reflection.backfinstarttaper		= original.backfinstarttaper
+				reflection.frontfin						= original.frontfin
+				reflection.frontfinendtaper		= original.frontfinendtaper
+				reflection.frontfinsize				= original.frontfinsize
+				reflection.frontfinstarttaper		= original.frontfinstarttaper
+				reflection.height						= original.height
+				reflection.sidefins					= original.sidefins 
+				reflection.sidefinsendtaper		= original.sidefinsendtaper
+				reflection.sidefinssize				= original.sidefinssize
+				reflection.sidefinsstarttaper	= original.sidefinsstarttaper
+				reflection.taper						= original.taper
+				reflection.width						= original.width
+				reflection.wirecolor					= original.wirecolor
+				
+				--si cumple el NC, averigua el nombre que tendria su opuesto
+				if lb.nc.ncOK original.name then
+				(
+					nameParts = filterString original.name "_"
+					case nameParts[4] of
+					(
+						(lb.nc.NC_locationLeft): nameParts[4] = substituteString nameParts[4] lb.nc.NC_locationLeft lb.nc.NC_locationRight 
+						(lb.nc.NC_locationRight): nameParts[4] = substituteString nameParts[4] lb.nc.NC_locationRight  lb.nc.NC_locationLeft
+					)
+					newName = nameParts[1] + "_" + nameParts[2] + "_" + nameParts[3] + "_" + nameParts[4] + "_" + nameParts[5] + "_" + nameParts[6] + "_" + nameParts[7]
+					reflection.name = newName
+				)
+				else --sino, coloca el sufijo mirrored
+					reflection.name = original.name + "(mirrored)"
+				
+				
+				-- add the created bone to the lists				
+				append parents reflection
+				append created reflection
+				
+				-- begin parent assignment
+				
+				-- if there's no parent then do nothing and go to the next bone
+				if ( original.parent == undefined ) do continue; 
+			
+				local parent = original.parent
+
+				-- check if the parent is among selected nodes			
+				if ( not parent.isSelected ) then
+				( 
+					reflection.parent = parent -- if isn't then let the original and the created one share the parent
+				)
+				else
+				(  -- find the index of the parent and assign the appropriate parent from the list of created parents 
+					for p = i-1 to 1 by -1 do
+					(
+						if ( parent == selection[bones[p].index] ) do
+						(
+							reflection.parent = parents[p]
+							exit
+						)
+					)
+				)
+			)
+
+			-- select the new bones			
+			if ( created.count > 0 ) do
+			(
+				clearSelection();
+				select created
+			)
+			
+			created
+		),
+		
+		---------------------------------------------------------------------------------------------------------------
+		--mirrorAxisValue: eje del viewport sobre el que se hace la simetria
+		--checkNonBones: flag para que se compruebe si los objetos son huesos u otro tipo de geometria
+		--created: huesos creados
+		fn callMirror mirrorAxisValue created mantainOffset =
+		(
+			
+			isBone = #()
+			-- check whether all selected nodes are proper bones
+			sel = getCurrentSelection()
+			for i=1 to sel.count do
+			(
+				isBone[i] = true
+				if (classof bone != BoneGeometry) do 
+					isBone[i] = false
+			)
+						
+			-- set up the negating multipliers for the axis' components
+			local axisFactor = [1,1,1]
+			if (mirrorAxisValue<=2 or  mirrorAxisValue==6) do axisFactor.x = -1;
+			if (mirrorAxisValue>=2 and mirrorAxisValue<=4) do axisFactor.y = -1;
+			if (mirrorAxisValue>=4) do axisFactor.z = -1;
+			
+			-- call the mirror function
+			with redraw off
+			(
+				if selection.count > 0 then
+					created = this.mirrorSelectedBones axisFactor created isBone mantainOffset
+			)
+			
+			created
+		),
+
+		---------------------------------------------------------------------------------------------------------------
+		--coloca el pivote del objeto en la posicion pasada por parametro
+		fn setPivotPos Obj Position =
+		(
+			success = true
+			
+			--comprueba si Position es un point3
+			try 
+			(
+				x = Position.x
+				y = Position.y
+				z = Position.z
+			)
+			catch
+			(
+				success = false
+			)
+			
+			--coloca el pivote en la nueva posicion
+			if success then
+			(
+				success = true
+				
+				try
+				(
+					-- almacena el matrix actual del objeto y le pone la nueva posicion
+					matrix = Obj.transform
+					matrix.row4 = Position
+					
+					-- copia de los offsets actuales
+					local TmScale = scaleMatrix Obj.objectOffsetScale
+					local TmRot = Obj.objectOffsetRot as matrix3
+					local TmPos = transMatrix Obj.objectOffsetPos
+					local TmOffset = TmScale * TmRot * TmPos
+					
+					-- New offset transform matrix
+					TmOffset *= obj.transform * inverse matrix
+					
+					-- Ssutituye la matriz
+					Obj.transform = matrix
+					
+					-- Restaura los offsets
+					Obj.objectOffsetPos = TmOffset.translation
+					Obj.objectOffsetRot = TmOffset.rotation
+					Obj.objectOffsetScale = TmOffset.scale
+				)
+				catch( success = false )
+					
+			
+			)
+			
+			success
+		),
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #(this.solutions, this.auxPart, this.layout, this.puppet)
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addLibrary this --añade la libreria a la principal
+		)
+	)--lib_rig
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	-- Nos guardamos la soluciones de forma temporal en un array, para que cuando evaluemos es ms lb.rig, podamos 
+	-- recuperarlos y rellenar de nuevo el array de soluciones.
+	_solutionsBckp = (if lb.rig != undefined then lb.rig.solutions.solutions else #())
+		
+	lib_rig() --crea la libreria
+		
+	if _solutionsBckp.count != 0 then lb.rig.solutions.solutions = _solutionsBckp
+		
+	OK
+)

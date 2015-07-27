@@ -1,0 +1,864 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--Descripcion: libreria de render
+------------------------------------------------------------------------------------------------------------------------------------------------
+(	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: render | Contiene la libreria de render.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct lib_render
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,					--@var: category | Categoria de la libreria.
+		className = lb.getFileLibName (getThisScriptFilename() as string),	--@var: className | Nombre de la libreria.
+		description = "Libreria de render",	--@var: description | Descripcion de la libreria.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		stopRender = false, --@var: stopRender | Indica si parar el proceso de render o de lanzamiento a render en los gestores de pases de render. Se usa en combinación con lb.materials.defaultStandardMaterial
+			
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		---------------------------------------------------------------------------
+		-- Función que se ejecuta en el postScript.
+		-- Función que genera un documento de texto con el resultado del
+		-- trabajo que le pasamos en un txt. Si lo consigue retorna true
+		-- si no, retorna false.
+		-- El parámetro renderManager define el tipo de cola de render que vamos a usar,
+		-- por el momento sólo tenemos #backburner y #deadline.
+		---------------------------------------------------------------------------
+		fn storeRenderJobInfo managerAddress renderManager =
+		(
+			--Ruta del archivo y flag del resultado.
+			-- 		_logFile = "\\\\lbdata001\\z\\documentation\\general\\renderTime\\log.txt"
+			-- 		_logFileStream = createFile _logFile
+			-- 		close _logFileStream
+			
+			_savePath = "\\\\lbdata001\\z\\documentation\\general\\renderTime\\"
+			_result = false
+			--Para que esto funcione tendremos que estar en un archivo de trabajo de backburner.
+			if matchPattern (getFilenameFile maxfilename) pattern:"*frames*-*[*]*" then
+			(
+				-- 			_logFileStream = openFile _logFile mode:"a"
+				-- 			format "cumple el patron\n" to:_logFileStream
+				-- 			close _logFileStream
+				
+				--Vemos si el archivo cumple el nc.
+				if lb.nc.ncOK (filterString (filterString (getFilenameFile maxfilename) "[")[2] "]")[1] type:#seqFile then
+				(
+				-- 				_logFileStream = openFile _logFile mode:"a"
+				-- 				format "cumple el NC\n" to:_logFileStream
+				-- 				close _logFileStream
+					
+				-- 				print "Paso el naming convention"
+					_fileParts = filterString (filterString (filterString (getFilenameFile maxfilename) "[")[2] "]")[1] "_"
+					_tries = 0
+					_done = false
+					-- A partir de aquí el código irá en un do-while con numero de intentos y un semaforo, así si hay varios trabajos con el mismo postRender a la vez mientras uno escribe los otros esperan.
+					do
+					(
+				-- 					try
+				-- 					(
+							--Si no está bloqueado por nadie nos lo quedamos nosotros
+							if not doesFileExist (_savePath + "seq_" + _fileParts[2] + ".lock") then
+							(
+				-- 							print "No hay bloqueo"
+								--Bloqueo el archivo
+				-- 							_lockFile = createFile (_savePath + "seq_" + _fileParts[2] + ".lock")
+								
+				-- 							_logFileStream = openFile _logFile mode:"a"
+				-- 							format "crea el lock\n" to:_logFileStream
+				-- 							close _logFileStream
+								
+								_fileJobs = #()
+								--Miro el documento para extraer los trabajos que haya
+								if doesFileExist (_savePath + "seq_" + _fileParts[2] + ".txt") then
+								(
+				-- 								_logFileStream = openFile _logFile mode:"a"
+				-- 								format "obtiene la informacion del archivo de la secuencia\n" to:_logFileStream
+				-- 								close _logFileStream
+									
+				-- 								print "Existe el archivo"
+									--Sacaremos todas las lineas del archivo a un array.
+									_filestream = openFile (_savePath + "seq_" + _fileParts[2] + ".txt")
+									while not eof _filestream do
+									(
+										_line = readLine _filestream
+										if (filterString _line "@").count > 1 then
+										(
+											append _fileJobs _line
+										)
+									)
+									close _filestream
+								)
+								
+								case renderManager of
+								(
+									#backburner:
+									(
+										print "#backburner"
+										--Ahora nos conectaremos al manager para obtener todos los trabajos terminados que coincidan con el nombre del archivo
+										_manager = NetRender.getManager()
+										
+										if _manager.connected then 
+											_manager.disconnect()
+										
+										if _manager.connect #manual managerAddress then
+										(
+											
+											_jobs = _manager.getJobs filter: #complete
+											_targetJobs = #()
+											
+											--Filtro el nombre del archivo que estamos ejecutando
+											if (filterString (getFilenameFile maxfilename) "#").count < 2 then
+												_name = getFilenameFile maxfilename
+											else
+												_name = substring (filterString (getFilenameFile maxfilename) "#")[1] 1 ((filterString (getFilenameFile maxfilename) "#")[1].count - 1)
+											
+											--Buscamos entre todos los trabajos 
+											for i=1 to _jobs.count where _jobs[i].outputWidth == renderwidth and _jobs[i].outputHeight == renderheight do
+											(
+												--Si encuentro un trabajo que tenga este nombre 
+												if matchPattern _jobs[i].name pattern:(_name + "*") then
+												(
+													append _targetJobs _jobs[i]
+												)
+											)
+											
+											--Ahora que tenemos los trabajos que necesitamos en targetJobs, los pasaremos al formato que tenenemos en el log.
+											for i=1 to _targetJobs.count do
+											(
+												_tempAttributes = ""
+												
+												--Apilamos el nombre
+												_tempAttributes = _name + "@"
+												
+												--Apilamos el ancho y alto de render
+												_tempAttributes += (_targetJobs[i].outputWidth As String)+ "@" + (_targetJobs[i].outputHeight As String) + "@"
+												
+												--Apilamos el número de secuencia y de cámara.
+												_tempAttributes += (filterString _name "_")[2] + "@" + (substituteString (filterString _name "_")[3] "cam" "") + "@"
+												
+												--Apilamos el nombre del pase
+												_tempAttributes += (filterString _targetJobs[i].name " ")[4] + "@"
+												
+												--Apilamos el numero de frames
+												_tempAttributes += (_targetJobs[i].numFrames As String) + "@"
+												
+												--Apilamos la fecha de lanzamiento
+												_tempAttributes += (parseManagerDates _targetJobs[i].timeSubmitted #backburner) + "@"
+												
+												--Apilamos la fecha de inicio
+												_tempAttributes += (parseManagerDates _targetJobs[i].timeStarted #backburner) + "@"
+												
+												--Apilamos la fecha de finalización
+												_tempAttributes += (parseManagerDates _targetJobs[i].timeFinished #backburner) + "@"
+												
+												--Apilamos el tiempo de render por frame.
+												_frameAvgTime = 0
+												for j=1 to _targetJobs[i].numFrames do
+												(
+													--Sumo los milisegundos de cada frame
+													_frameAvgTime += (_targetJobs[i].getFrameInfo j).elapsedTime
+												)
+												
+												--Hallamos la media en segundos.
+												_frameAvgTime = _frameAvgTime / (1000.0 * _targetJobs[i].numFrames)
+												
+												--La transformamos en el formato hh:mm:ss
+												_tempAttributes += (formattedPrint ((_frameAvgTime As Integer)/3600) format:"02d") + ":" \
+												+ (formattedPrint (((mod (_frameAvgTime As Integer) 3600) / 60) As Integer) format:"02d") + ":" \
+												+ (mod (mod (_frameAvgTime As Integer) 3600) 60) As String + "@"
+												
+												--Pondremos 1 como numero de intentos.
+												_tempAttributes += "1"
+												
+												--Substituimos los trabajos por sus versiones parseadas.
+												_targetJobs[i] = _tempAttributes
+											)
+											
+											
+										)-- _manager.connect #manual managerAddress then
+										else 
+										(
+											--Como no hemos conseguido nada lo damos por terminado.
+											_done = true
+			-- 										close _lockFile
+			-- 										deleteFile (_savePath + "seq_" + _fileParts[2] + ".lock")
+										)
+									)-- case #backburner
+									
+									#deadline:
+									(
+			-- 									print "#deadline"
+										--Si lo que ha terminado es un archivo de previos de frames no miraremos porque faltan los demás
+										if not matchPattern (getFilenameFile maxfilename) pattern: "*[PREVIEW FRAMES]" then
+										(
+			-- 										print "No soy un previo."
+											--Filtro el nombre del fichero de max desde el que he lanzado el render
+											--Primero intento sustituir la cadena de [REST OF FRAMES] si se da antes de filtrar el nombre
+											_name = getFilenameFile maxfilename
+											_name = substituteString _name " [REST OF FRAMES]" ""
+											--Si además tenemos un índice tendremos que hacer la criba por ahí.
+											if (filterString (getFilenameFile maxfilename) "#").count >= 2 then
+												_name = substring (filterString (getFilenameFile maxfilename) "#")[1] 1 ((filterString (getFilenameFile maxfilename) "#")[1].count - 1)
+											
+											--Relleno el array de trabajos y los recorro
+											SMTDFunctions.CollectJobs()
+											
+											--Apilamos aquellos completados que tengan el mismo nombre que el trabajo actual
+											for i=1 to SMTDSettings.JobsArray.count where (matchPattern SMTDSettings.JobsArray[i][1] pattern:(_name + "*")) \
+												and SMTDSettings.JobsArray[i][7] == "Completed" and not matchPattern SMTDSettings.JobsArray[i][1] pattern:"*[PREVIEW FRAMES]" do
+											(	
+			-- 											print SMTDSettings.JobsArray[i][1]
+			-- 											print (SMTDFunctions.GetNetworkRoot() + "\\jobs\\" + SMTDSettings.JobsArray[i][2] + "\\max_job_info.job")
+												--Saco la resolución del trabajo
+												if doesFileExist (SMTDFunctions.GetNetworkRoot() + "\\jobs\\" + SMTDSettings.JobsArray[i][2] + "\\max_job_info.job") then
+												(
+			-- 												print "Existe mi archivo de trabajo"
+													_fileStream = openFile (SMTDFunctions.GetNetworkRoot() + "\\jobs\\" + SMTDSettings.JobsArray[i][2] + "\\max_job_info.job")
+													
+													_renderWidth = 0
+													_renderHeight = 0
+													
+													while not (eof _fileStream) do
+													(
+														_line = readLine _fileStream
+														if (filterString _line "=")[1] == "RenderWidth" then
+															_renderWidth = (filterString _line "=")[2] As Number
+														else if (filterString _line "=")[1] == "RenderHeight" then
+															_renderHeight = (filterString _line "=")[2] As Number
+													)
+													
+													close _fileStream
+													_jobIds = #()
+													
+			-- 												print ("El ancho de mi trabajo: " + _renderWidth As String)
+			-- 												print ("El alto de mi trabajo: " + _renderHeight As String)
+													
+													--Antes de comparar nada miraremos si la resolución es la misma.
+													if renderWidth == _renderWidth and renderHeight == _renderHeight then
+													(
+														--Ahora miraremos si es el caso de un trabajo dividido en previo y resto de frames.
+														if matchPattern SMTDSettings.JobsArray[i][1] pattern:"*[REST OF FRAMES]" then
+														(
+															append _jobIds SMTDSettings.JobsArray[i][2]
+															for j=1 to SMTDSettings.JobsArray.count do
+															(
+																if matchPattern SMTDSettings.JobsArray[j][1] pattern: (substitutestring SMTDSettings.JobsArray[i][1] "[REST OF FRAMES]" "[PREVIEW FRAMES]") then
+																(
+																	append _jobIds SMTDSettings.JobsArray[j][2]
+																)
+															)
+														)
+														--Si no es un previo entonces apilaremos la id directamente en el array
+														else
+														(
+															append _jobIds SMTDSettings.JobsArray[i][2]
+														)
+														--Una vez tengo la id o ids de los trabajos vamos a ir montando el array con los datos separados por arrobas.
+														--Monto el nombre
+														_tempArray = _name + "@"
+														--Monto la anchura y la altura de render.
+														_tempArray += _renderWidth As String + "@" + _renderHeight As String + "@"
+														--Monto el numero de secuencia
+														_tempArray += (filterString (filterString (filterString _name "[")[2] "]")[1] "_")[2] + "@"
+														--Monto el numero de cámara
+														_tempArray += (substring (filterString (filterString (filterString _name "[")[2] "]")[1] "_")[3] 4 6) + "@"
+														--Monto el nombre del pase
+														_tempArray += (filterString _name " ")[4] + "@"
+														--Monto el numero de frames
+														_tempArray += (filterString _name " ")[1] + "@"
+														
+														--Saco las fechas del archivo del trabajo (en el caso de estar partido siempre cogeremos el de rest of frames _jobIds[1])
+														_fileStream = openFile (SMTDFunctions.GetNetworkRoot() + "\\jobs\\" + _jobIds[1] + "\\" + _jobIds[1] + ".job")
+														
+														_submitDate = _startDate = _endDate = ""
+														while not (eof _fileStream) do
+														(
+															_line = readLine _fileStream
+															if (filterString _line "<>")[2] == "SubmitDateTime" then
+																_submitDate = (filterString _line "<>")[3]
+															else if (filterString _line "<>")[2] == "StartedDateTime" then
+																_startDate = (filterString _line "<>")[3]
+															else if (filterString _line "<>")[2] == "CompletedDateTime" then
+																_endDate = (filterString _line "<>")[3]
+														)
+														
+														close _fileStream
+														
+														--Parsearemos el formato de fecha de los archivos y lo metemos en el string en este orden: fecha lanzamiento, fecha inicio render y fecha de fin de render.
+														_tempArray += (parseManagerDates _submitDate #deadline) + "@" + (parseManagerDates _startDate #deadline) + "@" \
+														+ (parseManagerDates _endDate #deadline) + "@"
+														
+														--Ahora vamos a hallar la media por fotograma de render.
+														--Hago las medias de todos los trabajos (pueden ser más de uno si son con previo).
+														_totalTime = 0.0
+														for j=1 to _jobIds.count do
+														(
+															--Saco las fechas del archivo del trabajo
+															_fileStream = openFile (SMTDFunctions.GetNetworkRoot() + "\\jobs\\" + _jobIds[j] + "\\taskInfo.txt")
+															
+															while not eof _fileStream do
+															(
+																_line = readLine _fileStream
+																_totalTime += (filterString _line " ")[(filterString _line " ").count] As Float
+															)
+															close _fileStream
+														)
+														
+														--Saco la media en segundos por frame
+														_totalTime = _totalTime / ((filterString _name " ")[1] As Float)
+														_tempArray += (formattedPrint ((_totalTime /3600) As Integer) format:"02d") + ":"
+														_tempArray += (formattedPrint (((mod _totalTime 3600) / 60) As Integer) format: "02d") + ":"
+														_tempArray += (mod (mod _totalTime 3600) 60) As String + "@"
+														
+														--Pongo el numero de intentos a 1
+														_tempArray += "1"
+														
+			-- 													print _tempArray
+														return()
+													)
+													
+													--Ahora buscaremos dentro del repositorio de deadline información adicional
+													--SMTDSettings.JobsArray
+													--append _jobs SMTDSettings.JobsArray[i]
+												)--if doesFileExist (SMTDFunctions.GetNetworkRoot() + "\\jobs\\" + SMTDSettings.JobsArray[i][2] + "\\max_job_info.job") then
+												--test else
+												else
+												(
+			-- 												print "no existe el archivo que busco."
+												)
+											)
+											
+											--Ahora recorreremos los seleccionados
+											
+										) --if not matchPattern (getFilenameFile maxfilename) pattern: "*[PREVIEW FRAMES]" then
+										else
+										(
+			-- 										print "Soy un previo de frames"
+											--Como no hemos conseguido nada lo damos por terminado.
+											_done = true
+			-- 										close _lockFile
+			-- 										deleteFile (_savePath + "seq_" + _fileParts[2] + ".lock")
+										)
+									)-- case #deadline
+									
+								)
+								
+								--Si hemos conseguido sacar un array de trabajos del manager (ya sea deadline o backburner
+								if not _done then
+								(
+									--Ahora tendremos todos los trabajos que estan relacionados con el nuestro y la lista de trabajos apuntados en el registro.
+									--Sacaremos el índice del que tenemos que modificar, de los que hay en el archivo .txt
+									--Filtro el nombre del archivo que estamos ejecutando
+									if (filterString (getFilenameFile maxfilename) "#").count < 2 then
+										_jobName = getFilenameFile maxfilename
+									else
+										_jobName = substring (filterString (getFilenameFile maxfilename) "#")[1] 1 ((filterString (getFilenameFile maxfilename) "#")[1].count - 1) 
+									
+									--Me creo una variable inicialmente a cero donde voy a almacenar la posición del trabajo en el log 
+									_jobLine = 0
+									for i=1 to _fileJobs.count do
+									(
+										_fileJobParts = filterString _fileJobs[i] "@"
+										--Busco aquellos que tengan el mismo nombre de trabajo y el mismo ancho y alto
+										if _fileJobParts[1] == _jobName and _fileJobParts[2] As Number == renderwidth and _fileJobParts[3] As Number == renderheight then
+										(
+											_jobLine = i
+										)
+									)
+									
+									--Si hemos encontrado un trabajo en el log que encaja con el que hemos lanzado cogeremos su fecha de lanzamiento para comparar los demás.
+									--Tambien cogeremos el número de lanzamientos para incrementarlo en caso de no encontrar nada.
+									if _jobLine != 0 then
+									(
+										_launchTries = (filterString _fileJobs[_jobLine] "@")[12] As Number
+										--#(dia,mes,año)
+										_launchDate = filterString (filterString (filterString _fileJobs[_jobLine] "@")[8]  " " )[1] "/"
+										--Aunque no todos los meses tengan 30 dias ni todos los años 365 no pasa nada si hago promedios porque uso los mismos para todas las fechas.
+										_launchDateInDays = (_launchDate[1] As Number) + ((_launchDate[2] As Number) * 30) + ((_launchDate[3] As Number) * 365)
+										--#(horas,minutos,segundos)
+										_launchHour = filterString (filterString (filterString _fileJobs[_jobLine] "@")[8]  " " )[2] ":"
+										_launchHourInSecs = (3600 * (_launchHour[1] As Number)) + (60 * (_launchHour[2] As Number)) + (_launchHour[3] As Number)
+			-- 									print ("Valores iniciales de mi trabajo")
+			-- 									print (_launchDateInDays As String)
+			-- 									print (_launchHourInSecs As String)
+			-- 									_logFileStream = openFile _logFile mode:"a"
+			-- 									format ("Pongo los valores de un trabajo de la lista.\n") to:_logFileStream
+			-- 									close _logFileStream
+									)
+									--Si no encuentro ninguno le pongo valores por defecto bajos para que se incremente siempre.
+									else
+									(
+										_launchTries = 0
+										_launchDate = #("0","0","0")
+										_launchHour = #("0","0","0")
+										_launchDateInDays = 0
+										_launchHourInSecs = 0
+										
+			-- 									_logFileStream = openFile _logFile mode:"a"
+			-- 									format ("Pongo los valores por defecto\n") to:_logFileStream
+			-- 									close _logFileStream
+									)
+									
+									--Me creo una variable para almacenar el último trabajo.
+									_latestJob = undefined
+									
+									--Ahora nos recorreremos target jobs para obtener los trabajos de fecha posterior al anotado y así añadirlos a la lista.
+									for i=1 to _targetJobs.count do
+									(
+										--Sacamos la fecha de cada trabajo y la desglosamos.
+										_currentDate = filterString (filterString (filterString _targetJobs[i] "@")[8]  " " )[1] "/" --#(dia,mes,año)
+										_currentHour = filterString (filterString (filterString _targetJobs[i] "@")[8]  " " )[2] ":" --#(horas,minutos,segundos)
+										_currentDateInDays = (_currentDate[1] As Number) + ((_currentDate[2] As Number) * 30) + ((_currentDate[3] As Number) * 365)
+										_currentHourInSecs = (3600 * (_currentHour[1] As Number)) + (60 * (_currentHour[2] As Number)) + (_currentHour[3] As Number)
+			-- 									_logFileStream = openFile _logFile mode:"a"
+			-- 									format (_currentDateInDays as String + " > " + _launchDateInDays as String+ "\n") to:_logFileStream
+			-- 									format ((_currentDateInDays > _launchDateInDays) as String+ "\n") to:_logFileStream
+			-- 									format (_currentHourInSecs as String + " > " + _launchHourInSecs as String+ "\n") to:_logFileStream
+			-- 									format ((_currentHourInSecs > _launchHourInSecs) as String+ "\n") to:_logFileStream
+			-- 									close _logFileStream
+										
+										--Si la fecha es posterior a la que tenemos como ultima entonces incrementaremos el contador de lanzamientos y miraremos si es el último
+										if _currentDateInDays > _launchDateInDays or _currentHourInSecs > _launchHourInSecs then
+										(
+			-- 										print ("Numero de trabajos iguales: " + _targetJobs.count As String) 
+			-- 										print "*********************"
+			-- 										print "Trabajo Viejo"
+			-- 										print ( _launchDate[1] + "/" + _launchDate[2] + "/" + _launchDate[3])
+			-- 										print (_launchDateInDays As String)
+			-- 										print (_launchHour[1] + ":" + _launchHour[2] + ":" + _launchHour[3])
+			-- 										print (_launchHourInSecs As String)
+			-- 										print "Trabajo Actual"
+			-- 										print (_currentDate[1] + "/" + _currentDate[2] + "/" + _currentDate[3])
+			-- 										print (_currentDateInDays As String)
+			-- 										print (_currentHour[1] + ":" + _currentHour[2] + ":" + _currentHour[3])
+			-- 										print (_currentHourInSecs As String)
+											_launchTries += 1
+											
+											if _latestJob == undefined then
+											(
+												
+			-- 											_logFileStream = openFile _logFile mode:"a"
+			-- 											format ("Pongo el primer trabajo que encuentro.\n") to:_logFileStream
+			-- 											close _logFileStream
+												_latestJob = _targetJobs[i]
+											)
+											else
+											(
+												--Extraigo la hora y dia del ultimo trabajo
+												_latestDate = filterString (filterString (filterString _latestJob "@")[8]  " " )[1] "/" --#(dia,mes,año)
+												_latestHour = filterString (filterString (filterString _latestJob "@")[8]  " " )[2] ":" --#(horas,minutos,segundos)
+												_latestDateInDays = (_latestDate[1] As Number) + ((_latestDate[2] As Number) * 30) + ((_latestDate[3] As Number) * 365)
+												_latestHourInSecs = (3600 * (_latestHour[1] As Number)) + (60 * (_latestHour[2] As Number)) + (_latestHour[3] As Number)
+												
+												--Si el actual es posterior al que tengo yo como último, lo sustituyo
+												if _currentDateInDays > _latestDateInDays or _currentHourInSecs > _latestHourInSecs then
+												(
+			-- 												_logFileStream = openFile _logFile mode:"a"
+			-- 												format ("Encuentro un trabajo posterior.\n") to:_logFileStream
+			-- 												close _logFileStream
+													
+													_latestJob = _targetJobs[i]
+												)
+											)
+										) -- if _currentDate > _launchDate
+									)--for i=1 to _targetJobs.count do
+									
+			-- 								_logFileStream = openFile _logFile mode:"a"
+			-- 								format ("Antes de evaluar latestJob\n") to:_logFileStream
+			-- 								close _logFileStream
+									
+									if _latestJob != undefined then
+									(
+			-- 									_logFileStream = openFile _logFile mode:"a"
+			-- 									format "encuentra el ultimo trabajo\n" to:_logFileStream
+			-- 									close _logFileStream
+			-- 									
+			-- 									print "Ya tengo el ultimo trabajo"
+										
+										_latestJobParts = (filterString _latestJob "@")[12].count
+										
+										_latestJob = substring  _latestJob 1 (_latestJob.count - (filterString _latestJob "@")[12].count)
+										_latestJob += _launchTries As String
+										
+										if _jobLine != 0 then
+										(
+			-- 										print "Encuentro un trabajo"
+											_fileJobs[_jobLine] = _latestJob
+										)
+										else
+										(
+			-- 										print "Lo agrego de cero"
+											append _fileJobs _latestJob
+											sort _fileJobs
+										)
+										
+										if doesFileExist (_savePath + "seq_" + _fileParts[2] + ".txt") then
+											_resultFile = openFile (_savePath + "seq_" + _fileParts[2] + ".txt") mode:"w"
+										else
+											--Creamos el archivo de nuevas
+											_resultFile = createFile (_savePath + "seq_" + _fileParts[2] + ".txt")
+										
+										for i=1 to _fileJobs.count do
+											format (_fileJobs[i] + "\n") to:_resultFile
+										
+										close _resultFile
+										
+										--Al final ponemos done a true y result tambien
+										_done = true
+										_result = true
+			-- 									close _lockFile
+			-- 									deleteFile (_savePath + "seq_" + _fileParts[2] + ".lock")
+									) -- if _latestJob != undefined
+									else
+									(
+			-- 									_logFileStream = openFile _logFile mode:"a"
+			-- 									format "elimina el lock\n" to:_logFileStream
+			-- 									close _logFileStream
+										
+										_done = true
+			-- 									close  _lockFile
+			-- 									deleteFile (_savePath + "seq_" + _fileParts[2] + ".lock")
+									)
+									
+								)--if not _done
+								
+								
+							)--if not doesFileExist (_savePath + "seq_" + _fileParts[2] + ".lock")
+							else
+							(
+								sleep 5
+								_tries +=1
+								--Si el numero de intentos es 10  lo damos por terminado.
+								if _tries == 10 then
+									_done = true
+							)
+			-- 					) --try
+			-- 					catch
+			-- 					(
+			-- 						if _lockFile != undefined then
+			-- 						(
+			-- 							close _lockFile
+			-- 							deleteFile (_savePath + "seq_" + _fileParts[2] + ".lock")
+			-- 						)
+			-- 					)
+					
+					)while not _done
+					
+					
+					
+				)-- if lb.nc.ncOK
+			)-- if matchPattern (getFilenameFile maxfilename) pattern:"*frames*[*]" and (renderwidth == 2048 or renderwidth == 512)
+			
+			if preRendScript != "" and doesFileExist preRendScript then
+				deleteFile preRendScript
+			
+			_result
+		),
+			
+		------------------------------------------------
+		--@fn: undefined | redirectFinalGatherMap | Redirecciona el path del archivo de precalculos de final gather.
+		--@gets: string | sourcePattern | Parte del path que sustituir.
+		--@gets: string | mappedPattern | Parte del path por la cual sustituir.
+		------------------------------------------------
+		fn redirectFinalGatherMap sourcePattern mappedPattern =
+		(
+			if classof (renderers.current) == mental_ray_renderer then
+			(
+				_fgmFile = (renderers.current).FinalGatherFilename
+				
+				_fgmPath = tolower (getFileNamePath _fgmFile) --almacena solo el path
+				_fgmFile = (getFileNameFile _fgmFile) + (getFileNameType _fgmFile) --almacena solo el file
+				
+				_newFgmPath = substituteString (tolower _fgmPath) (tolower sourcePattern) (tolower mappedPattern)
+				_defPath = _newFgmPath + _fgmFile
+				
+				--cambia el path
+				if _defPath != "" and _defPath != (renderers.current).FinalGatherFilename then (renderers.current).FinalGatherFilename = _defPath
+			)--if
+		),
+
+		------------------------------------------------
+		--@fn: undefined | resourceCollector | Redirecciona texturas y proxies a la carpeta de la camara
+		------------------------------------------------
+		fn resourceCollector =
+		(
+			bResult = true
+			_filePathOrg = maxfilepath
+
+			_fileName = maxfilename
+			_fileNameParts = filterString _fileName "_"
+				
+			if not matchpattern _filePathOrg pattern: lb.nc.NC_seqRenderPathPattern then
+			(
+				lb.message.show "To collect textures you have to open render scene." type:#message
+				bResult = false
+			)
+			else
+			(
+				--Parte de materiales
+				_objMats = lb.materials.getSceneMaterials()
+				_matXref = false
+				for i=1 to _objMats.count where classof _objMats[i] == XRef_Material do _matXref = true  
+
+				if not _matXref then 
+				(
+					for j=1 to _objMats.count do
+					(
+						_objBitmaps = (lb.materials.getBitmaps _objMats[j])
+
+						_filePath = (lb.io.getDirName (lb.io.getDirName _filePathOrg)) 
+						_filePathParts = filterString _filePath "\\"
+						_filePath = substituteString _filePath _filePathParts[_filePathParts.count] (lb.nc.NC_textureFolderName + "\\")
+
+						for i=1 to _objBitmaps.count do
+						(
+							_bmpPath = getFilenamePath _objBitmaps[i]
+							if (tolower _filePath) != (tolower _bmpPath) then 
+							(	
+								if not doesFileExist (_filePath + (getFilenameFile _objBitmaps[i]) + (getFilenameType _objBitmaps[i])) then copyFile _objBitmaps[i] (_filePath + (getFilenameFile _objBitmaps[i]) + (getFilenameType _objBitmaps[i]))
+								lb.materials.redirectMatBitmaps _objMats[j] _bmpPath _filePath lower:false	
+							)
+						)
+					)
+					for obj in objects do 
+					(
+						for i=1 to obj.modifiers.count do
+	 					(
+	 						_bitmapPaths = lb.materials.getBitmaps obj.modifiers[i]
+
+	 						_filePath = (lb.io.getDirName (lb.io.getDirName _filePathOrg)) 
+							_filePathParts = filterString _filePath "\\"
+							_filePath = substituteString _filePath _filePathParts[_filePathParts.count] (lb.nc.NC_textureFolderName + "\\")
+							
+							for j=1 to _bitmapPaths.count do
+							(
+								_bmpPath = getFilenamePath _bitmapPaths[j]
+								if (tolower _filePath) != (tolower _bmpPath) then 
+								(	
+									print "llega"
+									if not doesFileExist (_filePath + (getFilenameFile _bitmapPaths[j]) + (getFilenameType _bitmapPaths[j])) then copyFile _bitmapPaths[j] (_filePath + (getFilenameFile _bitmapPaths[j]) + (getFilenameType _bitmapPaths[j]))
+									lb.materials.redirectMatBitmaps obj.modifiers[i] _bmpPath _filePath lower:false	
+								)
+							)
+	 					)
+					)
+				)
+				else
+				(
+					lb.message.show "Materials can't be XRef_Material type." type:#message
+					bResult = false
+				)
+
+				--Parte de proxies
+				_proxiesDone = #()
+				for o in Objects where classof o == mr_Proxy do
+				(
+					if findItem _proxiesDone o.filename == 0 then
+					(
+						append _proxiesDone o.filename
+						_newPath = substituteString maxfilepath ("cam\\" + (filterString maxfilename "_")[3] + "\\render") lb.nc.NC_textureFolderName 
+						_newPath += filenameFromPath o.filename
+						
+						copyFile o.filename _newPath
+						copyFile (o.filename + ".bmp") (_newPath + ".bmp")
+						o.filename = _newPath
+					)
+				)
+			)
+			
+			bResult
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | cmdDeadlinePreRender | Configura el pase de render actual para ser lanzado a granja, usando el propio nombre de max, y el fileInfo
+		------------------------------------------------
+		fn cmdDeadlinePreRender =
+		(
+			_process = false
+			_allPasses = #()
+			if maxfilename != "" then
+			(
+				_maxPassNamePart = (filterstring maxfilename "_")[5]
+				_maxPassNamePart  = (filterstring _maxPassNamePart ".")[1]
+				if matchPattern _maxPassNamePart pattern: lb.nc.NC_PMpassPattern then
+				(
+					if (lb.fileInfo.hasFileInfo (maxFilePath + maxFileName)) do
+					(
+						_fileInfoDoc = lb.fileInfo.getFileInfo (maxfilepath+maxfilename)
+						_passTree  = _fileInfoDoc.root.getNode "fileInfo/passTree"
+						if _passTree != undefined then
+						(
+							_passGroups = _passTree.getChildren()
+							for _passGroup in _passGroups do
+							(
+								_passGroupName = _passGroup.getProperty "groupName"
+								_passes = _passGroup.getChildren()
+								for _pass in _passes do
+								(
+									_passName = _pass.getProperty "passName"
+									append _allPasses _passName
+								)
+							)
+							if _allPasses.count != 0 then
+							(
+								_process = true
+							)
+						)
+					)			
+				)	
+			)
+			if _process do
+			(
+				_maxPassNamePart = (filterstring maxfilename "_")[5]
+				_maxPassNamePart  = (filterstring _maxPassNamePart ".")[1]
+				for _passName in _allPasses do
+				(
+					if _maxPassNamePart == _passName then
+					(
+						_passTrees = #()
+						_passTrees = lb.passManager.getContainerTrees()
+
+						for _passTree in _passTrees do
+						(
+							for _passGroup in _passTree.getChildren() where (_passGroup.getSubType()) == #passGroup do
+							(
+								for _pass in _passGroup.getChildren() where (_pass.getSubType()) == #pass do
+								(
+									if _pass.getCaption() == _passName do
+									(
+										_pass.preRender()
+									)
+								)
+							)	
+						)
+					)
+				)
+			)
+		),
+			
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn createTxtRenderFiles _caTimeOutput _sourcePath  jobInfoStruct _passCaption=
+		(
+			_maxFilePath = _sourcePath
+			_maxFilePath = (filterstring  _maxFilePath ".")[1]
+
+			--JOB INFO
+			_jinfoTxt = createFile (_maxFilePath + "_jobInfo.txt")
+			format "[JobSettings]\n" to:_jinfoTxt
+			format "Plugin=3dsmax\n" to:_jinfoTxt
+			format "ForceReloadPlugin=false\n" to:_jinfoTxt
+			format "Priority=%\n" jobInfoStruct._priority to:_jinfoTxt 
+			format "Pool=%\n" jobInfoStruct._pool to:_jinfoTxt 
+			if _caTimeOutput.renderTimeType == 3 then
+			(
+				_jobStringName = (substituteString ((_caTimeOutput.renderEnd - _caTimeOutput.renderStart + 1) as string) "f" "") + " frames - "
+			)
+			else
+			(
+				_nFrames = 0
+				_fParts = filterString (_caTimeOutput.renderPickupFrames) ", "
+				
+				for p in _fParts do
+				(
+					if (lb.math.isNumeric p) and (p.count != 0) then _nFrames += 1
+					else _nFrames += ((filterString p "-")[2] as integer) - ((filterString p "-")[1] as integer)
+				)--for
+				
+				_jobStringName = (_nFrames as string) + " frames - "
+			)
+			_tmpName = _jobStringName + _passCaption + " [" + maxfilename + "]"
+			format "Name=%\n" _tmpName to:_jinfoTxt --AQUI HABRIA QUE CONSTRUIR EL JOBNAME
+			format "Comment=3ds Max 2014 Scene Submission %\n" jobInfoStruct._comment to:_jinfoTxt
+			if _caTimeOutput.renderTimeType == 4 then
+			(
+				format "Frames=%\n"  _caTimeOutput.renderPickupFrames to:_jinfoTxt
+			)
+			else
+			(
+				_startFrame = (filterstring (_caTimeOutput.renderStart as string) "f")[1]
+				_endFrame = (filterstring (_caTimeOutput.renderEnd as string) "f")[1]
+				format "Frames=%-%\n" _startFrame _endFrame to:_jinfoTxt
+			)
+
+			if (jobInfoStruct._taskChunkSize>1) do format "ChunkSize=%\n"(jobInfoStruct._taskChunkSize) to:_jinfoTxt
+			if (jobInfoStruct._concurrentMachines>0) do format "MachineLimit=%\n" (jobInfoStruct._concurrentMachines) to:_jinfoTxt
+			if (jobInfoStruct._suspended == true ) do format "InitialStatus=Suspended\n" to:_jinfoTxt
+			if (jobInfoStruct._enableLimits == true ) do format "%\n" jobInfoStruct._limitedRender to:_jinfoTxt
+
+			close _jinfoTxt
+			renameFile (_maxFilePath + "_jobInfo.txt") (_maxFilePath + "_jobInfo.job")
+		),
+
+	
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+			
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addLibrary this --añade la libreria a la principal
+		)
+		
+	)--lib_render
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	
+	lib_render() --crea la libreria
+)

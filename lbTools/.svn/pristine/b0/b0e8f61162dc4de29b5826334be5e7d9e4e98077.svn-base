@@ -1,0 +1,959 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--Descripcion: libreria de callbacks
+------------------------------------------------------------------------------------------------------------------------------------------------
+(	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: templateLib | Contiene la libreria de callbacks.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct lib_callbacks
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,					--@var: category | Categoria de la libreria.
+		className = lb.getFileLibName (getThisScriptFilename() as string),	--@var: className | Nombre de la libreria.
+		description = "Libreria callbacks",	--@var: description | Descripcion de la libreria.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		preMergeAssetNames = #(),
+			
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		---------------------------------------------------------------------------
+		--funcion de test para usar en los procesos
+		---------------------------------------------------------------------------
+		fn callbackTestFunction =
+		(
+			ok
+		),--callbackTestFunction	
+
+		---------------------------------------------------------------------------
+		--METODO VIEJO
+		--funcion para desglosar las capas de LPM en varios trabajos
+		---------------------------------------------------------------------------
+		fn OLDcallbackLPMbatchRender =
+		(
+			--averigua si es un archivo de batch de render
+			--_isBatchRender = MatchPattern maxfilename pattern:"*[LPM-BATCH]*"
+			
+			_LPMbatchInfo = $'LPM_batchRenderInfo' --obtiene el nodo de informacion de batch de render
+			_isBatchRender = (isValidNode _LPMbatchInfo)
+			
+			--crea la carpeta temporal si no existiera
+			_tempdir = ((getDir #temp) + "\\LPMbatchBreakdown\\")
+			makeDir _tempdir all:true
+			
+			--if false then
+			if _isBatchRender then
+			(
+				--crea un archivo de log y pone la hora (TEMPORAL)
+				f = openFile (_tempdir + maxfilename + "_.log") mode:(if doesfileexist (_tempdir + maxfilename + "_.log") then "a" else "w")
+				if f != undefined then print ("-------------------------------------------------------------------") to:f
+				if f != undefined then print (maxfilepath + maxfilename) to:f
+				if f != undefined then print ("BatchFileOriginal - " + (localTime as string)) to:f
+				
+				--INTENTO 1
+				/* --renombra el objeto de batch info para que solo haga este paseo una vez
+				_LPMbatchInfo.name = "LPM_batchRenderBreakdownInfo"
+				
+				if _LPMbatchInfo.name == "LPM_batchRenderBreakdownInfo" then
+				(
+					if f != undefined then print "Nodo de batch auxiliar renombrado" to:f	
+				)
+				else if f != undefined then print "No ha podido renombrar el nodo de batch auxiliar" to:f	
+				
+				--hace una copia del archivo en la carpeta temporal de desglose
+				_saveSuccess = saveMaxFile (_tempdir + "_brkdwn_.max") useNewFile:false quiet:true
+				
+				if _saveSuccess then
+				(
+					if f != undefined then print "Se ha salvado el archivo de breakdown" to:f
+					
+					--lanza un nuevo max con el archivo de breakdown
+					shellLaunch ("\"" + (getDir #maxRoot) + "3dsmax.exe\"") ("\"" + _tempdir + "_brkdwn_.max\"")
+					
+					--deja el nombre del objeto de batch info como estaba
+					_LPMbatchInfo.name = "LPM_batchRenderInfo"
+				)
+				else if f != undefined then print "No ha podido salvar el archivo de breakdown" to:f*/
+				
+				--INTENTO 2
+				/* --hace una copia del max que abre deadline en el directorio temporal, para poder lanzarlo a mano y desglosar el render
+				deleteFile (_tempdir + "_brkdwn_.max") --primero lo elimina por si existiera
+				_copySuccess = copyFile (maxfilepath + maxfilename) (_tempdir + "_brkdwn_.max") --lo copia
+				
+				if _copySuccess then
+				(
+					if f != undefined then print "Se ha salvado el archivo de breakdown" to:f
+					shellLaunch ("\"" + (getDir #maxRoot) + "3dsmax.exe\"") ("\"" + _tempdir + "_brkdwn_.max\"")
+				)
+				else if f != undefined then print "No ha podido salvar el archivo de breakdown" to:f */
+				
+				--INTENTO 4
+				----------------------------------------------------------------------------------------------------------------------------------
+				if not doesFileExist (_tempdir + _LPMbatchInfo.jobName + ".bat") then --si es la fase 1 en la que deadline abre el archivo
+				(		
+					if f != undefined then print ("Fase de lanzamiento desde Deadline") to:f
+					
+					--monta el path de deadline donde este guarda los trabajos
+					_deadlineJobsDataFolder = (substituteString (tolower sysInfo.tempdir) "temp\\" "") + "\\Prime Focus\\Deadline\\slave\\jobsData\\"
+					
+					_jobMaxFiles = getFiles (_deadlineJobsDataFolder + "*.max") --obtiene los .max de esa carpeta
+					_currentJobMaxFile = "" --obtiene el max del trabajo en cuestion
+					for _job in _jobMaxFiles where (getFilenameFile _job) == _LPMbatchInfo.jobName do _currentJobMaxFile = _job
+					
+					if _currentJobMaxFile != "" then --si ha encontrado el trabajo, lo abre en un max a parte
+					(
+						if f != undefined then print "Intenta abrir el archivo del trabajo en un max a parte" to:f
+						
+						--crea un bat que al ejecutarlo lanza de nuevo el archivo en otro max, para que ese desglose las secuencias
+						deleteFile (_tempdir + _LPMbatchInfo.jobName + ".bat")
+						if not doesfileexist (_tempdir + _LPMbatchInfo.jobName + ".bat") then
+						(
+							_bat = openFile (_tempdir + _LPMbatchInfo.jobName + ".bat") mode:"w"
+							if _bat != undefined then print ((getDir #maxRoot) + "3dsmax.exe\" \"" + _currentJobMaxFile) to:_bat
+							if _bat != undefined then format  ("pause") to:_bat
+							close _bat
+							
+							HiddenDOSCommand ("\"" + (_tempdir + _LPMbatchInfo.jobName + ".bat") + "\"") donotwait:true
+							while (not doesfileexist (_tempdir + _LPMbatchInfo.jobName + ".bat")) do sleep 5
+						)
+						
+						-----------------------------------------------------------------------------------------------------------------
+						--SOLO FUNCIONA EL SLEEP --NO FUNCIONA TAMPOCO - INTENTO 6
+						global _prerenderSleep --global para la funcion de prerender que tiene que llamar un callback especial de prerender
+						fn _prerenderSleep =
+						(
+							_LPMbatchInfo_ = $'LPM_batchRenderInfo' --obtiene el nodo de informacion de batch de render
+							
+							--crea la carpeta temporal si no existiera
+							_tempdir_ = ((getDir #temp) + "\\LPMbatchBreakdown\\")
+							makeDir _tempdir_ all:true
+							
+							--mientras el proceos que abre el bat no elimine el propio bat no continua
+							while (doesfileexist (_tempdir_ + _LPMbatchInfo_.jobName + ".bat")) do sleep 5
+								
+							--pone los parametros para que no haga render mas que de un frame pequeñito y negro, y no lo guarde.
+			-- 						rendsavefile = false
+			-- 						rendTimeType = 4
+			-- 						rendPickupFrames = "0"
+			-- 						renderWidth = 1
+			-- 						renderHeight = 1
+							(objects as array).ishidden = true
+						)--fn _prerenderSleep
+						callbacks.addscript #preRender "_prerenderSleep()" id:#tempCallbacks
+						------------------------------------------------------------------------------------------------------------------
+						
+						--TAMPOCO FUNCIONA - INTENTO 5
+						--mientras el proceos que abre el bat no elimine el propio bat no continua
+						--while (doesfileexist (_tempdir + _LPMbatchInfo.jobName + ".bat")) do (sleep 20)
+						
+						--AHORA HAY QUE ELIMINAR EL TRABAJO DE DEADLINE
+						--se elimina solo debido a una propiedad del job
+							
+						--deleteFile (_tempdir + _LPMbatchInfo.jobName + ".bat")
+						
+						--ESTE ERA EL INTENTO 3
+						/*--shellLaunch ("\"" + (getDir #maxRoot) + "3dsmax.exe\"") ("\"" + _currentJobMaxFile + "\"")*/
+						
+						--A partir de aqui hay que cerrar el trabajo de deadline y eliminarlo
+						
+					)
+					else if f != undefined then print "No ha encontrado el max del trabajo" to:f
+					
+				)
+				else --si es la fase 2 en la que max desglosa las capas
+				(
+					if f != undefined then print ("Fase de desglose de pases de LPM") to:f
+					if f != undefined then print ("Encuentra la información de batch de LPM") to:f
+					
+					--crea un log con los PID de los procesos de max
+					_PIDlogFile = _tempdir + "pid.log"
+					hiddenDosCommand ("tasklist /M 3dsmax* > \"" + _PIDlogFile + "\"")
+					
+					--renombra el nodo de informacion de desglose
+					_LPMbatchInfo.name = "LPM_batchRenderBreakdownInfo"
+					
+					macros.run "lbToolsFinishing" "lbPassManager" --abre el macro de LPM
+					
+					if LPM_treeview_rollout.rolloutOpen then --si lo ha conseguido abrir
+					(	
+						if f != undefined then print ("Ha abierto el LPM") to:f
+						
+						_lpmRoot = $'LPM_Root' --obtiene el root de LPM
+						
+						if isValidNode _lpmRoot then --si ha conseguido encontrar el nodo root de LPM
+						(
+							if f != undefined then print ("hay nodo root de LPM") to:f
+							
+							--en funcion de que manager se haya elegido usará backburner o deadline
+							case _LPMbatchInfo.custAttributes[#LPMbatchInfo].renderManager of
+							(
+								"backburner":
+								(
+									if f != undefined then print ("Intenta lanzar a backburner") to:f
+									
+									LPM_Fun.setWhoToRenderByRenderType() --mira que capas lanzar
+									LPM_Fun.setIni "Settings" "Network Type" "Backburner" --fuerza backburner como manager
+									LPM_Fun.launchNetworkRender() --lanza el dialogo de render
+									
+									--una vez abierto el dialogo de render le pone los settings
+									LPM_BackburnerSubmitRo.ip1.text = _LPMbatchInfo.managerName
+									LPM_BackburnerSubmitRo.connectButton.pressed()
+									
+									if LPM_BackburnerSubmitRo.SubmitButton.enabled then
+									(
+										
+										LPM_BackburnerSubmitRo.SubmitButton.pressed() --envia los trabajos (NO VA, no consigue el control de la cola)
+									)
+									else if f != undefined then print ("No consigue conectar con backburner") to:f
+								)--backburner
+								
+								"deadline":
+								(
+									print ("Intenta lanzar a deadline") to:f
+										
+									LPM_Fun.setWhoToRenderByRenderType() --mira que capas lanzar
+									LPM_Fun.setIni "Settings" "Network Type" "Deadline" --fuerza backburner como manager
+									global SMTD_MainRollout --esto se hace asi porque si no no encontraba el rollout abierto
+									LPM_Fun.launchNetworkRender() --lanza el dialogo de render
+									
+									if SMTD_MainRollout.open then
+									(
+										if SMTD_MainRollout.btn_submit.caption == "SUBMIT LPM" then
+										(
+			-- 										--elimina el nodo de batch de desglose par no crear un bucle infinito de lanzamientos a granja
+			-- 										delete _LPMbatchInfo
+			-- 										if isValidNode _LPMbatchInfo then (if f != undefined then print ("No consigue eliminar el nodo de batch info") to:f)
+			-- 										else (if f != undefined then print ("Eliminado el nodo de batch info") to:f)
+											
+											
+											if f != undefined then print ("Intenta lanzar las capas a render") to:f
+											SMTD_MainRollout.btn_submit.pressed() --envia los trabajos
+										)
+										else if f != undefined then print ("No se ha abierto el plugin de deadline con conexion a LPM") to:f
+									)
+									else if f != undefined then print ("No consigue abrir el plugin de conexion con deadline") to:f
+									
+								)--deadline
+							)--case
+							
+						)--if isValidNode
+						else if f != undefined then print ("No encuentra el nodo root de LPM") to:f
+					)else if f != undefined then print ("No ha podifo abrir el LPM") to:f	
+					
+					--deleteFile (_tempdir + _LPMbatchInfo.jobName + ".bat") --elimina el bat
+					--deleteFile _PIDlogFile --elimina el log de pid
+				)--if else de lanzamiento de deadline y de desglose de pases de LPM
+				
+				if f != undefined then print ("BatchFileOriginal - " + (localTime as string)) to:f
+				if f != undefined then print ("-------------------------------------------------------------------") to:f	
+				close f --cierra el log				
+					
+			)--if _isBatchRender
+			---------------------------------------------------------------------------------------------------------------------------------------
+			
+			-- 		_LPMbatchInfo = $'LPM_batchRenderBreakdownInfo' --obtiene el nodo de informacion de batch de render
+			-- 		_isBatchRenderBreakdown = (isValidNode _LPMbatchInfo)
+			
+			/*METODO VIEJO QUE NO LLEGO A FUNCIONAR*/
+			if false then
+			--if _isBatchRenderBreakdown then --si es un archivo de batch de render
+			/*try */(
+				
+				--crea un archivo de log y pone la hora (TEMPORAL)
+				f = openFile (_tempdir + maxfilename + "_.log") mode:(if doesfileexist (_tempdir + maxfilename + "_.log") then "a" else "w")
+				if f != undefined then print ("-------------------------------------------------------------------") to:f
+				if f != undefined then print (maxfilepath + maxfilename) to:f
+				if f != undefined then print ("BatchFileBreakdown - " + (localTime as string)) to:f
+				
+				if f != undefined then print ("Es un archivo de batch de render") to:f
+					
+				_LPMbatchInfo = $'LPM_batchRenderBreakdownInfo' --obtiene el nodo de informacion de batch de render
+				
+				if isValidNode _LPMbatchInfo then
+				(
+					if f != undefined then print ("Encuentra la información de batch de LPM") to:f
+					
+					macros.run "lbToolsFinishing" "lbPassManager" --abre el macro de LPM
+					
+					if LPM_treeview_rollout.rolloutOpen then --si lo ha conseguido abrir
+					(	
+						if f != undefined then print ("Ha abierto el LPM") to:f
+						
+						_lpmRoot = $'LPM_Root' --obtiene el root de LPM
+						
+						if isValidNode _lpmRoot then --si ha conseguido encontrar el nodo root de LPM
+						(
+							if f != undefined then print ("hay nodo root de LPM") to:f
+							
+							--en funcion de que manager se haya elegido usará backburner o deadline
+							case _LPMbatchInfo.custAttributes[#LPMbatchInfo].renderManager of
+							(
+								"backburner":
+								(
+									if f != undefined then print ("Intenta lanzar a backburner") to:f
+									
+									LPM_Fun.setWhoToRenderByRenderType() --mira que capas lanzar
+									LPM_Fun.setIni "Settings" "Network Type" "Backburner" --fuerza backburner como manager
+									LPM_Fun.launchNetworkRender() --lanza el dialogo de render
+									
+									--una vez abierto el dialogo de render le pone los settings
+									LPM_BackburnerSubmitRo.ip1.text = _LPMbatchInfo.managerName
+									LPM_BackburnerSubmitRo.connectButton.pressed()
+									
+									if LPM_BackburnerSubmitRo.SubmitButton.enabled then
+									(
+										
+										LPM_BackburnerSubmitRo.SubmitButton.pressed() --envia los trabajos (NO VA, no consigue el control de la cola)
+									)
+									else if f != undefined then print ("No consigue conectar con backburner") to:f
+								)--backburner
+								
+								"deadline":
+								(
+									print ("Intenta lanzar a deadline") to:f
+									
+									LPM_Fun.setWhoToRenderByRenderType() --mira que capas lanzar
+									LPM_Fun.setIni "Settings" "Network Type" "Deadline" --fuerza backburner como manager
+									global SMTD_MainRollout
+									LPM_Fun.launchNetworkRender() --lanza el dialogo de render
+									
+			-- 								_cont = 1
+			-- 								while (SMTD_MainRollout == undefined) and (_cont < 10) do
+			-- 								(
+			-- 									print _cont
+			-- 									sleep 5.0
+			-- 									_cont += 1
+			-- 								)
+									
+									if SMTD_MainRollout.open then
+									(
+										if SMTD_MainRollout.btn_submit.caption == "SUBMIT LPM" then
+										(
+											--elimina el nodo de batch de desglose par no crear un bucle infinito de lanzamientos a granja
+											delete _LPMbatchInfo
+											if isValidNode _LPMbatchInfo then (if f != undefined then print ("No consigue eliminar el nodo de batch info") to:f)
+											else (if f != undefined then print ("Eliminado el nodo de batch info") to:f)
+											
+											
+											if f != undefined then print ("Intenta lanzar las capas a render") to:f
+											SMTD_MainRollout.btn_submit.pressed() --envia los trabajos
+										)
+										else if f != undefined then print ("No se ha abierto el plugin de deadline con conexion a LPM") to:f
+									)
+									else if f != undefined then print ("No consigue abrir el plugin de conexion con deadline") to:f
+									
+								)--deadline
+							)--case
+							
+						)--if isValidNode
+						else if f != undefined then print ("No encuentra el nodo root de LPM") to:f
+					)else if f != undefined then print ("No ha podifo abrir el LPM") to:f
+				)else if f != undefined then print ("No hay nodo de batch info") to:f
+				--rellena log
+				if f != undefined then print ("BatchFileBreakdown - " + (localTime as string)) to:f
+				if f != undefined then print ("-------------------------------------------------------------------") to:f	
+				close f --cierra el log
+			)/*catch()*/
+		),--callbackLPMbatchRender
+
+		---------------------------------------------------------------------------
+		--METODO NUEVO
+		--funcion para desglosar las capas de LPM en varios trabajos de deadline
+		---------------------------------------------------------------------------
+		fn callbackLPMbatchRender = 
+		(
+			_LPMbatchInfo = $'LPM_batchRenderInfo' --obtiene el nodo de informacion de batch de render
+			_isBatchRender = (isValidNode _LPMbatchInfo)
+			
+			if _isBatchRender then --si es un archivo de batch de LPM
+			(
+				--renombra el nodo de informacion de desglose
+				_LPMbatchInfo.name = "LPM_batchRenderBreakdownInfo"
+					
+				macros.run "lbToolsFinishing" "lbPassManager" --abre el macro de LPM
+				
+				if LPM_treeview_rollout.rolloutOpen then --si lo ha conseguido abrir
+				(	
+					_lpmRoot = $'LPM_Root' --obtiene el root de LPM
+					
+					if isValidNode _lpmRoot then --si ha conseguido encontrar el nodo root de LPM
+					(
+						--en funcion de que manager se haya elegido usará backburner o deadline
+						case _LPMbatchInfo.custAttributes[#LPMbatchInfo].renderManager of
+						(
+							"backburner":
+							(
+								LPM_Fun.setWhoToRenderByRenderType() --mira que capas lanzar
+								LPM_Fun.setIni "Settings" "Network Type" "Backburner" --fuerza backburner como manager
+								LPM_Fun.launchNetworkRender() --lanza el dialogo de render
+								
+								--una vez abierto el dialogo de render le pone los settings
+								LPM_BackburnerSubmitRo.ip1.text = _LPMbatchInfo.managerName
+								LPM_BackburnerSubmitRo.connectButton.pressed()
+								
+								if LPM_BackburnerSubmitRo.SubmitButton.enabled then							
+									LPM_BackburnerSubmitRo.SubmitButton.pressed() --envia los trabajos (NO VA, no consigue el control de la cola)
+							)--backburner
+							
+							"deadline":
+							(
+								LPM_Fun.setWhoToRenderByRenderType() --mira que capas lanzar
+								LPM_Fun.setIni "Settings" "Network Type" "Deadline" --fuerza backburner como manager
+								global SMTD_MainRollout --esto se hace asi porque si no no encontraba el rollout abierto
+								LPM_Fun.launchNetworkRender() --lanza el dialogo de render
+								
+								if SMTD_MainRollout.open then
+									if SMTD_MainRollout.btn_submit.caption == "SUBMIT LPM" then
+										SMTD_MainRollout.btn_submit.pressed() --envia los trabajos
+							)--deadline
+						)--case
+						
+					)--if isValidNode				
+				)--if LPM open
+			)--if _isBatchRender
+		),
+
+		---------------------------------------------------------------------------
+		--METODO NUEVO
+		--funcion para desglosar las capas de LPM en varios trabajos de deadline
+		---------------------------------------------------------------------------
+		fn callbackQueueManager = 
+		(
+			if maxfilename == "qmJobProcess_2010.max" then
+			(	
+				_localJobsPath = substituteString (sysInfo.tempdir) "\\Local\\Temp\\" "\\Roaming\\queueManager\\job\\"
+				_localJobsPath = substituteString _localJobsPath "\\local\\temp\\" "\\Roaming\\queueManager\\job\\"
+				_localJobsPath = substituteString _localJobsPath "\\Local\\temp\\" "\\Roaming\\queueManager\\job\\"
+				_localJobsPath = substituteString _localJobsPath "\\local\\Temp\\" "\\Roaming\\queueManager\\job\\"
+					
+				_jobDirs = getDirectories (_localJobsPath + "*")
+				
+				_stop = false
+				for jb in _jobDirs where not _stop do
+				(
+					_dirParts = filterString jb "\\"
+					_jobSettingsFile = jb + _dirParts[_dirParts.count] + ".xml"
+					
+					if doesFileExist _jobSettingsFile then
+					(			
+						_jobType = ""
+						_jobStatus = ""
+						_jobSoftware = ""
+						_jobSoftwareVersion = ""
+						
+						f = openfile _jobSettingsFile mode:"r"
+						
+						_searchState = "normal"
+						
+						while not eof f do
+						(
+							_line = readline f
+							
+							if _searchState == "normal" then
+							(
+								if findString _line "<type>" != undefined then
+								(
+									_lineParts = filterString _line " 	<>"
+									_jobType = _lineParts[2]
+								)
+								
+								if findString _line "<status>" != undefined then
+								(
+									_lineParts = filterString _line " 	<>"
+									_jobStatus = _lineParts[2]
+								)
+								
+								if findString _line "<software>" != undefined then _searchState = "software"	
+							)
+								
+							if _searchState == "software" then
+							(
+								if findString _line "<name>" != undefined then
+								(
+									_lineParts = filterString _line " 	<>"
+									_jobSoftware = _lineParts[2]
+								)
+								
+								if findString _line "<version>" != undefined then
+								(
+									_lineParts = filterString _line " 	<>"
+									_jobSoftwareVersion = _lineParts[2]
+									_searchState = "end"
+								)
+							)
+						)--while
+						
+						close f
+						
+						_process = false --flag de procesado a falso inicialmente.
+						
+						--si es max 2010
+						if ((maxVersion())[1] == 12000) and _jobSoftware == "3dsmax" and _jobSoftwareVersion == "2010" and _jobStatus == "ready" then
+							_process = true
+						
+						if _process then
+						(
+							case _jobType of
+							(
+								"renderPassLaunch": --desglose de capas de LPM
+								(
+									_sourceFile = (getFiles (jb + "\\source\\*.max"))[1]
+									
+									if _sourceFile != undefined then
+									(
+										if loadMaxFile _sourceFile useFileUnits:true quiet:true then --abre el archivo del trabajo
+											_stop = true --ya ha encontrado un trabajo de procesar, luego para de buscar
+									)
+								)--renderPassLaunch
+							)--case
+							
+							--cambia los settings del job para indicar la hora de comienzo
+							(	
+								_jobSettingsStrings = #() --array para todas las lineas del archivo
+								
+								--recorre el archivo y lo guarda en el array
+								f = openfile _jobSettingsFile mode:"r"
+								while not eof f do append _jobSettingsStrings (readline f)												
+								close f
+								
+								--recorre el array modificando la información necesaria
+								for i=1 to _jobSettingsStrings.count do
+								(								
+									if findString _jobSettingsStrings[i] "<status>" != undefined then _jobSettingsStrings[i] = "  <status>processing</status>"
+									else if findString _jobSettingsStrings[i] "<startTime>" != undefined then _jobSettingsStrings[i] = "  <startTime>" + localTime + "</startTime>"
+									else if findString _jobSettingsStrings[i] "<progress>" != undefined then _jobSettingsStrings[i] = "  <progress>0.0</progress>"
+									else if findString _jobSettingsStrings[i] "<changed>" != undefined then _jobSettingsStrings[i] = "  <changed>true</changed>"
+								)--for
+								
+								--pisa el archivo de settings con lo nuevo
+								f = openfile _jobSettingsFile mode:"w"
+								for i=1 to _jobSettingsStrings.count do format (_jobSettingsStrings[i] + "\n") to:f
+								close f
+							)--if
+							
+						)--if _process
+					)--if
+				)--for
+			)--if 
+		),--fn
+
+		---------------------------------------------------------------------------
+		--sustitucion de los controladores xref por controladores animables
+		--esto permite animar los props y setprops añadidos por xref
+		---------------------------------------------------------------------------
+		fn replaceXrefControllers =
+		(
+			--	en las piezas animables mergeamos el controlador de animación para poder manipularlas.
+			local assets = lb.asset.getSceneAssets() --obtiene los assets de la escena incluyendo los assets con xref
+			local animNodes = #() --array para almacenar los nodos animables de la escena
+					
+			for ast in assets do
+				animNodes = animNodes + (lb.asset.getAssetAnimNodes ast #all)
+			
+			if animNodes.count != 0 then
+				for o in animNodes do
+					if classof o.controller == XRef_Controller then
+						o.controller = o.controller.getSourceCtrl true
+					
+			assets = undefined
+			animNodes = undefined
+		),
+
+		---------------------------------------------------------------------------
+		--salva los valores actuales de los custom attributes
+		---------------------------------------------------------------------------
+		fn	preOpenProcess =
+		(
+			--indica que la redefinicion solo se debe hacer al final
+			sceneassets = undefined
+			--addNotification "preOpenProcess \t.000. Set sceneassets to undefined"
+			CAsRedefineAtEnd = true
+			--addNotification "preOpenProcess \t.001. CAsRedefineAtEnd set to TRUE"
+		),
+
+		---------------------------------------------------------------------------
+		--salva los valores actuales de los custom attributes
+		---------------------------------------------------------------------------
+		fn	preMergeProcess =
+		(
+			if not CAsRedefineAtEnd then
+			(
+				--addNotification "preMergeProcess\t.001. Obtaining scene assets before merge"
+				preMergeAssets = lb.asset.getSceneAssets()
+			)
+			preMergeAssetNames = for a in (lb.asset.getSceneAssets()) collect a.fullName
+		),
+
+		---------------------------------------------------------------------------
+		--redefine todos los custom attributes que son utilizados por las herramientas
+		--restaura los valores salvados anteriormente de los custom attributes
+		---------------------------------------------------------------------------
+		fn	postMergeProcess =
+		(
+			local cont = lb.customAttributes.redefineCustAttributes()
+			cont = undefined
+			
+			--sustitucion de los controladores xref por controladores animables
+			--esto permite animar los props y setprops añadidos por xref
+			replaceXrefControllers()
+
+			--recarga las variaciones de material en los objetos que deban tenerlas aplicadas
+			--debido a que los materiales por xref siempre se cargan como en el original y no con los IDS de la variación
+			lb.variations.updateSceneStoredMatVariations()
+
+			_newAssets = for a in lb.asset.getSceneAssets() where (findItem preMergeAssetNames a.fullName) == 0 collect a
+			nameParts = filterString maxFileName "_"
+			if nameParts.count >= 4 and nameParts[1] == lb.nc.NC_seqPrefix then --es un archivo de secuencia
+			(
+				_assetType = (filterString (filterString nameParts[4] ".")[1] "-")[1]
+				if _assetType == lb.nc.NC_renderFileName or _assetType == lb.nc.NC_renderFXFileName or _assetType == lb.nc.NC_PCfileName or _assetType == lb.nc.NC_cacheFxFileName or _assetType == lb.nc.NC_hairFileName do
+					lb.hair.loadHairSimulation _newAssets
+				lb.cache.fixAssetClothCaches assets:_newAssets
+			)
+		),
+
+		---------------------------------------------------------------------------
+		--redefine todos los custom attributes que son utilizados por las herramientas
+		---------------------------------------------------------------------------
+		fn postOpenProcess =
+		(
+			--redefine los custom attributes
+			local cont = lb.customAttributes.redefineCustAttributes()
+			
+			--sustitucion de los controladores xref por controladores animables
+			--esto permite animar los props y setprops añadidos por xref
+			replaceXrefControllers()
+
+			--recarga las variaciones de material en los objetos que deban tenerlas aplicadas
+			--debido a que los materiales por xref siempre se cargan como en el original y no con los IDS de la variación
+			lb.variations.updateSceneStoredMatVariations()
+			
+			--si es un archivo de secuencia, hay que sacar el mensaje de no checkeado si no esta guardado con los checks pasados
+			nameParts = filterString maxFileName "_"
+			if nameParts.count >= 4 and nameParts[1] == lb.nc.NC_seqPrefix then --es un archivo de secuencia
+			(
+				_assetType = (filterString (filterString nameParts[4] ".")[1] "-")[1]
+				if _assetType == lb.nc.NC_renderFileName or _assetType == lb.nc.NC_renderFXFileName or _assetType == lb.nc.NC_PCfileName or _assetType == lb.nc.NC_cacheFxFileName or _assetType == lb.nc.NC_hairFileName do
+				(
+					lb.hair.loadHairSimulation (lb.asset.getSceneAssets())
+				)
+
+				--Sacamos error si da error en el chequeo.
+				if not (lb.fileInfo.isFileChecked (maxFilePath + maxFileName)) then
+					lb.qualityMessage.launch #fail
+				else
+				(
+					--Si no hay información guardada saltará el warning
+					if not (lb.fileInfo.hasFileInfo (maxFilePath + maxFileName)) then
+					(
+						lb.qualityMessage.launch #warning
+					)
+				)
+			)
+
+			-- Fix de cloth cache
+			lb.cache.fixAssetClothCaches()
+			
+			---------------------------------------------------------------------
+			--ejecuta la funcion de test
+			callbackTestFunction()
+			---------------------------------------------------------------------
+			
+			---------------------------------------------------------------------
+			--llama a la fucion de queue manager
+			callbackQueueManager()
+			---------------------------------------------------------------------
+			
+			---------------------------------------------------------------------
+			--llama a la funcion de batch de render de LPM si es necesario
+			callbackLPMbatchRender()
+			---------------------------------------------------------------------
+			
+			---------------------------------------------------------------------------------------------------------------------------------
+			-- 		local newAssets = lb.asset.getSceneAssets()
+			-- 		checkAssetsState newAssets --checkea si los assets mergeados han pasado los checks
+			
+			gc()--libera la memoria
+		),
+
+		---------------------------------------------------------------------------
+		--llama a la funcion de actualizacion de nodeIndo para saber si esta checked o no
+		---------------------------------------------------------------------------
+		fn preSaveProcess notifications =
+		(
+			if notifications[1] == 1 then --solo si no es un autoback
+			(
+				-- 			addNotification "preSaveProcess\t.001.try to update checked param in nodeInfo if necessary"
+				-- 			updateNodeInfoChecked() --notifications
+			)
+		),
+
+		---------------------------------------------------------------------------
+		--pone la variable saveFromAssetChecker a FALSE
+		---------------------------------------------------------------------------
+		fn postSaveProcess notifications =
+		(
+			if notifications[1] == 1 then --solo si no es un autoback
+			(
+				if not FI_checkedFile then FI_time = undefined --esto es muy importante, si no se esta salvando checkeado, no se le debe pasar fecha al fileinfo y pondra la actual, no la del nodeInfo
+				_fileInfoDoc = lb.fileInfo.createfileInfoXmlDoc date:FI_time checked:FI_checkedFile
+
+				--EXCEPCIÓN: Si el nombre del archivo que vamos a salvar difiere del archivo original, no salvaremos file info.
+				-- Esto es para cuando hagamos preset con save selection.
+				if getFilenameFile notifications[2] == getFilenameFile maxfilename then
+					lb.fileInfo.addFileInfo (maxfilePath + maxfilename) (_fileInfoDoc.toString())	
+				
+				--limpia la variable
+				saveFromAssetChecker = false
+				
+				--limpia las variables de salvado desde asset checker
+				currentChecksArrayName = undefined
+				FI_passedChecks = #()
+				FI_failedChecks = #()
+				FI_notRequiredChecks = #()
+				FI_warningChecks = #()
+				FI_overrideActivated = false
+				FI_checkedFile = false
+				FI_time = undefined
+
+				setSaveRequired false
+				
+				setArrowCursor()
+			)
+		),
+
+		---------------------------------------------------------------------------
+		--pone el punto de pivote de los modos de transformacion en local siempre que haya un cambio de seleccion
+		--y en la seleccion haya algun hueso
+		---------------------------------------------------------------------------
+		fn setTransformCoordCenterToLocal =
+		(
+			if selection.count != 0 then
+			(
+				/*--esto se deja comentado porque en algunas escenas que se pudren hace que vaya todo mas lento
+				setCoordCenter #local
+				
+				stop = false --flag de parada
+				sceneBones = (getClassInstances boneGeometry) --esta es la linea que lo deja todo lento
+				
+				if sceneBones.count != 0 do --si hay huesos en la escena
+				(
+					sel = (selection as array) --convierte el selectionset de seleccion en un array para poder usar findItem
+					
+					for bon in sceneBones where not stop do
+					(
+						obj = (refs.dependentNodes bon firstOnly:true)
+						
+						if findItem sel obj != 0 then --si hay al menos un hueso seleccionado deshabilita el cambio de pivote
+						(
+							enableCoordCenter false
+							stop = true
+						)
+					)--for
+					
+					if not stop do enableCoordCenter true --si no hay huesos seleccionados lo habilita
+				)--is sceneBones
+				*/
+				
+				_stop = false --flag de parada
+				_currSel = getCurrentSelection() --obtiene la seleccion actual
+				
+				for obj in _currSel where not _stop do --recorre la seleccion buscando huesos
+				(
+					if classof obj.baseobject == BoneGeometry then
+					(
+						_stop = true
+						setCoordCenter #local
+						enableCoordCenter false					
+					)
+				)--for
+				
+				if not _stop do enableCoordCenter true --si no hay huesos seleccionados lo habilita
+			)
+			else
+				enableCoordCenter true
+		),
+
+		----------------------------------------------------------------------------
+		-- Callback de antes de cerrar max.
+		----------------------------------------------------------------------------
+		fn preSystemShutdownProcess =
+		(
+			_tempFiles = lb.fileIOFunctions.getAllFilesFromSubFolders ((pathConfig.GetDir #temp) + "\\*.*") extension:".*"
+			
+			for i=1 to _tempFiles.count do 
+				deleteFile _tempFiles[i]
+		),
+
+		----------------------------------------------------------------------------
+		-- Callback de exportación de cachés
+		----------------------------------------------------------------------------
+		fn cacheExportProcess =
+		(
+			--Miro si hay un exportador de cachés lanzado
+			if maxfilename == "_cacheExport_.max" then
+			(
+				--Busco el archivo .ini
+				if doesFileExist(sysInfo.tempdir + "cacheExport/export.ini") and doesFileExist(sysInfo.tempdir + "cacheExport/log.log") then
+				(
+					--Abrimos el log en modo añadir texto
+					_fileStream = openFile (sysInfo.tempdir + "cacheExport/log.log") mode:"a"
+					
+					--Sacamos el path del archivo actual que hay que abrir, la carpeta de cachés y si queremos eliminar los antiguos.
+					_path = (getIniSetting (sysInfo.tempdir + "cacheExport/export.ini") "files" "path")
+					_cachesFolder = (getIniSetting (sysInfo.tempdir + "cacheExport/export.ini") "files" "cachesFolder")
+					_deleteOld = (getIniSetting (sysInfo.tempdir + "cacheExport/export.ini") "files" "deleteOld")
+					_error = false
+					
+					if _deleteOld == "true" then
+						_deleteOld = true
+					else
+						_deleteOld = false
+					
+					try
+					(
+						--Cargamos el archivo
+						print ((getFilenameFile _path) + " => Starting cache export.") to:_fileStream
+						print (" => Loading animation file.") to:_fileStream
+						loadMaxFile _path quiet:true
+						
+						print (" => Exporting caches.") to:_fileStream
+						lb.cache.remoteBatchCacheExport cachesFolder:_cachesFolder deleteOld:_deleteOld
+						
+						print (" => Exporting video...") to:_fileStream
+						print (" => Looking for a camera.") to:_fileStream
+						
+						_camera = undefined
+						for c in cameras do
+							if c.name == ("cam_" + (substituteString (filterString maxfilename "_")[3] "cam" "")) then
+								_camera = c
+						
+						if _camera == undefined then
+							throw "Camera not found."
+						else
+						(
+							--Ponemos el viewport con la camara y en smooth + highlights
+							viewport.setLayout #layout_1
+							viewport.setCamera _camera
+							viewport.setRenderLevel #smoothhighlights
+							
+							--Ponemos el stamp en la cámara
+							print ("=> Loading stamp.") to:_fileStream
+							_sequenceNumber = (filterString maxfilename "_")[2]
+							_cameraNumber = (substituteString (filterString maxfilename "_")[3] "cam" "")
+							lb.preview.createStamps _camera stampText:"caches" cameraText:(_sequenceNumber + "_" +_cameraNumber) visibleFrame:false
+							
+							--Sacamos el previo
+							print ("=> Making preview.") to:_fileStream
+							lb.preview.makeViewportPreview _camera previewPath:("z:\\sequence\\seq_" + _sequenceNumber  + "\\cam\\cam" + _cameraNumber + "\\video\\") previewName:("seq_" + _sequenceNumber  + "_cam" + _cameraNumber + "_cache")
+							
+						)
+					)
+					catch
+					(
+						_error = true
+					)
+					
+					if _error then
+						print ((getFilenameFile _path) + " => ERROR") to:_fileStream
+					else
+						print ((getFilenameFile _path) + " => OK") to:_fileStream 
+					
+					close _fileStream
+					
+					deleteFile (sysInfo.tempdir + "cacheExport/export.ini")
+				)
+				
+			)	
+		),
+
+		----------------------------------------------------------------------------
+		--lanza los callbacks generales de la escena
+		----------------------------------------------------------------------------
+		fn initCallbacks =
+		(
+			callbacks.removescripts id:#generalCallbacks
+			
+			callbacks.addscript #filePreMerge 			"lb.callbacks.preMergeProcess()" id:#generalCallbacks
+			callbacks.addscript #filePreOpenProcess		"lb.callbacks.preOpenProcess()" id:#generalCallbacks
+			
+			callbacks.addscript #filePostMerge 			"lb.callbacks.postMergeProcess()" id:#generalCallbacks
+			callbacks.addscript #filePostOpenProcess 	"lb.callbacks.postOpenProcess()" id:#generalCallbacks
+			callbacks.addscript #filePostOpenProcess 	"lb.callbacks.cacheExportProcess()" id:#generalCallbacks
+			
+			callbacks.addscript #filePreSaveProcess		"lb.callbacks.preSaveProcess (callbacks.notificationParam())" id:#generalCallbacks
+			callbacks.addscript #filePostSaveProcess	"lb.callbacks.postSaveProcess (callbacks.notificationParam())" id:#generalCallbacks
+			
+			
+			callbacks.addscript #selectionSetChanged	"lb.callbacks.setTransformCoordCenterToLocal()" id:#generalCallbacks
+			
+			callbacks.addscript #preSystemShutdown 		"lb.callbacks.preSystemShutdownProcess()" id:#generalCallbacks
+		),
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+			
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addLibrary this --añade la libreria a la principal
+		)
+	)--lib_callbacks
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	
+	lib_callbacks() --crea la libreria
+)

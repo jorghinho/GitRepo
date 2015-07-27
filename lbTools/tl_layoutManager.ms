@@ -1,0 +1,1453 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--Descripcion: Herramienta Plantilla.
+------------------------------------------------------------------------------------------------------------------------------------------------
+(
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollPresetsList | Contiene el listado de overrides permitidos.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollPresetsListDef "Presets List"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) --@var : parent | Herramienta o rolllout del que depende y/o contiene el rollout actual.
+			
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+
+		listBox lbxPresets "" pos:[10,10] width:580 height:19 enabled:true items:(parent._filesInFolder)
+		button btnOk "OK" pos:[330,272] width:125	--@control | btnOk | Devuelve el override que se ha elegido.
+		button btnCancel "Cancel" pos:[465,272] width:125	--@control | btnCancel | Cancela la operacion.
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+				
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--no guarda settings
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			--no carga settings
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al presionar el boton. Devuelve los nodeSets elegidos.
+		--@control: button | btnOk | Boton presionado.
+		------------------------------------------------
+		on btnOk pressed do
+		(
+			_setAssets = lb.asset.getSceneAssets type:lb.nc.NC_setPrefix
+			_listBox = undefined
+			_listBox = lbxPresets
+
+			_indexListBox = _listBox.selection
+			parent._importFile = _listBox.items[_indexListBox]
+
+			destroyDialog parent.rollPresetsList
+		)
+		
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al presionar el boton. Cancela la operacion.
+		--@control: button | btnCancel | Boton presionado.
+		------------------------------------------------
+		on btnCancel pressed do
+		(	
+			destroyDialog parent.rollPresetsList
+		)
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | overrideUnLocks | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollPresetsListDef open do
+		(
+			loadSettings()
+		)		
+	)--rollPresetsList
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: layoutSetReplacerDef | Contiene la herramienta plantilla.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout layoutSetReplacerDef "Layout Set Replacer"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) --@var : parent | Herramienta o rolllout del que depende y/o contiene el rollout actual		
+		
+		local minRollWidth = 220	--@var: minRollWidth | Minimun tool width.
+		local minRollHeight = 155	--@var: minRollHeight | Minimun tool height.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		
+		button btnSetExport "Set Export" pos:[5,10] width:195 height:20 highlightColor:(color 255 195 0) checked:false enabled:true tooltip:"Set Export" 
+		button btnSetReplace "Set Replace" pos:[5,60] width:195 height:20 highlightColor:(color 255 195 0) checked:false enabled:true tooltip:"Set Replace" 
+
+		checkbox chkreName "" pos:[15,35] width:20 height:20 checked:false 
+		edittext edtMain "" pos:[35,35] text:"main" width:80 height:10 enabled:false
+		edittext edtStd "" pos:[120,35] text:"std" width:80 height:10 enabled:false
+
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			if not parent.resizeDisabled then 
+			(
+				------------------------------------------------------------------------------
+				--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+				if size.x < minRollWidth then (size.x = minRollWidth; layoutSetReplacerDef.width = size.x)
+				if size.y < minRollHeight then (size.y = minRollHeight; layoutSetReplacerDef.height = size.y)
+				------------------------------------------------------------------------------
+				
+				--calcula el incremento en ancho y alto, respecto al mínimo.
+				_increment = [size.x - minRollWidth, size.y - minRollHeight]
+				
+				------------------------------------------------------------------------------
+				--redimension en horizontal
+				if _increment.x != 0 then --si hay incremento
+				(
+					btnSetExport.pos.x = 5 + _increment.x/2
+					btnSetReplace.pos.x = 105 + _increment.x/2
+				)--if
+				------------------------------------------------------------------------------
+				
+				------------------------------------------------------------------------------
+				--redimension en vertical
+				if _increment.y != 0 then --si hay incremento
+				(
+					
+				)--if
+				------------------------------------------------------------------------------
+			)
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--lb.xml.setAttribute parent.cfgFile ("rollExample1/cateagory") "paramName" "paramValue"
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			--_param = (lb.xml.getAttribute parent.cfgFile ("rollExample1/category") "paramName") as <value type>
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al apretar el boton setExport.
+		------------------------------------------------
+		on chkreName changed state do
+		(
+			if state then 
+			(
+				edtMain.enabled = true
+				edtStd.enabled = true
+			)
+			else 
+			(
+				edtMain.enabled = false
+				edtStd.enabled = false
+			)
+		)
+
+		--------------------------------------------------
+		----@event: pressed | Evento que se lanza al apretar el boton setExport.
+		--------------------------------------------------
+		--on btnSetExport	pressed do
+		--(
+		--	parent.setExporter()
+		--)
+
+		--------------------------------------------------
+		----@event: pressed | Evento que se lanza al apretar el boton setExport.
+		--------------------------------------------------
+		--on btnSetExport	pressed do
+		--(
+		--	parent.setExporter()
+		--)	
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al apretar el boton setExport.
+		------------------------------------------------
+		on btnSetExport	pressed do
+		(
+			parent.setExporter()
+		)
+
+		------------------------------------------------
+		--@event: pressed | Evento que se lanza al apretar el boton setReplace.
+		------------------------------------------------
+		on btnSetReplace pressed do 
+		(
+			parent.setReplacer()
+		)
+
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollMain | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		--@gets: point2 | size | tamaño al que se ha redimensionado el rollout
+		------------------------------------------------
+		on layoutSetReplacerDef resized size do
+		(
+			if not parent.resizeDisabled then resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollMain | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on layoutSetReplacerDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+			if parent.rollMain != undefined and not parent.resizeDisabled then resize [parent.rollMain.width, parent.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollMain | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on layoutSetReplacerDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+		)
+	)--layoutSetReplacerDef
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: cheatSetObjectDef | Contiene la herramienta plantilla.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout cheatSetObjectDef "Cheat Set Objects"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) --@var : parent | Herramienta o rolllout del que depende y/o contiene el rollout actual	
+		local minRollWidth = 220	--@var: minRollWidth | Minimun tool width.
+		local minRollHeight = 150	--@var: minRollHeight | Minimun tool height.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+
+		button btnCheatNow "Cheat Now" pos:[5,10] width:195 height:20 highlightColor:(color 255 195 0) checked:false enabled:true tooltip:"Cheat Now" 
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			if not parent.resizeDisabled then 
+			(
+				------------------------------------------------------------------------------
+				--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+				if size.x < minRollWidth then (size.x = minRollWidth; cheatSetObjectDef.width = size.x)
+				if size.y < minRollHeight then (size.y = minRollHeight; cheatSetObjectDef.height = size.y)
+				------------------------------------------------------------------------------
+				
+				--calcula el incremento en ancho y alto, respecto al mínimo.
+				_increment = [size.x - minRollWidth, size.y - minRollHeight]
+				
+				------------------------------------------------------------------------------
+				--redimension en horizontal
+				if _increment.x != 0 then --si hay incremento
+				(
+					btnCheatNow.pos.x = 5 + _increment.x/2
+				)--if
+				------------------------------------------------------------------------------
+				
+				------------------------------------------------------------------------------
+				--redimension en vertical
+				if _increment.y != 0 then --si hay incremento
+				(
+					
+				)--if
+				------------------------------------------------------------------------------
+			)
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--lb.xml.setAttribute parent.cfgFile ("rollExample1/cateagory") "paramName" "paramValue"
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			--_param = (lb.xml.getAttribute parent.cfgFile ("rollExample1/category") "paramName") as <value type>
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+
+		------------------------------------------------
+		--@event: pressed | Llama a la funcion cheatNow del struct.
+		------------------------------------------------
+		on btnCheatNow pressed do 
+		(
+			parent.cheatNow()
+		)
+
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollMain | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		--@gets: point2 | size | tamaño al que se ha redimensionado el rollout
+		------------------------------------------------
+		on cheatSetObjectDef resized size do
+		(
+			if not parent.resizeDisabled then resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollMain | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on cheatSetObjectDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+			if parent.rollMain != undefined and not parent.resizeDisabled then resize [parent.rollMain.width, parent.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollMain | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on cheatSetObjectDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+		)
+	)--cheatSetObjectDef
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollMainDef | Contiene el listado de overrides permitidos.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollMainDef "Layout Manager"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) --@var : parent | Herramienta o rolllout del que depende y/o contiene el rollout actual
+		
+		local minRollWidth = 220	--@var: minRollWidth | Minimun tool width.
+		local minRollHeight = 150	--@var: minRollHeight | Minimun tool height.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		local opening = false --@var: opening | Flag para que no salte el evento de cambio de tab y no pise el valor cargado del archivo .cfg
+		
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		
+		dotNetControl tbTabs "DevExpress.XtraTab.XtraTabControl" pos:[0,5] width:220 height:21 --25
+	
+		------------------------------------------------------------------------------------------------
+		--SUBROLLOUTS
+		------------------------------------------------------------------------------------------------
+
+		subrollout subRollContainer "subRollouts" pos:[0,26] width:minRollWidth height:574 --@control | subRollContainer | SubRollouts container.
+
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | initUI | Inicializa los controles del UI.
+		------------------------------------------------
+		fn initUI =
+		(	
+			tbTabs.paintstylename = "PropertyView"
+			tbTabs.borderStyle = (dotnetclass "DevExpress.XtraEditors.Controls.BorderStyles").noBorder
+			tbTabs.TabPageWidth = 100			
+			
+			tbTabs.Appearance.BackColor = (dotnetclass "system.drawing.color").fromArgb 68 68 68
+			tbTabs.Appearance.BackColor2 = (dotnetclass "system.drawing.color").fromArgb 68 68 68
+			tbTabs.Appearance.BorderColor = (dotnetclass "system.drawing.color").fromArgb 100 100 100
+		)
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			_width = (lb.xml.getAttribute parent.cfgFile ("rollMain/size") "width") as integer
+			_height = (lb.xml.getAttribute parent.cfgFile ("rollMain/size") "height") as integer
+				
+			--posicion
+			_posX = (lb.xml.getAttribute parent.cfgFile ("rollMain/pos") "x") as integer
+			_posY = (lb.xml.getAttribute parent.cfgFile ("rollMain/pos") "y") as integer
+				
+			--establece minimos
+			if _width < minRollWidth then _width = minRollWidth
+			if _height < minRollHeight then _height = minRollHeight
+			if _posX < 0 then _posX = 0
+			if _posY < 0 then _posY = 0
+				
+			--aplica los valores
+			rollMainDef.width = _width
+			rollMainDef.height = _height
+			setDialogPos rollMainDef [_posX,_posY]
+
+			--aplica el tab seleccionado
+			parent.selectedTabIndex = (lb.xml.getAttribute parent.cfgFile "rollMain/options" "selectedTabIndex") as integer
+			if parent.selectedTabIndex == 0 then parent.selectedTabIndex = 1
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--almacena posicion
+			lb.xml.setAttribute parent.cfgFile ("rollMain/pos") "x" (((getDialogPos rollMainDef).x) as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/pos") "y" (((getDialogPos rollMainDef).y) as string)
+			
+			--almacena tamaño
+			lb.xml.setAttribute parent.cfgFile ("rollMain/size") "width" (rollMainDef.width as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/size") "height" (rollMainDef.height as string)
+
+			--almacena las opciones de UI
+			lb.xml.setAttribute parent.cfgFile ("rollMain/options") "selectedTabIndex" (parent.selectedTabIndex as string)
+		)
+
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks de este rollout.
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+			--sin operaciones
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Elimina los callbacks de este rollout.
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+			--sin operaciones
+		)
+
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size forced:false =
+		(
+			if not parent.resizeDisabled then 
+			(
+				------------------------------------------------------------------------------
+				--si el tamaño es menor que el minimo
+				if size.x < minRollWidth then (size.x = minRollWidth; rollMainDef.width = size.x)
+				if size.y < minRollHeight then (size.y = minRollHeight; rollMainDef.height = size.y)
+				------------------------------------------------------------------------------
+				
+				--calcula el incremento de tamaño
+				_increment = [size.x - minRollWidth, size.y - minRollHeight]
+
+				------------------------------------------------------------------------------
+				--redimension en horizonal
+				if _increment.x != 0 or forced then --si hay incremento
+				(				
+					tbTabs.width = minRollWidth + _increment.x
+					if tbTabs.tabPages.count != 0 then tbTabs.TabPageWidth = (minRollWidth + _increment.x)/(tbTabs.tabPages.count) - 20
+					if tbTabs.tabPages.count == 1 then tbTabs.TabPageWidth = tbTabs.TabPageWidth - 10
+					
+					subRollContainer.width = size.x
+				)--if
+				------------------------------------------------------------------------------
+
+				------------------------------------------------------------------------------
+				--redimension en vertical
+				if _increment.y != 0 then --si hay incremento
+				(
+					--zona de subRollouts
+					subRollContainer.height = 574 + _increment.y				
+				)--if
+				------------------------------------------------------------------------------
+
+				parent.addTabRollouts()
+			)
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: selectedPageChanged | Evento que se lanza al cambiar de tab.
+		--@control: DevExpress.XtraTab.XtraTabControl | tbTabs | Tabs.
+		--@gets: event | events | Objeto devuelto por el evento.
+		------------------------------------------------
+		on tbTabs selectedPageChanged events do
+		(
+			if not opening then
+			(
+				parent.selectedTabIndex = tbTabs.selectedTabPageIndex + 1
+				parent.addTabRollouts()
+			)--if
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollMainDef | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		--@gets: point2 | size | tamaño al que se ha redimensionado el rollout
+		------------------------------------------------
+		on rollMainDef resized size do
+		(
+			if not parent.resizeDisabled then resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollMainDef | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollMainDef open do
+		(
+			opening = true --flag para que no salte el evento de cambio de tab y no pise el valor cargado del archivo .cfg
+
+			initUI() --inicializa el UI
+			loadSettings()
+			parent.fillTabsRolloutsDefs()
+			parent.addTabs()
+			createSceneEvents()		
+			if parent.rollMain != undefined and not parent.resizeDisabled then resize [parent.rollMain.width, parent.rollMain.height] forced:true
+			
+			opening = false --flag para que no salte el evento de cambio de tab y no pise el valor cargado del archivo .cfg
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollMainDef | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollMainDef close do
+		(				
+			removeSceneEvents()
+			saveSettings()
+
+			parent.opened = false
+			updateToolbarButtons()		
+		)	
+	)--rollMainDef
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: templateTabTool | Contiene la herramienta plantilla.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct tl_layoutManager 
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,					--@var: category | Categoria de la tool.
+		className = lb.getFileToolName (getThisScriptFilename() as string),	--@var: className | Nombre de la tool.
+		description = "layout Manager",		--@var: description | Descripcion de la tool.
+		
+		cfgFile = (lb.config.getToolsIniPath()) + (lb.getFileToolName (getThisScriptFilename() as string)) + ".cfg",	--@var: cfgFile | Archivo de configuracion de la tool.
+			
+		opened = false,			--@var: opened | Indica si la herramienta está abierta.
+
+		minWidth = 220,		--@var: minWidth | Ancho mínimo de la herramienta.
+		minHeight = 400,		--@var: minHeight | Alto mínimo de la herramienta.
+
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		tabForeColor = (dotnetclass "system.drawing.color").fromArgb 189 189 189,
+		tabBorderColor = (dotnetclass "system.drawing.color").fromArgb 30 30 30,
+		tabBackColor = (dotnetclass "system.drawing.color").fromArgb 60 60 60,
+		tabBackColorActive = (dotnetclass "system.drawing.color").fromArgb 90 90 90,
+		tabBackColor2 = (dotnetclass "system.drawing.color").fromArgb 55 55 55,
+		tabBackColorActive2 = (dotnetclass "system.drawing.color").fromArgb 60 60 60,		
+
+		resizeDisabled = false,
+		_filesInFolder = #(),
+		_importFile = #(),
+
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--ROLLOUTS
+		------------------------------------------------------------------------------------------------
+
+		layoutSetReplacer = layoutSetReplacerDef,
+		cheatSetObject = cheatSetObjectDef,
+		rollPresetsList = rollPresetsListDef,
+		rollMain = rollMainDef,	--@var: rollMain | Main tool rollout.
+		
+		subRolloutsContainer = this.rollMain.subRollContainer, --@var: subRolloutsContainer | contenedor de subrollouts.
+
+		--estos arrays se rellenan en la funcion fillTabsRolloutsDefs, que se llama al abrir la herramienta.
+		--esto es solo la defincion de las variables y una ejemplo de estructura que luego se sobrescribe.
+		tabNames = #(""), --@var: tambNames | Nombres de los tabs.
+		tabRollouts = #(#(undefined)), --@var: mentalrayTabNames | Rollots de cada tab.
+		tabRolloutsRolledUp = #(#(true, true)), --@var: tabRolloutsRolledUp | Estado de desplegado/plegado de cada rollout de cada tab.
+
+		selectedTabIndex = 1, --@var: selectedTabIndex | Tab seleccionado. Para usar al abrir y cerrar la herramienta
+
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		------------------------------------------------
+		--@fn: undefined | writeTXTCheatInfo | Guarda un archivo txt con el nombre y la camara de los objetos falseados.
+		------------------------------------------------
+		fn writeTXTCheatInfo _cam _obj _Start _End = 
+		(
+			local dirMax = filterstring maxfilepath "\\" 
+			local newDir =  (dirMax[1] + "\\" + dirMax[2] + "\\" + dirMax[3] + "\\" + dirMax[4] + "\\doc\\cheats\\" ) as string
+			local txt = (newDir + "variationSet_" + _cam + ".txt") as string
+			local info = (_obj + " rango:" + _Start + "-" + _End)
+			
+			if doesFileExist newDir == false do makeDir newDir
+
+			if doesFileExist txt == true then
+			(
+				edit_txt = openFile txt mode:"a+"
+				if edit_txt != undefined do 
+				(
+					t = readLine edit_txt
+					format "%\n" info to:edit_txt
+				)
+				close edit_txt
+			)
+			else 
+			(
+				edit_txt = createfile txt
+				format "%\n" (info as string) to:edit_txt
+				close edit_txt
+			)
+		),
+
+		------------------------------------------------
+		--@fn: undefined | setExporter | Funcion para exportar el set.
+		------------------------------------------------		
+		fn setExporter =
+		(
+			this.resizeDisabled = true
+
+			_setAssets = lb.asset.getSceneAssets type:lb.nc.NC_setPrefix --obtiene los assets de tipo set
+			
+			if _setAssets.count == 0 then lb.message.show "There is no set in the scene."
+			else if _setAssets.count > 1 then lb.message.show "There is more than one set in the scene. Process will not continue."
+			else
+			(
+				_referenced = false
+				_xrefScene = xrefs.getXRefFileCount()
+
+				if _xrefScene != 0 then
+				(
+					lb.message.show "Set is loaded by xrefScene. You must break de xref references and merge it to continue the exportation process." type:#message 
+				)
+				else
+				(
+					for i=1 to _setAssets[1].meshNodesAll.count where classof _setAssets[1].meshNodesAll == XRefObject do _referenced = true
+
+					if _referenced then 
+						lb.message.show "Current set is already referenced. Process will not continue." type:#message
+					else 
+					(
+						if _setAssets[1].folder == undefined or _setAssets[1].folder == "undefined" then lb.message.show "Nodeinfo in the set file is corrupt. You must re-save verified again and reload it." type:#message
+						else
+						(
+							_assetVersionFolder = (_setAssets[1].folder + lb.nc.NC_versionFolderName + "\\")
+							setWaitCursor()
+							_folderUpdated = lb.svn.isFolderUpdated _assetVersionFolder donotwait:false
+							setArrowCursor()
+							
+							_updateFolder = false
+
+							if not _folderUpdated then _updateFolder = lb.message.show "Set folder isn't updated. Do you want to update ?" type:#query
+
+							if _updateFolder then
+							(
+								setWaitCursor()
+								lb.svn.svnUpdate _assetVersionFolder
+								_folderUpdated = lb.svn.isFolderUpdated _assetVersionFolder
+								setArrowCursor()
+							)
+
+							if _folderUpdated then
+							(
+								_saveRequired = getSaveRequired()
+								_saved = true
+								_originalPathNameFile = maxfilepath + maxfilename
+
+								if _saveRequired then 
+								(
+									_process = lb.message.show "File has changes. Do you want to save it now?" type:#query--si hay cambios en el 
+
+									if _process then 
+									(  
+										_saved = saveMaxFile _originalPathNameFile
+										if not _saved then lb.message.show "File couldn't be saved, check if the file is readOnly. Process will not continue." type:#message
+									) 
+									else _saved = false
+								)
+
+								if _saved then 
+								(	
+									_layerNames = lb.layer.getLayersNames()
+									(LayerManager.getLayerFromName "0").current = true --pone la capa 0 como activa
+
+									for _layName in _layerNames where _layName != _setAssets[1].layer.name do
+									(
+										_lay = lb.layer.getLayerByName _layName
+
+										_lay.ishidden = false
+										_lay.isfrozen = false
+
+										_layerNodes = lb.layer.getLayerNodes _lay
+										delete _layerNodes
+
+										lb.layer.deleteLayerByName _layName
+									) 
+
+									animationrange = (interval 0f 100f)
+									sliderTime = 0
+
+									for i=1 to _setAssets[1].meshNodesAll.count do
+									(
+										_setAssets = lb.asset.getSceneAssets type:lb.nc.NC_setPrefix
+										if _setAssets[1].meshNodesAll[i] != undefined then 
+											lb.animation.deleteAnimation _setAssets[1].meshNodesAll[i] (interval 0f 100000f)
+									)
+
+									_fileHistory = undefined
+									for i=1 to _setAssets[1].meshNodesAll.count where _fileHistory == undefined do
+									(
+										_nodeInfo = lb.nodeInfo.hasNodeInfo _setAssets[1].meshNodesAll[i]
+										if _nodeInfo then 
+										(
+											_fileHistory = _setAssets[1].meshNodesAll[i].nodeInfo.fileHistory[1]
+											if matchpattern _fileHistory pattern:(lb.nc.NC_sequenceRootPattern + "*") then _fileHistory = undefined
+										)
+									)
+									
+									if _fileHistory == undefined do
+									(
+										for i=1 to _setAssets[1].nodes.count where _fileHistory == undefined do
+										(
+											_nodeInfo = lb.nodeInfo.hasNodeInfo _setAssets[1].nodes[i]
+											if _nodeInfo then 
+											(
+												_fileHistory = _setAssets[1].nodes[i].nodeInfo.fileHistory[1]
+												if matchpattern _fileHistory pattern:(lb.nc.NC_sequenceRootPattern + "*") then _fileHistory = undefined
+											)
+										)
+									)
+
+									if _fileHistory != undefined then
+									(
+										_defPartFileName = ""
+										_defPresetFileName = ""
+
+										_fileHistory = substituteString _fileHistory lb.nc.NC_baseFolderName lb.nc.NC_partFolderName
+
+										if not matchpattern (getFileNameFile _fileHistory) pattern:"*_v??" then _fileHistory = substituteString _fileHistory (getFileNameFile _fileHistory) ((getFileNameFile _fileHistory) + "_v01")
+
+										_defPartFileName = getFileNameFile _fileHistory
+										_defPresetFileName = _defPartFileName
+
+										_defPartFileNameParts = filterString _defPartFileName "_"
+
+										
+										if lb.layoutManager.layoutSetReplacer.chkreName.checked then
+										(
+											_version = lb.layoutManager.layoutSetReplacer.edtMain.text
+											_subVersion = lb.layoutManager.layoutSetReplacer.edtStd.text
+
+											if _version == "" then _version = "main"
+											if _subVersion == "" then _subVersion "std"
+
+											_defPartFileName = _defPartFileNameParts[1] + "_" + (filterString _defPartFileNameParts[2] "(){}")[1] + ("(" + _version + "-" + _subVersion +")") + "_" + _defPartFileNameParts[3] + "_" + _defPartFileNameParts[4]
+										)
+
+										_defPresetFileName = _defPartFileName
+										_defPresetFileName = substituteString _defPresetFileName "main" "std"
+										_defPresetFileName = substituteString _defPresetFileName "(" "{"
+										_defPresetFileName = substituteString _defPresetFileName ")" "}"
+
+										_pathPart = (getFilenamePath _fileHistory) + _defPartFileName + (getFilenameType _fileHistory)
+										_pathPart = substituteString _pathPart ("_" + lb.nc.NC_meshFileName + "_") ("_" + lb.nc.NC_draftFileName + "_")
+										_pathPreset = (getFilenamePath _fileHistory) + _defPresetFileName + ".prt"
+										_pathPreset = substituteString _pathPreset lb.nc.NC_partFolderName lb.nc.NC_presetFolderName
+										
+										if doesFileExist _pathPart then
+										(
+											setFileAttribute _pathPart #readOnly false
+											deleteFile _pathPart
+										)
+
+										if doesFileExist _pathPreset then
+										(
+											setFileAttribute _pathPreset #readOnly false
+											deleteFile _pathPreset
+										)
+
+										saveMaxFile _pathPart useNewFile:true quiet:true
+
+										--CHECKS AUTOMATICOS
+
+										_groups = for o in objects where (isGroupHead o == true) collect o
+										for o in _groups do explodeGroup o
+
+										for obj in objects where isValidNode obj do 
+										(
+											setTransformLockFlags obj #all
+											obj.isHidden = false
+											obj.isFrozen = false	
+										)
+
+										--Limpia el editor de materiales
+										for i=1 to 24 do --resetea el editor de materiales
+										(
+											_newMat = standardMaterial() --crea un material standar
+											_newMat.name = ("Standard_" + i as string)
+											meditMaterials[i] = _newMat
+										)--for
+
+										--Smart reset xForm a todas las piezas
+										for obj in objects where isValidNode obj do lb.geometry.smartResetXform obj true
+
+										--Freeze Pose todas las piezas
+										suspendEditing()
+										for o in objects where isValidNode o do lb.controller.freezePose o #all
+										resumeEditing()
+
+										--averigua el nombre del nuevo asset
+										_assetFullName = (filterString _defPartFileName "_")[1] + "_" + (filterString _defPartFileName "_{}()")[2]
+
+										--renombrado de la capa
+										_setAssets[1].layer.setName _assetFullName
+
+										--Renombrado de piezas
+										for o in _setAssets[1].nodes do 
+										(
+											if isValidNode o then
+											(
+												_nameParts = filterString o.name "_"
+
+												if lb.nc.ncOK o.name or _nameParts.count == 7 then
+												(
+													o.name = _assetFullName + "_" + lb.nc.NC_meshFileName + "_" + _nameParts[4] + "_" + _nameParts[5] + "_" + lb.nc.NC_tcCache + "_" + lb.nc.NC_frozenFlag 
+												)
+												else
+												(
+													_newName = o.name
+													_newNameParts = filterString _newName "_"
+													for i=1 to _newNameParts.count do
+													(
+														_nameUpper = toUpper _newNameParts[i][1]
+														_newName = substituteString _newName _newNameParts[i][1] _nameUpper
+													)
+													_newName = substituteString _newName " " ""
+													_newName = substituteString _newName "_" ""
+													o.name = _assetFullName + "_" + lb.nc.NC_meshFileName + "_" + lb.nc.NC_notSpecifiedFlag + "_" + _newName + "_" + lb.nc.NC_tcCache + "_" + lb.nc.NC_frozenFlag 
+												)
+											)
+										)
+
+										--Renombrado de materiales
+										mats = lb.materials.getSceneMaterials()
+										for m in mats do
+										(
+											_newMname = m.name
+											_newMname = substituteString _newMname " " ""
+											m.name = _newMname
+											_mParts = filterString m.name "_"
+
+											if _mParts.count == 3 then 
+											(
+												_newMname = substituteString _newMname (_mParts[1] + "_" + _mParts[2]) _assetFullName
+												m.name = _newMname		
+											)
+											else if _mParts.count == 1 then
+											(
+												_newMname = _assetFullName + "_" + _mParts[1]
+												m.name = _newMname
+											)
+										)
+
+										--Rango de animacion de 0 a 100
+										animationrange = (interval 0f 100f)
+
+										--Colapsamos las mallas
+										for obj in objects where isValidNode obj do collapseStack obj
+
+										--borramos selection sets
+										while selectionsets.count > 0 do deleteitem selectionsets 1
+
+										hideByCategory.none()
+
+										for o in objects where isValidNode o do setTransformLockFlags o #{7..9}
+
+										for o in _setAssets[1].nodes where isValidNode o do o.renderable = true
+
+										--Creamos el archivo presset
+										f = openFile _pathPreset mode:"w" --crea el xml y lo abre en modo escritura
+										format "<preset version=\"1.0\">\n" to: f
+										format "  <files>\n" to: f
+										format ("    <file path=\"" + _pathPart + "\" loadMode=\"xrefMeshObjectsAll\" />\n") to: f
+										format "  </files>\n" to: f
+										format "</preset>\n" to: f
+										close f --cierra el xml
+
+										--Guardamos el archivo
+										_saved = saveMaxFile _pathPart useNewFile:true quiet:true
+
+										--SE DEJA ABIERTO EL SET POR PETICION DE LAYOUT. Para que puedan pasar los checks
+										if _saved then
+										(
+											lb.message.show "Exported correctly. You should use the asset checker to save it verified and COMMIT IT PLEASE!" type:#message
+											macros.run "lbTools: Common" "assetChecker"
+											rollAssetChecker.btnCheck.pressed()
+										)
+										else
+										(
+											loadMaxFile _originalPathNameFile useFileUnits:true quiet:true --Cargamos el archivo _original
+											lb.message.show "Export error. Ask someone." type:#message
+										)
+									)
+									else
+									(
+										lb.message.show "Asset doesn't have fileHistory." type:#message
+									)
+								)	
+							)
+							else lb.message.show "Current set isn't updated. Process will not continue." type:#message
+						)
+					)
+				)
+			)
+
+			this.resizeDisabled = false
+		),
+
+		------------------------------------------------
+		--@fn: undefined | setReplacer | Funcion para importar el set.
+		------------------------------------------------		
+		fn setReplacer =
+		(
+
+			_setAssets = lb.asset.getSceneAssets type:lb.nc.NC_setPrefix --obtiene los assets de tipo set
+			
+			if _setAssets.count == 0 then lb.message.show "There is no set in the scene."
+			else if _setAssets.count > 1 then lb.message.show "There is more than one set in the scene. Process will not continue."
+			else
+			(
+				_process = lb.message.show "This process can't be undone. Do you want to continue ?" type:#query
+				if _process then
+				(
+					_folderPreset = _setAssets[1].folder + lb.nc.NC_versionFolderName + "\\" + lb.nc.NC_presetFolderName + "\\" + "*.prt"
+					this._filesInFolder = getFiles _folderPreset
+					lb.layoutManager.rollPresetsList.lbxPresets.items = this._filesInFolder 
+
+					setWaitCursor()
+					_folderUpdated = lb.svn.isFolderUpdated _folderPreset
+					setArrowCursor()
+
+					_updateFolder = false
+					if not _folderUpdated then _updateFolder = lb.message.show "Set folder isn't updated. Do you want to update ?" type:#query
+				
+					if _updateFolder then
+					(
+						setWaitCursor()
+						lb.svn.svnUpdate _folderPreset
+						_folderUpdated = lb.svn.isFolderUpdated _folderPreset
+						setArrowCursor()
+					)--if
+
+					if this._filesInFolder.count != 0 then
+					(
+						_size = [600, 300]
+						_pos = (GetDialogPos this.rollMain) + ([this.rollMain.width, this.rollMain.height]/2) - (_size/2)
+						
+						createDialog this.rollPresetsList lockwidth:true lockheight:true pos:_pos width:_size.x height:_size.y modal:true style:#(#style_toolwindow, #style_titlebar, #style_sysmenu, #style_resizing)
+
+						if this._importFile != undefined then 
+						(
+							_presetSavedVerified = lb.presets.getPresetCheckedState this._importFile
+							_checked = false
+							if _presetSavedVerified == #checked then _checked = true 
+							if _checked then
+							(
+								_setLayer = _setAssets[1].layer
+
+								(LayerManager.getLayerFromName "0").current = true --pone la capa 0 como activa
+
+								_setLayer.ishidden = false
+								_setLayer.isfrozen = false
+
+								_layerNodes = lb.layer.getLayerNodes _setLayer
+								delete _layerNodes
+
+								lb.layer.deleteLayerByName _setLayer.name
+
+								lb.presets.load this._importFile 
+
+								_setAssets = lb.asset.getSceneAssets type:lb.nc.NC_setPrefix
+								if _setAssets.count != 0 then 
+								(
+									for obj in _setAssets[1].meshNodesAll do obj.isFrozen = false
+								)
+								lb.message.show "Import completed successfully." type:#message
+							)
+							else lb.message.show "Set file you are trying to import is not checked(SAVE VERIFIED)." type:#message
+
+							this._importFile = undefined
+						)
+						else
+						(
+							 lb.message.show "You must select 1 item in the listBox." type:#message
+						)
+					)
+					--Creamos el rollout con el listbox para elegir el presset		
+				)
+			)
+		),
+
+		------------------------------------------------
+		--@fn: undefined | cheatNow | Funcion para poder modificar las piezas del set.
+		------------------------------------------------			
+		fn cheatNow =
+		(
+			_objSelect = getCurrentSelection() as array
+
+			if _objSelect.count != 1 then lb.message.show "You must select one object (Only one object)." type:#message
+			else 
+			(
+				_objParts = filterString _objSelect[1].name "_"
+				if _objParts[1] != lb.NC.NC_setPrefix then lb.message.show "Selected object must belong to a set asset." type:#message
+				else 
+				(
+					_viewportCams = #()
+
+					for i=1 to viewport.numViews do
+					(
+					    _cam = viewport.getCamera index:i
+					    if _cam != undefined then append _viewportCams _cam
+					)
+
+					if _viewportCams.count > 1 then 
+					(
+						lb.message.show "You must select only one cam active in viewport." type:#message
+					)
+					else if _viewportCams.count == 0 then 
+					(
+						lb.message.show "You must select at least 1 camera." type:#message
+					)
+					else if _viewportCams.count == 1 then
+					(
+						animationRange = interval _viewportCams[1].recStart _viewportCams[1].recEnd 
+						sliderTime = _viewportCams[1].recStart
+
+						xFormMod = false
+						for i=1 to _objSelect.count do
+						(
+							for j=1 to _objSelect[i].modifiers.count do
+							(
+								if classof _objSelect[i].modifiers[j] == XForm then
+								(
+									addNewKey _objSelect[1].modifiers[#XForm].gizmo.controller (_viewportCams[1].recStart - 1)
+									addNewKey _objSelect[1].modifiers[#XForm].gizmo.controller (_viewportCams[1].recStart)
+									addNewKey _objSelect[1].modifiers[#XForm].gizmo.controller (_viewportCams[1].recEnd)
+									addNewKey _objSelect[1].modifiers[#XForm].gizmo.controller (_viewportCams[1].recEnd + 1)
+										
+									animButtonState = true
+									this.writeTXTCheatInfo _viewportCams[1].name  _objSelect[1].name (_viewportCams[1].recStart as string) (_viewportCams[1].recEnd as string)
+									setCommandPanelTaskMode #modify
+									modPanel.setCurrentObject _objSelect[1].modifiers[#XForm]
+									subobjectLevel = 1
+									
+									lb.message.show "This object have xForm modifier." type:#message
+									xFormMod = true
+								)
+							)
+
+							if xFormMod == false then 
+							(
+								at time _viewportCams[1].recStart (addmodifier _objSelect[i] (XForm()))
+								addNewKey _objSelect[1].modifiers[1].gizmo.controller (_viewportCams[1].recStart - 1)
+								addNewKey _objSelect[1].modifiers[1].gizmo.controller (_viewportCams[1].recStart)
+								addNewKey _objSelect[1].modifiers[1].gizmo.controller (_viewportCams[1].recEnd)
+								addNewKey _objSelect[1].modifiers[1].gizmo.controller (_viewportCams[1].recEnd + 1)
+
+								--set animate on, write doc and select gizmo.
+								animButtonState = true
+								this.writeTXTCheatInfo _viewportCams[1].name  _objSelect[1].name (_viewportCams[1].recStart as string) (_viewportCams[1].recEnd as string)
+								setCommandPanelTaskMode #modify
+								modPanel.setCurrentObject _objSelect[1].modifiers[#XForm]
+								subobjectLevel = 1			
+								lb.message.show "Modifier xForm added to object." type:#message
+							)
+						)
+					)
+				)
+			)
+		),
+
+		------------------------------------------------
+		--@fn: undefined | updateTabsColor | Actualiza el color de los tabs.
+		------------------------------------------------
+		fn updateTabsColor =
+		(
+			--actualiza los tabs
+			for i=1 to this.tabNames.count do
+			(
+				--configura los colores de los tabs
+				this.rollMain.tbTabs.tabPages.item[i-1].Appearance.Header.Font = dotnetobject "system.drawing.font" (dotnetobject "System.Drawing.FontFamily" "Arial") 7
+				this.rollMain.tbTabs.tabPages.item[i-1].Appearance.Header.ForeColor = this.tabForeColor
+				this.rollMain.tbTabs.tabPages.item[i-1].Appearance.Header.BackColor = this.tabBackColor
+				this.rollMain.tbTabs.tabPages.item[i-1].Appearance.Header.BackColor2 = this.tabBackColor2
+				this.rollMain.tbTabs.tabPages.item[i-1].Appearance.Header.BorderColor = this.tabBorderColor
+				
+				this.rollMain.tbTabs.tabPages.item[i-1].Appearance.HeaderActive.Font = dotnetobject "system.drawing.font" (dotnetobject "System.Drawing.FontFamily" "Arial") 8
+				this.rollMain.tbTabs.tabPages.item[i-1].Appearance.HeaderActive.ForeColor = this.tabForeColor
+				this.rollMain.tbTabs.tabPages.item[i-1].Appearance.HeaderActive.BackColor = this.tabBackColorActive
+				this.rollMain.tbTabs.tabPages.item[i-1].Appearance.HeaderActive.BackColor2 = this.tabBackColorActive2
+				this.rollMain.tbTabs.tabPages.item[i-1].Appearance.HeaderActive.BorderColor = this.tabBorderColor
+			)--for
+		),
+
+		------------------------------------------------
+		--@fn: undefined | fillTabsRolloutsDefs | Añade los tabs y las definiciones de los rollouts a los arrays correspondientes para que la herremienta sepa donde están.
+		------------------------------------------------
+		fn fillTabsRolloutsDefs =
+		(
+			this.tabNames = #("Draft Set Tools")
+			this.tabRollouts = #(#(lb.layoutManager.layoutSetReplacer, lb.layoutManager.cheatSetObject))
+			this.tabRolloutsRolledUp = #(#(false, false))
+		),
+
+		------------------------------------------------
+		--@fn: undefined | addTabs | Añade los tabs.
+		------------------------------------------------
+		fn addTabs =
+		(
+			--elimina los tabs actuales
+			this.rollMain.tbTabs.tabPages.clear()
+
+			--añade los tabs
+			for i=1 to this.tabNames.count do
+				this.rollMain.tbTabs.tabPages.add this.tabNames[i] --añade el tab
+			
+			if this.rollMain.tbTabs.tabPages.count != 0 then this.rollMain.tbTabs.TabPageWidth = (this.rollMain.width)/(this.rollMain.tbTabs.tabPages.count) - 17
+
+			--selecciona el tab que estaba seleccionado la ultima vez que se abrio el override
+			if this.rollMain.tbTabs.tabPages.count >= this.selectedTabIndex then
+				this.rollMain.tbTabs.SelectedTabPage = this.rollMain.tbTabs.tabPages.item[this.selectedTabIndex - 1]
+			
+			this.updateTabsColor() --actualiza los colores de los tabs
+			
+			this.addTabRollouts()			
+		),
+
+		------------------------------------------------
+		--@fn: undefined | removeAllTabRollouts | Elimina todos los subrollouts actuales
+		------------------------------------------------
+		fn removeAllTabRollouts =
+		(
+			--elimina los subRollouts actuales
+			while this.subRolloutsContainer.rollouts.count != 0 do RemoveSubRollout this.subRolloutsContainer this.subRolloutsContainer.rollouts[1]
+		),
+
+		------------------------------------------------
+		--@fn: undefined | addTabRollouts | Añade los rollouts del tab actual.
+		------------------------------------------------
+		fn addTabRollouts =
+		(
+			--elimina los subRollouts actuales
+			this.removeAllTabRollouts()
+
+			--añade los subRollouts
+			for i=1 to this.tabRollouts[this.selectedTabIndex].count where this.tabRollouts[this.selectedTabIndex][i] != undefined do
+			(
+				AddSubRollout this.subRolloutsContainer this.tabRollouts[this.selectedTabIndex][i] rolledUp:this.tabRolloutsRolledUp[this.selectedTabIndex][i]
+				this.tabRollouts[this.selectedTabIndex][i].resize [this.rollMain.width, this.rollMain.height]
+			)
+		),
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: boolean | isOpen | Devuelve información true o false, si la herramienta está abierta o cerrada.
+		------------------------------------------------
+		fn isOpen =
+		(
+			this.opened
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | refreshInterface | Refresca el interface inicial de la herramienta
+		------------------------------------------------
+		fn refreshInterface =
+		(
+			--refresca el interface de la herramienta
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | createInterface | Crea el interface inicial de la herramienta
+		------------------------------------------------
+		fn createInterface =
+		(
+			--crea el interface, lo redimensiona y lo reposiciona
+			createDialog this.rollMain lockwidth:false lockheight:false pos:[-10000,0] style:#(#style_toolwindow, #style_titlebar, #style_sysmenu, #style_resizing)
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | destroyInterface | Destruye el interface de la herramienta.
+		------------------------------------------------
+		fn destroyInterface =
+		(
+			destroyDialog this.rollMain --cierra la herramienta.			
+		),--destroyInterface
+		
+		------------------------------------------------
+		--@fn: undefined | run | Lanza la herramienta.
+		------------------------------------------------
+		fn run =
+		(
+			this.createInterface() --crea el interface.
+			this.opened = true --indica que la herramienta está abierta
+		),--execute
+		
+		------------------------------------------------
+		--@fn: undefined | close | Cierra la herramienta.
+		------------------------------------------------
+		fn close =
+		(
+			this.destroyInterface() --destruye el interface.
+			this.opened = false --indica que la herramienta está cerrada.
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addTool this --añade la tool a la libreria principal	
+		)		
+		
+	)--tl_layoutManager
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------	
+	
+	tl_layoutManager() --crea la herramienta
+)

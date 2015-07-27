@@ -1,0 +1,2815 @@
+------------------------------------------------------------------------
+--	POR HACER
+------------------------------------------------------------------------
+--	AÑADIR  BARRA DE SCROLL VERTICAL EN EL GRID
+--	HACER EL PLACE ASSET
+
+
+------------------------------------------------------------------------------------------------------------------------------------------------
+--Descripcion: Herramienta Asset Browser
+------------------------------------------------------------------------------------------------------------------------------------------------
+(
+	------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+	--	STRUCT strSampleObj
+	------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+	struct strSampleObj 
+	(
+		type = undefined,   				-- 	tipo de objeto. Puede ser #assetPreset, #assetFolder, #assetBase, #assetPart, #seqFolder, #folder, #seqFile, #seqPreset
+		subType = undefined, 				--	subtipo de asset. Para ficheros de asset: #mesh, #layout, #facial, #anim... Para ficheros de secuencia #anim, #cache, #render...
+		
+		name = "",							--	ejemplos: "chr_tadeo", "set_canaveral.launchPad", "seq_087", <nombre de la carpeta>
+		versionNumber = undefined,			--	número de versión del asset
+		variation = "",						--	El texto que se encuentra en el nombre dentro de las llaves
+		
+		uiObj = undefined,					--	celda del dataGridView que representa el elemento
+		
+		path = undefined,					--	ruta del asset que representa el elemento
+		fileName = undefined,				-- ruta y nombre del fichero completos (esto último cuando el objeto sea un fichero y no una carpeta) 
+		
+		sampleFile = undefined,				--	imagen de muestra que representa el asset
+		iconFile = undefined,				--	icono que representa el asset
+		checked = #checked,					--	estado del asset o preset (#checked, #unChecked, #warning)
+		
+		------------------------------------------------------------------------
+		--	indica si el objeto representa un fichero o no.
+		------------------------------------------------------------------------
+		fn isAssetFileSample =
+		(
+			_isAssetSample = false
+
+			--SI SE AÑADEN NUEVOS TIPOS DE CARPETAS DE ASSET, EL MANTENIMIENTO SE HACE AQUI
+			_isAssetSample = (findItem #(#assetPreset, #assetBase, #assetPart, #assetAnimBase, #seqFile, #seqPreset) this.type != 0)
+
+			_isAssetSample
+		),
+		
+		------------------------------------------------------------------------
+		--	inicia todas las propiedades del objeto según el tipo 
+		------------------------------------------------------------------------
+		fn init =
+		(
+			--	iniciamos el nombre del asset.
+			if this.name == "" then 
+			(
+				_name = ""
+				
+				--	si estamos tratando una carpeta, su nombre es el último elemento de toda la ruta
+				if not this.isAssetFileSample() then
+				(
+					if this.path != undefined then
+					(
+						_parts = filterString this.path "\\"
+						
+						if _parts.count > 1 then
+						(
+							_name = _parts[_parts.count]
+						)
+					)
+				)
+				------------------------------------------------------------------
+				--	si estamos tratando un fichero, su nombre es el del propio fichero
+				else
+				(
+					if this.fileName != undefined then
+					(
+						case this.type of
+						(	
+							#seqFile:
+							(
+								_parts = filterstring (getFileNameFile this.filename) "_"
+								
+								_name = _parts[1] + "_" + _parts[2] + "_" + _parts[3]
+								if _parts.count == 4 then _name += "_" + _parts[4]
+
+								this.checked = if (lb.fileInfo.isFileChecked this.filename) then #checked else #unChecked
+							)
+
+							#seqPreset:
+							(
+								_parts = filterstring (getFileNameFile this.filename) "_"
+								
+								_name = _parts[1] + "_" + _parts[2] + "_" + _parts[3]
+								if _parts.count == 4 then _name += "_" + _parts[4]
+
+								this.checked = lb.presets.getPresetCheckedState this.filename
+								--this.checked = if (lb.fileInfo.isFileChecked this.filename) then #checked else #unChecked
+							)
+
+							#assetPreset:
+							(
+								_parts = filterstring (getFileNameFile this.fileName) "_"
+								_name = _parts[1] + "_" + _parts[2]
+
+								this.checked = lb.presets.getPresetCheckedState this.filename
+							)
+
+							/*--ESTO SE HACE MAS GENERICO EN EL DEFAULT
+							#assetBase:
+							(
+								_parts = filterstring (getFileNameFile this.fileName) "_"
+								_name = _parts[1] + "_" + _parts[2]
+
+								this.checked = if (lb.fileInfo.isFileChecked this.filename) then #checked else #unChecked
+							)*/
+							
+							/*--ESTO SE HACE MAS GENERICO EN EL DEFAULT
+							#assetPart:
+							(
+								_parts = filterstring (getFileNameFile this.fileName) "_"
+								_name = _parts[1] + "_" + _parts[2]
+
+								this.checked = if (lb.fileInfo.isFileChecked this.filename) then #checked else #unChecked
+							)*/
+
+							default:
+							(
+								if (MatchPattern (toLower (this.type as string)) pattern:"asset*") then
+								(
+									_parts = filterstring (getFileNameFile this.fileName) "_"
+									_name = _parts[1] + "_" + _parts[2]
+
+									this.checked = if (lb.fileInfo.isFileChecked this.filename) then #checked else #unChecked
+								)--if
+							)--default
+						)--case
+					)--if
+				)--if else
+				
+				this.name = _name
+			)
+			
+			--	iniciamos el subtipo y número de versión en caso de que sea un fichero
+			------------------------------------------------------------------
+			if this.isAssetFileSample() then
+			(
+				_fileParts = filterstring (getFileNameFile this.filename) "_"
+				
+				if _fileParts[3] != undefined then
+					this.subType = toLower _fileParts[3]
+				
+				if _fileParts[4] != undefined then
+					this.versionNumber = (substitutestring (toLower _fileParts[4]) "v" "") as integer
+			)
+			
+			--	iniciamos el icono y el sample
+			------------------------------------------------------------------
+			if this.path != undefined then
+			(
+				_sampleFiles = #()
+
+				if this.fileName == undefined then
+				(
+					_sampleFiles = getFiles (this.path + "image\\sample\\" + this.name + "_sample.*")
+					if _sampleFiles.count == 0 then _sampleFiles = getFiles (this.path + "image\\sample\\" + this.name + "(head-std)_sample.*")
+					if _sampleFiles.count == 0 then _sampleFiles = getFiles (this.path + "image\\sample\\" + this.name + "{std-std}_sample.*")
+				)
+				else
+					_sampleFiles = getFiles (this.path + "image\\sample\\" + this.name + "_sample.*")
+				
+				_iconFiles = _sampleFiles
+
+				--ESTO SE HA DESACTIVADO PARA QUE SE SEPA QUE FALTA UN SAMPLE
+				/*-- Si no se ha encontrado sample o icono miramos si estamos en un preset e intentamos capturar las imágenes estándar
+				--if _sampleFiles.count == 0 then _sampleFiles = getFiles (this.path + "image\\sample\\" + (filterstring this.name "{}")[1] + "_sample.*")
+				--if _iconFiles.count == 0 then _iconFiles = getFiles (this.path + "image\\icon\\" + (filterstring this.name "{}")[1] + "icon.*")*/
+								
+				-- De todos los iconos e imágenes que pueda haber nos quedamos solo con la primera
+				if _sampleFiles.count > 0 then sampleFile = _sampleFiles[1]
+				if _iconFiles.count > 0 then iconFile = _iconFiles[1]
+			)
+
+			_sampleName = tolower this.name
+			if matchPattern _sampleName pattern:"*{*-*}" then
+			(
+				_startIndex = findString _sampleName "{"
+				this.variation = substring _sampleName (_startIndex+1) ((findString _sampleName "-") - _startIndex - 1)
+			)
+			else if matchPattern _sampleName pattern:"*(*-*)" then
+			(
+				_startIndex = findString _sampleName "("
+				this.variation = substring _sampleName (_startIndex+1) ((findString _sampleName "-") - _startIndex - 1)
+			)
+			else if (findItem #(#assetPreset, #assetBase, #assetPart) this.type) != 0 do
+			(
+				this.variation = "_old_"
+			)
+		),
+		
+		------------------------------------------------------------------------
+		on create do
+		(
+			this.init()
+		)
+	)
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollMain | Contiene la herramienta plantilla.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollMainDef "Asset Browser"  width:945 height:530
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) --@var : parent | Herramienta o rolllout del que depende y/o contiene el rollout actual
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		local dialogWidth 
+		local dialogHeight 
+		local minRollWidth = 785		--anchura minima del rollout
+		local minRollHeight = 550		--altura minima del rollout
+		
+		local iniFile = (toolsCfgPath + "\\assetBrowser.ini")
+		
+		local iconPath = if (maxVersion())[1] >= 15000 then (getDir #maxRoot) + "UI_ln\\Icons\\" else (getDir #ui) + "/icons/"			-- ruta de los iconos de Max.
+		local imagesPath = (getDir #maxRoot) + "stdplugs\\stdscripts\\lbTools\\image\\"
+		
+		local editMode = #asset								-- tipo de navegación. Puede ser por assets (#asset) o por secuencias (#sequence)
+		local updatingTabs = false		--indica si se estan acutalizando los tabs para no entrar en bucle infinito de eventos
+		
+		local assetsFolder 				= "asset\\"				-- ruta de los assets
+		local sequencesFolder 			= "sequence\\"			-- ruta de los assets
+		
+		local assetIconFolder	 		= "image\\icon\\"		-- ruta de los iconos de cada asset
+		local assetSampleFolder 		= "image\\sample\\"		-- ruta de los samples de cada asset
+		local assetModelsFilesFolder 	= "version\\model\\"	-- ruta donde se almacenan los ficheros base del asset
+		local assetPartsFilesFolder 	= "version\\part\\"		-- ruta donde se almacenan los ficheros de partes del asset
+		local assetPresetFilesFolder 	= "version\\preset\\"	-- ruta donde se almacenan los presets del asset
+		
+		local projectFolder = "z:\\"							-- ruta de almacenamiento del proyecto
+		local basePath = ""										-- path inicial
+		local currentPath = ""									-- path en el que estamos navegando actualmente
+		local lastSessionPath = ""								-- path en el que se cerró la anterior sesión
+		local samplesCache = #()								-- array para almacenar los samples en caché
+		local samplesCacheFolders = #()							-- array para indicar de que directorio son los elementos de cada subarray de samplesCache (como un dict)
+		local samplesCachePath = ""								-- path del que tenemos cacheados los samples
+		
+		local nonListableFolders = #(".svn", "auxiliary", "doc", "documentation", "image")
+			
+		local currentSamples = #()
+		local selectedSamples = #()
+			
+		local lblAssetNeutralColor = (dotNetClass "System.Drawing.Color").fromARGB 127 127 127 --color del asset neutral
+		local lblAssetCheckedColor = (dotNetClass "System.Drawing.Color").fromARGB 80 255 80 --color del asset checkeado
+		local lblAssetPartialCheckedColor = (dotNetClass "System.Drawing.Color").fromARGB 255 169 0 --color del asset parcialmente checkeado
+		local lblAssetWarningColor = (dotNetClass "System.Drawing.Color").fromARGB 255 112 0 --color del asset en warning
+		local lblAssetUnCheckedColor = (dotNetClass "System.Drawing.Color").fromARGB 255 40 40 --color del asset sin checkear
+		
+		local assetsCheckedState = false 				--estado de los assets seleccionados en el grid
+		
+		local lblAssetCheckedNeutralText = "" 			--texto de los que no son assets
+		local lblAssetCheckedText = "OK"			 	-- texto de los checks pasados
+		local lblAssetPartialCheckedText = "Some OK" 	-- texto de los checks pasados
+		local lblAssetWarningText = "Warning" 		-- texto de los checks no pasados
+		local lblAssetNonCheckedText = "UnChecked" 		-- texto de los checks no pasados
+		
+		local selGridAssets = #() --array con los nombres de los assets seleccionados en el grid
+		
+		local lvBackColor = (dotNetClass "System.Drawing.Color").fromARGB 168 168 180
+		local trvNodeBackColor = (dotNetClass "System.Drawing.Color").white
+		local trvNodeForeColor = (dotNetClass "System.Drawing.Color").black
+		local trvNodeSelBackColor = (dotNetClass "System.Drawing.Color").fromARGB 93 154 255
+		local oldTrvNode = undefined
+		
+		--cell vars---------------------------------------------------------------------------
+		local lvIconWidth = 136			--anchura de una celda
+		local lvIconHeight = 136		--anchura de una celda
+		local lvTitleHeight = 25		--altura de las celdas de titulo de categoria
+		
+		--imágenes predefinidas para los samples ---------------------------------------------------
+		local noIconBitmap = bitmap 25 25 color:black
+		local assetsImage = dotnetObject "System.Drawing.Bitmap" (imagesPath + "\\lbImages_assetIcons.tif")
+		local sequencesImage = dotnetObject "System.Drawing.Bitmap" (imagesPath + "\\lbImages_sequence.tif")
+		local folderImage = dotnetObject "System.Drawing.Bitmap" (imagesPath + "\\lbImages_folder.tif")
+		local previousFolderImage = dotnetObject "System.Drawing.Bitmap" (imagesPath + "\\lbImages_levelUp.png") 
+		local skeletonImage = dotnetObject "System.Drawing.Bitmap" (imagesPath + "\\lbImages_skeletonIcon.tif") 
+		local addonsImage = dotnetObject "System.Drawing.Bitmap" (imagesPath + "\\lbImages_addonsIcon.tif") 
+		
+		local commonImages = #(assetsImage, sequencesImage, folderImage, previousFolderImage, skeletonImage, addonsImage)
+		
+		local imageSizeStep = 10
+		
+		--Cursor---------------------------------------------------------------------------
+		local cursor = dotNetClass "Windows.Forms.Cursor"
+		
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		
+		GroupBox grpProjectFolder "" pos:[5,0] width:255 height:35
+		label lblProjectFolder "Project folder" pos:[15,13] width:70 height:15
+		edittext edtProjectFolder "" pos:[80,10] width:100 height:20 readOnly:true
+		button btnBrowse "..." pos:[180,10] width:20 height:20
+		button btnRefresh "Refresh" pos:[205,10] width:50 height:20
+		
+		GroupBox grpProjectName "" pos:[265,0] width:420 height:35
+		label lblProjectNameCaption "Project Name:" pos:[275,15] width:70 height:15
+		dotnetControl lblProjectName "System.Windows.Forms.Label" pos:[350,13] width:170 height:15 text:"<UNKNOWN PROJECT>"
+		
+		GroupBox grpEditMode "" pos:[690,0] width:250 height:35
+		label lblEditMode "Mode" pos:[700,13] width:35 height:15
+		checkbutton ckbModeAssets "Assets" pos:[735,10] width:100 height:20
+		checkbutton ckbModeSequences "Sequences" pos:[835,10] width:100 height:20
+		
+		edittext edtFindNode "" pos:[0,45] width:169 height:17
+		button btnSearch "->" pos:[174,45] width:17 height:17 border:false images:#(iconPath + "TrackViewStatus_16i.bmp", undefined, 27, 13, 13, 13, 13, true)
+		dotNetControl trvExplorer "system.windows.forms.treeView" pos:[5,65] width:185 height:460
+		
+		checkbutton ckbPresetInfo "" pos:[765,505] width:22 height:20 toolTip:"Preset File Info" images:#((lb.config.getCustomIconsPath()) + "miscIcons001_16i.bmp", undefined, 50, 25, 25, 26, 26, true) border:false
+
+		dotNetControl lblAssetFolder "system.windows.forms.label" pos:[195,505] width:475 height:20
+		dotNetControl lblAssetChecked "system.windows.forms.label" pos:[675,505] width:85 height:20
+		dotNetControl btnRefreshFolder "system.windows.forms.button" text:"↺" pos:[665,40] width:25 height:25 
+		dotNetControl btnIconSizeUp "system.windows.forms.button" text:"+" pos:[700,40] width:25 height:25 
+		dotNetControl btnIconSizeDown "system.windows.forms.button" text:"-" pos:[725,40] width:25 height:25 
+		dotNetControl bmpIcon "system.windows.forms.pictureBox" pos:[760,40] width:25 height:25 
+		
+		dotNetControl tbFileTypes "DevExpress.XtraTab.XtraTabControl" pos:[195,45] width:470 height:20
+		dotNetControl lvNavigation "System.Windows.Forms.listView" pos:[195,65] width:590 height:435
+		
+		label lblAssetVariations "Variations" pos:[795,65] width:50 height:14
+		button btnAllVariations "All" pos:[850,65] width:28 height:14
+		button btnNoneVariations "None" pos:[881,65] width:28 height:14
+		button btnInvVariations "Inv" pos:[912,65] width:28 height:14
+		dotNetControl dgvAssetVariations "System.Windows.Forms.DataGridView" pos:[790,80] width:150 height:100
+
+		label lblAssetType "Asset Type" pos:[795,201] width:80 height:15
+		checkbox chkAssetSubTypeFilter "Filter" pos:[897,201] width:50 height:15 checked:false
+		listbox lbxAssetSubType "" pos:[790,216] width:150 height:8 selection:1
+		listbox lbxAssetSubTypeFilter "" pos:[790,216] width:150 height:8 selection:1
+		label lblVersionNumber "Type version" pos:[795,335] width:70 height:15
+		dropdownList ddlVersionNumber "" pos:[885,330] width:55 height:21
+		
+		groupBox grpLoadOptions "Load options" pos:[790,355] width:150 height:140
+		radiobuttons rdoAssetLoadType "" pos:[800,375] width:104 height:80 enabled:false labels:#("Open", "Merge", "xRefScene", "xRefObjects", "xRefMeshObjects", "xRefMeshObjectsAll") columns:1
+		radiobuttons rdoPresetLoadType "" pos:[800,375] width:104 height:80 enabled:false labels:#("Load", "Load (new scene)", "Create Anim Base") columns:1
+		button btnLoad "Load" pos:[790,500] width:75 height:25 toolTip:"Load assets in original position"
+		checkbutton ckbPlace "Place" pos:[865,500] width:75 height:25 toolTip:"Place assets in picked viewport position"
+		checkbox chkRenameParts "Rename Asset Parts" pos:[800,436] width:125 height:15 checked:true
+		checkbox chkRenamePartsMaterials "Rename Parts Materials" pos:[800,453] width:130 height:15 checked:false
+		checkbox chkAutoGrid "AutoGrid (place only)" pos:[800,470] width:125 height:15 checked:false
+		
+		dotNetControl rMenu "System.Windows.Forms.ContextMenuStrip"
+		
+		------------------------------------------------------------------------------------------------
+		--TOOLS
+		------------------------------------------------------------------------------------------------
+		
+		----------------------------------------------------------------------------------
+		--@tool: placeAsset | Permite hacer copias del asset seleccionado haciendo click en viewport
+		----------------------------------------------------------------------------------
+		tool placeAsset
+		(
+			local askForUpdate = true
+			
+			on mousePoint clickNumber do
+			(
+				with undo off
+				(
+					if clickNumber > 1 then 	-- Los click 1 y 2 se lanzan simultáneamente. Ignoramos el primero.
+					(
+						newPos = worldPoint --posicion del grid donde ha hecho click el raton
+						
+						if chkAutoGrid.checked then
+						(
+							clickRay = mapScreenToWorldRay mouse.pos
+							
+							try --lo metemos en un try ya que no logramos averiguar en que ocasiones salta (cuando hay un set por xrefScene)
+							(
+								collisionObjects = geometry as array --almacenamos toda la geometria (incluidos huesos) de la escena (excepto los xrefScene objects que no los reconoce como tal)
+								
+								for ast in lb.asset.sceneAssets do --recopila tambien todos los nodos de mesh y rig de cada asset
+								(
+									collisionObjects += ast.meshNodesAll
+									collisionObjects += ast.rigNodesAll
+								)
+								
+								collisionObjects = makeUniqueArray collisionObjects
+								
+								intersectedFound = #() --array de intersecciones encontradas
+								
+								for o in collisionObjects do --busca la interseccion del rayo con cada objeto
+								(
+									auxRay = intersectRay o clickRay --lanza la interseccion
+									if auxRay != undefined do append intersectedFound (#(o, auxRay))
+								)
+									
+								if intersectedFound.count != 0 do --si el rayo ha colisionado con algun objeto de la escena
+								(
+									auxItersected = for item in intersectedFound where not item[1].isHidden collect #(item[1], item[2], (distance clickRay.pos item[2].pos))
+									qsort auxItersected (rollMainDef.sortByHitDistance)
+									
+									newPos = auxItersected[1][2].pos
+								)
+							)
+							catch (lb.message.show "Asset/s can not be placed y picked surface. It will be placed on the ground." type:#message pos:undefined size:[300,75] modal:true)
+						)--if chkAutoGrid
+						
+						assetsBefore = lb.asset.getSceneAssets() --assets antes de cargar los nuevos
+						assetsBeforeNames = for ast in assetsBefore collect ast.fullname
+						
+						process = true --flag para saber si hay que cargar los assets
+						message = "" --mensaje para mostrar en caso de que haya que actualizar assets o haya algun conflicto
+						
+						
+						------------------------------------------------------------------------------------------------------------------
+						------------------------------------------------------------------------------------------------------------------
+						if askForUpdate then
+						(
+							--averigua si los archivos que va a cargar están actualizados con subversion
+							--si están sin actualizar pregunta si quieres actualizarlos
+							--si hay alguno con algun otro conflicto te lo indica para avisarte
+							
+							--averigua cuales son los archivos que se van a cargar para preguntarles si están actualizados---------
+							assetType = rollMainDef.getCurrentAssetType()
+							
+							assetPrefix = ""
+								
+								
+							if ckbSetTypeSet.enabled then
+							(
+								if ckbSetTypeSet.checked then
+									assetPrefix = lb.nc.NC_setPrefix + "*"
+								else if ckbSetTypeSpr.checked then
+									assetPrefix = lb.nc.NC_sprPrefix + "*"
+							)
+							
+							currFolder = rollMainDef.getCurrentPath() --folder del nodo seleccionado del treeview
+							isAsset = rollMainDef.isAssetFolder currFolder --averigua si es un folder de asset o no
+							
+							files = #() --rutas de los ficheros de los que cargar assets
+							_subType = if chkAssetSubTypeFilter.checked == false then lbxAssetSubType.selected else lbxAssetSubTypeFilter.selected
+							
+							if isAsset then --si es un folder de asset obtiene el path del archivo a cargar
+								files = #((getfiles (rollMainDef.getCurrentPath() + "version\\*" + assetPrefix + _subType + "_v" + ddlVersionNumber.selected + ".max"))[1])
+							else if selGridAssets.count != 0 then
+							(--si el folder actual no es de asset pero en el grid hay seleccionados assets, hay que cargar todos los seleccionados
+								--obtiene la version de asset seleccionada, para buscar el la carpeta adecuada
+								vers = lbxAssetVersion.selected
+								
+								if lbxAssetVersion.selected == undefined or vers == mainVersionName then
+									vers = ""
+								else
+									vers = "-" + vers
+								
+								for selAst in selGridAssets do
+									files += (getfiles (selAst + vers + "\\version\\*" + assetPrefix + _subType + "_v" + ddlVersionNumber.selected + ".max"))
+							)
+							
+							states = #()
+							someNeedsUpdate = false
+							someHasConflict = false
+							
+							_svnInfo = #() --informacion de svn para pasar al resto de funciones de svn y que tarden menos
+							
+							for f in files do --rellena un array con los estados de los assets
+							(
+								_svnInfo += lb.svn.svnGetFolderStatus (getFilenamePath f)
+								
+								if svnIsFileVersioned f statusInfo:_svnInfo then
+								(	
+									status = lb.svn.svnGetFileStatus f statusInfo:_svnInfo --obtiene el estado
+									append states status --almacena el estado
+									
+									isUpdated = lb.svn.svnIsFileUpdated f statusInfo:_svnInfo --obtiene si esta actualizado o no
+									
+									if not isUpdated then --si no esta actualizado
+									(
+										if status == "G" or status == "R" or status == "U" or status == "*" then
+											someNeedsUpdate = true
+										else
+											someHasConflict = true
+										
+										message += f + "-> "
+									)--if
+								)--if
+							)--for
+							
+							if someNeedsUpdate then message += "\nUPDATE needed.\n"
+							else if someHasConflict then message += "\nCONFLICT with server.\n"
+							
+							successUpdate = true --flag para saber si se han hecho bien los updates
+							
+							if someNeedsUpdate then
+							(
+								message += "\nDo you want to UPDATE before loading?"	
+								updateFiles = yesNoCancelBox message
+								
+								if updateFiles == #yes then --si se ha dicho YES, hacemos los update necesarios
+								(
+									for i=1 to files.count where states[i] == "G" or states[i] == "R" or states[i] == "U" or states[i] == "*" do
+									(
+										--svnUpdate files[i]
+										--Sacamos la ruta de la etiqueta de arriba. Luego quitamos el nombre de archivo y la carpeta version para actualizar toda la carpeta.
+										ShellLaunch (substituteString (getFilenamePath files[i]) "version\\" "") ""
+										process = false
+										--if  not lb.svn.svnIsFileUpdated files[i] then --si sigue sin estar actualizada
+										--	successUpdate = false
+									)
+								)
+								else if updateFiles == #cancel then process = false --si se ha cancelado no cargamos nada
+							)
+							else if someHasConflict then
+							(
+								message += "\nDo you want to continue with the asset loading?"	
+								process = queryBox message
+							)--if else
+							
+							--si no ha hecho bien los updates damos la opcion de continuar o no
+							if process and not successUpdate then
+								process = queryBox "Some assets weren't updated successfully.\nDo you want to load it/them anyway?"
+							
+						)--if askForUpdate
+						------------------------------------------------------------------------------------------------------------------
+						------------------------------------------------------------------------------------------------------------------
+						roots = #()
+						
+						if process then
+						(
+							askForUpdate = false
+							setWaitCursor()
+							roots = rollMainDef.loadAssets() --carga los assets y almacena los roots
+							setArrowCursor()
+						)
+						else
+							stopTool placeAsset
+											
+						assetsAfter = lb.asset.getSceneAssets() --assets despues de cargar los nuevos
+						newAssets = #() --array donde almacenar solo los nuevos
+						
+						for ast in assetsAfter where findItem assetsBeforeNames ast.fullname == 0 do
+							append newAssets ast
+						
+						if newAssets.count != 0 then --if roots.count != 0 then --si ha cargado assets
+						(
+							mainAssetsNames = #() --array con los nombres de los assets principales, para evitar que se repitan
+							mainAssets = #() --array para almacenar los assets principales de cada grupo de assets dependientes
+								
+							tempAssets = lb.asset.getAssetsFromNodes roots --obtiene los assets que se acaban de cargar
+							
+							for a in newAssets do --for a in tempAssets do --obtiene los assets que son principales entre los que acaba de cargar
+							(
+								depAssets = lb.asset.getDependencygroup a assetsAfter --tempAssets
+								for da in depAssets where not da.isDependent do
+									if appendIfUnique mainAssetsNames da.fullname do
+										appendIfUnique mainAssets da
+							)
+							
+							-------------------------------------------------------------------------------------------------------------------------------
+							if mainAssets.count > 1 then --si hay varios assets principales que cargar los carga con la posicion relativa
+							(
+								currentPos = newPos
+								prevAsset = 0
+								prevPos = newPos
+								prevWidth = 0.0
+								--recorre los assets colocandolos a partir del punto elegido con un offset
+								for i=1 to mainAssets.count do
+								(
+									BBcurrent = lb.geometry.getNodesBoundingBox mainAssets[i].nodes (matrix3 1)
+									currentWidth = ((BBcurrent[2].x - BBcurrent[1].x)/2.0)
+									
+									if i==1 then --si es el primero del listado
+										currentPos = newPos
+									else
+										currentPos = prevPos + [(currentWidth + prevWidth),0,0] --prevRoot.pos + [(((BBprev[2].x - BBprev[1].x)/2.0) + ((BBcurrent[2].x - BBcurrent[1].x)/2.0) + 10), 0, 0]
+									
+									root = (lb.asset.getAssetRootNode mainAssets[i])
+									
+									if root != undefined then --si el asset tiene root o base
+									(
+										root.pos = currentPos								
+										prevAsset = i --indica al indice del ultimo asset que se ha conseguido colocar
+									)
+									else if mainAssets[i].meshNodesAll.count != 0 then --si no hay rig, pero si mayas
+									(
+										prevAsset = i --indica al indice del ultimo asset que se ha conseguido colocar
+										minCenterPos = [(BBcurrent[1].x + BBcurrent[2].x)/2.0, (BBcurrent[1].y + BBcurrent[2].y)/2.0, BBcurrent[1].z]
+										
+										for obj in mainAssets[i].nodes where obj.parent == undefined do
+										(
+											obj.pos = (obj.pos - minCenterPos) + currentPos
+										)
+									)
+									
+									prevPos = currentPos
+									prevWidth = (currentWidth + 10)
+								)--for assets
+								
+								--una vez colocados necesitamos el bounding box general de todos ellos para centrarlos
+								mainAssetsObjects = #()
+								for a in mainAssets do mainAssetsObjects += a.nodes
+								
+								BBgeneral = lb.geometry.getNodesBoundingBox mainAssetsObjects (matrix3 1)
+								generalOffset = abs (((BBgeneral[2].x + BBgeneral[1].x)/2.0) - newPos.x)
+								
+								for i=1 to mainAssets.count do
+								(
+									BBcurrent = lb.geometry.getNodesBoundingBox mainAssets[i].nodes (matrix3 1)
+									root = (lb.asset.getAssetRootNode mainAssets[i])
+									
+									if root != undefined then --si el asset tiene root o base
+										root.pos.x -= generalOffset
+									else if mainAssets[i].meshNodesAll.count != 0 then --si no hay rig, pero si mayas
+										for obj in mainAssets[i].nodes where obj.parent == undefined do
+											obj.pos.x -= generalOffset								
+									
+								)--for assets
+								
+							)
+							else --si solo  hay un asset que cargar lo carga con la posicion absoluta
+							(
+								--------------------------------------------------------------------------------------------
+								if mainAssets[1].rigNodesAll.count != 0 then --si hay objetos de tipo rig
+								(
+									(lb.asset.getAssetRootNode mainAssets[1]).pos = newPos
+								)
+								else if mainAssets[1].meshNodesAll.count != 0 then --si no hay rig, pero si mayas
+								(
+									BBcurrent = lb.geometry.getNodesBoundingBox mainAssets[1].nodes (matrix3 1)
+									minCenterPos = [(BBcurrent[1].x + BBcurrent[2].x)/2.0, (BBcurrent[1].y + BBcurrent[2].y)/2.0, BBcurrent[1].z]
+									
+									for obj in mainAssets[1].nodes where obj.parent == undefined do
+										obj.pos = (obj.pos - minCenterPos) + newPos
+								)
+								----------------------------------------------------------------------------------------------
+							)--if mainassets--------------------------------------------------------------------------------
+									
+						)--if roots
+						
+						--stopTool placeAsset
+					)
+				)
+			)
+				
+			on stop do
+			(
+				ckbPlace.checked = false
+			)
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--almacena posicion
+			lb.xml.setAttribute parent.cfgFile ("rollMain/pos") "x" (((getDialogPos rollMainDef).x) as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/pos") "y" (((getDialogPos rollMainDef).y) as string)
+			
+			--almacena tamaño
+			lb.xml.setAttribute parent.cfgFile ("rollMain/size") "width" (rollMainDef.width as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/size") "height" (rollMainDef.height as string)
+ 			
+ 			--propiedades específicas
+			lb.xml.setAttribute parent.cfgFile ("rollMain/main") "projectFolder" projectFolder
+			lb.xml.setAttribute parent.cfgFile ("rollMain/main") "editMode" (editMode as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/main") "iconWidth" (lvIconWidth as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/main") "iconHeight" (lvIconHeight as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/main") "lastSessionPath" (rollMainDef.getCurrentPath())
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			--inicializa los valores.
+			_width = 0; _height = 0
+			_posX = 0; _posY = 0
+			projectFolder = ""
+			editMode = ""
+			_lastSessionPath = ""
+			
+			--lee los valores
+			if doesFileExist parent.cfgFile then
+			(
+				--tamaño
+				_width = (lb.xml.getAttribute parent.cfgFile ("rollMain/size") "width") as integer
+				_height = (lb.xml.getAttribute parent.cfgFile ("rollMain/size") "height") as integer
+				
+				--posicion
+				_posX = (lb.xml.getAttribute parent.cfgFile ("rollMain/pos") "x") as integer
+				_posY = (lb.xml.getAttribute parent.cfgFile ("rollMain/pos") "y") as integer
+				
+				--propiedades específicas
+				projectFolder = (lb.xml.getAttribute parent.cfgFile ("rollMain/main") "projectFolder")
+				editMode = (lb.xml.getAttribute parent.cfgFile ("rollMain/main") "editMode")
+				_iconWidth = (lb.xml.getAttribute parent.cfgFile ("rollMain/main") "iconWidth") as integer
+				_iconHeight = (lb.xml.getAttribute parent.cfgFile ("rollMain/main") "iconHeight") as integer
+				_lastSessionPath = (lb.xml.getAttribute parent.cfgFile ("rollMain/main") "lastSessionPath")
+			)
+			
+			--establece minimos
+			if _width < minRollWidth then _width = rollMainDef.width
+			if _height < minRollHeight then _height = rollMainDef.height
+			if _posX < 1 then _posX = 300
+			if _posY < 1 then _posY = 200
+			if projectFolder == "" then projectFolder = "y:\\"
+			if projectFolder[projectFolder.count] != "\\" then projectFolder = projectFolder + "\\"
+			if editMode == "" then editMode = #asset else editMode = editMode as name
+			if _iconWidth == 0 then _iconWidth = lvIconWidth
+			if _iconHeight == 0 then _iconHeight = lvIconHeight
+
+			--aplica los valores
+			rollMainDef.width = _width
+			rollMainDef.height = _height
+			rollMainDef.setIconSize [_iconWidth, _iconHeight]
+			setDialogPos rollMainDef [_posX,_posY]
+			edtProjectFolder.text = projectFolder
+			rollMainDef.fillProjectName()
+			rollMainDef.lastSessionPath = _lastSessionPath
+		)
+		
+		---------------------------------------------------------------------------
+		--@fn: undefined | initUI | inicia todos los controles gráficos del interface
+		---------------------------------------------------------------------------
+		fn initUI =
+		(
+			_uiBackColor = (dotnetclass "system.drawing.color").fromArgb 68 68 68
+			
+			--	ruta del proyecto
+			edtProjectFolder.text = projectFolder 
+			
+			--	Nombre del proyecto
+			lblProjectName.backColor = _uiBackColor
+			lblProjectName.foreColor = (dotnetclass "system.drawing.color").white
+			lblProjectName.font = dotnetobject "system.drawing.font" (dotnetobject "System.Drawing.FontFamily" "Arial") 10 (dotnetclass "system.drawing.fontstyle").bold
+			lblProjectName.text = "<UNKNOWN PROJECT>"
+			
+			-- Label de la ruta del asset
+			lblAssetFolder.backColor = (dotnetClass "system.drawing.color").lightGray
+			lblAssetFolder.textAlign = (dotnetclass "system.drawing.contentAlignment").middleleft
+			lblAssetFolder.borderStyle = (dotnetclass "system.windows.forms.borderStyle").fixedSingle
+			--lblAssetFolder.font = dotnetobject "system.drawing.font" (dotnetobject "System.Drawing.FontFamily" "Arial") 11 (dotnetclass "system.drawing.fontstyle").bold
+			lblAssetFolder.text = currentPath
+			
+			--	botones de tamaño de iconos
+			btnRefreshFolder.flatStyle = btnIconSizeUp.flatStyle = btnIconSizeDown.flatStyle = (dotnetclass "System.Windows.Forms.FlatStyle").flat
+			btnRefreshFolder.backColor = btnIconSizeUp.backColor = btnIconSizeDown.backColor = lvBackColor
+			
+			--	Icono del asset
+			bmpIcon.backcolor = lvBackColor
+			bmpIcon.sizeMode = (dotnetclass "System.Windows.Forms.PictureBoxSizeMode").stretchImage
+			
+			-- Label que indica si el asset está checkeado
+			lblAssetChecked.textAlign = (dotnetclass "system.drawing.contentAlignment").middlecenter
+			lblAssetChecked.borderStyle = (dotnetclass "system.windows.forms.borderStyle").fixedSingle
+			lblAssetChecked.font = dotnetobject "system.drawing.font" (dotnetobject "System.Drawing.FontFamily" "Arial") 9 (dotnetclass "system.drawing.fontstyle").bold
+			lblAssetChecked.backColor = lblAssetNeutralColor
+			lblAssetChecked.text = lblAssetCheckedNeutralText
+			
+			--	TreeView de navegación
+			trvExplorer.borderStyle = (dotnetclass "system.windows.forms.borderStyle").none
+			trvExplorer.fullRowSelect = true
+			
+			--	Tabs
+			tbFileTypes.backColor = _uiBackColor
+			tbFileTypes.paintstylename = "PropertyView"
+			tbFileTypes.borderStyle = (dotnetclass "DevExpress.XtraEditors.Controls.BorderStyles").noBorder
+			if (maxversion())[1] >= 15000 then (tbFileTypes.TabPageWidth = 50)
+			
+			--	Listview de navegación y de selección de modelo
+			lvNavigation.backcolor = lvBackColor								
+			lvNavigation.scrollable = true
+			lvNavigation.hideselection = false
+			lvNavigation.View = (dotNetClass "System.Windows.Forms.View").largeIcon
+			lvNavigation.largeimagelist = dotnetobject "System.Windows.Forms.ImageList"
+			lvNavigation.largeimagelist.colordepth = (dotnetclass "system.windows.forms.colordepth").depth32bit
+ 			--lvNavigation.largeimagelist.images.addRange commonImages
+
+ 			--DataGridView
+ 			dgvAssetVariations.allowUsertoaddRows = false -- No dejamos agregar columnas
+			dgvAssetVariations.allowUserToResizeRows = false -- No dejamos escalar filas
+			dgvAssetVariations.allowUserToResizeColumns = false -- No dejamos escalar columnas
+			dgvAssetVariations.AllowUserToOrderColumns = false 	-- No dejamos ordenar columnas
+
+			dgvAssetVariations.columnHeadersVisible = false									--Para que las columnas no tengan titulo
+			dgvAssetVariations.rowheadersvisible = false									--Para que las filas no tengan titulo
+			
+			dgvAssetVariations.readonly = false 					--No modificable
+			dgvAssetVariations.multiSelect = false				--Sin multiselección
+			dgvAssetVariations.showCellTooltips = false			--Mostrar tooltips de las celdas
+			dgvAssetVariations.selectionMode = (dotnetClass "System.Windows.Forms.DataGridViewSelectionMode").fullRowSelect	--Selección de fila completa
+
+			_rowStyle = (dotnetObject "System.Windows.Forms.DataGridViewCellStyle")
+			_rowStyle.selectionBackcolor = dgvAssetVariations.backcolor
+			_rowStyle.selectionForecolor = dgvAssetVariations.forecolor
+			dgvAssetVariations.rowsDefaultCellStyle = _rowStyle
+
+			_column = (dotnetobject "System.Windows.Forms.DataGridViewCheckBoxColumn")
+			_column.readOnly = false
+			_column.width = 20
+			_column.sortmode = (dotnetclass "System.Windows.Forms.DataGridViewColumnSortMode").notSortable
+			dgvAssetVariations.columns.add _column
+
+			_column = (dotnetobject "System.Windows.Forms.DataGridViewTextBoxColumn")
+			_column.width = 125
+			_column.readOnly = true
+			_column.sortmode = (dotnetclass "System.Windows.Forms.DataGridViewColumnSortMode").notSortable
+			dgvAssetVariations.columns.add _column
+
+			--Filtro de subtipos
+			lbxAssetSubTypeFilter.items = #(lb.nc.NC_animFileName, lb.nc.NC_facialFileName, lb.nc.NC_meshFileName, lb.nc.NC_layoutFileName, lb.nc.NC_draftFileName, lb.nc.NC_morphFileName, lb.nc.NC_hairFileName, lb.nc.NC_clothFileName, lb.nc.NC_fxFileName)
+			lbxAssetSubTypeFilter.visible = false
+			chkAssetSubTypeFilter.checked = false
+		)
+		
+		--------------------------------------------------------------------------------------
+		--@fn: undefined | setIconSize | cambia el tamaño de los iconos al indicado en el parámetro SIZE
+		--@gets: integer | size | tamaño horizontal del icono. También puede valer #up #down o #reset
+		--------------------------------------------------------------------------------------
+		fn setIconSize size =
+		(
+			_oldSize = lvNavigation.largeImageList.imageSize
+			_newSize = undefined
+			_iconSpacing = 20
+			
+			if (classOf size == point2) then _newSize = dotNetObject "system.drawing.size" size.x size.y
+			if size == #up then _newSize = dotNetObject "system.drawing.size" (_oldSize.width + imageSizeStep) (_oldSize.height + imageSizeStep)
+			if size == #down then _newSize = dotNetObject "system.drawing.size" (_oldSize.width - imageSizeStep) (_oldSize.height - imageSizeStep)
+			if size == #reset then _newSize = dotNetObject "system.drawing.size" lvIconWidth lvIconHeight
+			
+			if _newSize.Width < 1 then _newSize.Width = 1
+			if _newSize.Height < 1 then _newSize.Height = 1
+			if _newSize.Width > 256 then _newSize.Width = 256
+			if _newSize.Height > 256 then _newSize.Height = 256
+
+			lvNavigation.largeImageList.imageSize = _newSize
+			
+			--	la separación entre iconos no puede regularse mediante un parámetro del listView, pero sí con un mensaje directo de windows a la memoria del handle del listView
+			windows.sendMessage lvnavigation.handle (0x1000 + 53) 0 ((_newSize.width+_iconSpacing) + ((_newSize.height + 20 + _iconSpacing) * 65536)) 
+			
+			--	como las imágenes se pierden al cambiar el tamaño de los iconos, restablecemos las comunes y rellenamos de nuevo el samplesGrid
+			lvNavigation.largeimagelist.images.addRange commonImages
+			rollMainDef.fillSamplesGrid()
+		)
+		
+		--------------------------------------------------------------------------------------
+		--@fn: undefined | menuItemClickedProcess | Procesa de forma genérica todos los menús de botón derecho de la herramienta según su texto. No pueden existir dos opciones de menú derecho que se llamen iguales ni entre distintos menús
+		--@gets: string | menuText | nombre de la opción que hay que pulsar
+		--------------------------------------------------------------------------------------
+		fn menuItemClickedProcess menuText =
+		(
+			case menuText of
+			(
+				"Open in explorer window": rollMainDef.openSamplesInExplorer()
+				
+				"SVN Update": rollMainDef.svnUpdate()
+				"SVN Cleanup": rollMainDef.svnCleanup()
+				"SVN Selective Updater": rollMainDef.svnSelectiveUpdate()
+				
+				"Show Fx Preview": rollMainDef.loadFxPreview()
+
+				"Load": rollMainDef.loadAssets renameParts:rollMainDef.chkRenameParts.checked renamePartsMaterials: rollMainDef.chkRenamePartsMaterials.checked
+				"Load (new scene)": rollMainDef.loadAssets mode:#loadNewScene renameParts:rollMainDef.chkRenameParts.checked
+				
+				"Open": rollMainDef.loadAssets mode:#open 
+				"Merge": rollMainDef.loadAssets mode:#merge 
+				"Load xRefScene": rollMainDef.loadAssets mode:#xRefScene 
+				"Load xRefObjects": rollMainDef.loadAssets mode:#xRefObjects 
+				"Load xRefMeshObjects": rollMainDef.loadAssets mode:#xRefMeshObjects 
+				"Load xRefMeshObjectsAll": rollMainDef.loadAssets mode:#xRefMeshObjectsAll 
+				
+				"Reset Icon Size": setIconSize #reset
+			)
+		)
+		
+		----------------------------------------------------------------------------------------
+		--@fn:  dotnetclass "System.Windows.Forms.ToolStripitem" | getRmenuItemByText | Captura el item del rMenu cuyo texto sea igual que text
+		--@gets: string | menuText | nombre de la opción que hay que pulsar
+		----------------------------------------------------------------------------------------
+		fn getRmenuItemByText menuText =
+		(
+			_item = undefined
+			
+			for i = 1 to rMenu.items.count do
+			(
+				if rMenu.items.item[i-1].text == menuText then
+					_item = rMenu.items.item[i-1]
+			)
+			
+			_item
+		)
+		
+		--------------------------------------------------------------------------------------
+		--@fn: undefined | createRmenu | Crea el menú al pulsar con el botón derecho del ratón sobre el interface
+		--@gets: point2 | pos | Posición en la que hay que crear el menú
+		--@gets: name | type | Tipo de menú que hay que crear.
+		--------------------------------------------------------------------------------------
+		fn createRMenu pos type =
+		(
+			_rMenuItems = #()
+			
+			rMenu.items.clear()
+			rMenu.rendermode = (dotnetclass "System.Windows.Forms.ToolStripRenderMode").system
+			
+			if type == #samplesMenu then
+			(
+				_loadOptionsEnabled = rollMainDef.isSelectedSampleFile()
+				_isPreset = rollMainDef.isSelectedSamplePreset()
+
+				append _rMenuItems "Open in explorer window"
+				append _rMenuItems (dotnetobject "System.Windows.Forms.ToolStripSeparator")
+				append _rMenuItems "SVN Update"
+				append _rMenuItems "SVN Selective Updater"
+				append _rMenuItems "SVN Cleanup"
+
+
+				append _rMenuItems (dotnetobject "System.Windows.Forms.ToolStripSeparator")
+				append _rMenuItems "Show Fx Preview"
+					
+				
+
+				if _loadOptionsEnabled then
+				(
+					append _rMenuItems (dotnetobject "System.Windows.Forms.ToolStripSeparator")
+
+					if _isPreset then
+					(
+						append _rMenuItems "Load"
+						append _rMenuItems "Load (new scene)"
+					)
+					else
+					(
+						append _rMenuItems "Open"
+						append _rMenuItems "Merge"
+						append _rMenuItems "Load xRefScene"
+						append _rMenuItems "Load xRefObjects"
+						append _rMenuItems "Load xRefMeshObjects"
+						append _rMenuItems "Load xRefMeshObjectsAll"
+					)--if else
+				)--if	
+				
+				append _rMenuItems (dotnetobject "System.Windows.Forms.ToolStripSeparator")
+				append _rMenuItems "Reset Icon Size"
+				
+				for i = 1 to _rMenuItems.count do rMenu.items.add _rMenuItems[i]
+			)
+			
+			rMenu.Show pos.x pos.y
+		)
+		
+		
+		------------------------------------------------------------------------------
+		--@fn: undefined | setEditMode | establece el modo de edición del interface para navegar por assets o secuencias
+		------------------------------------------------------------------------------
+		fn setEditMode mode = 
+		(
+			_tabPageNames = #()
+			
+			editMode = mode
+			
+			case editMode of
+			(
+				#asset:
+				(
+					ckbModeAssets.checked = true
+					ckbModeSequences.checked = false
+					
+					lblVersionNumber.visible = true
+					ddlVersionNumber.visible = true
+					lblAssetType.visible = true
+					lbxAssetSubType.visible = true
+					
+					_tabPageNames = #("preset", "base", "part")
+				)
+				
+				#sequence:
+				(
+					ckbModeAssets.checked = false
+					ckbModeSequences.checked = true
+					
+					lblVersionNumber.visible = false
+					ddlVersionNumber.visible = false
+					lblAssetType.visible = false
+					lbxAssetSubType.visible = false
+					
+					_tabPageNames = #("anim", "simulation", "cache", "cloth", "hair", "render", "post", "asset")
+				)
+			)
+			
+			--	Rellenamos los tabs para el modo indicado
+			tbFileTypes.tabPages.clear()
+			for _tabName in _tabPageNames do tbFileTypes.tabPages.add _tabName
+			
+			basePath = rollMainDef.getBasePath()
+			currentPath = basePath
+			
+			rollMainDef.updateSampleControls()
+		)
+
+		/*fn addAnimBaseTab =
+		(
+			tbFileTypes.tabPages.add "animBase"
+		)
+
+		fn removeAnimBaseTab =
+		(
+			_animBaseTab = undefined
+			for i=1 to tbFileTypes.tabPages.count where tbFileTypes.tabPages.item[i-1].text == "animBase" do _animBaseTab = tbFileTypes.tabPages.item[i-1]
+			if _animBaseTab != undefined then tbFileTypes.tabPages.remove _animBaseTab
+		)*/
+
+		fn fillTabsByFolder folder =
+		(
+			updatingTabs = true
+			_tabPageNames = #()
+
+			if matchPattern folder pattern:(lb.nc.NC_assetRootPattern + "*") then
+			(
+				_tabPageNames = #("preset", "base", "part")
+
+				_dirs = #()
+				if doesFileExist (folder + lb.nc.NC_versionFolderName + "\\") then _dirs = getDirectories (folder + lb.nc.NC_versionFolderName + "\\*")
+				if _dirs.count != 0 then
+				(
+					for _dir in _dirs do
+					(
+						_dirParts = FilterString _dir "\\"
+						appendIfUnique _tabPageNames (_dirParts[_dirParts.count])
+					)--for
+				)--if
+			)
+			else if matchPattern folder pattern:(lb.nc.NC_sequenceRootPattern + "*") then
+			(
+				_tabPageNames = #("anim", "simulation", "cache", "cloth", "hair", "render", "post", "asset")
+			)
+
+			_currentTabs = sort (for i=1 to tbFileTypes.tabPages.count collect tbFileTypes.tabPages.item[i-1].text)
+
+			if not lb.misc.areArraysEqual _currentTabs (sort (deepCopy _tabPageNames)) then
+			(
+				tbFileTypes.tabPages.clear()
+				for _tabName in _tabPageNames do tbFileTypes.tabPages.add _tabName
+			)
+			
+			updatingTabs = false
+		)
+		
+		---------------------------------------------------------------------------
+		--@fn: array:{strSampleObj} | getSelectedSamples | devuelve los assetObjs seleccionados según la selección del dataGridView
+		---------------------------------------------------------------------------
+		fn getSelectedSamples = 
+		(
+			_selSamples = for _sample in currentSamples where _sample.uiObj != undefined and _sample.uiObj.selected collect _sample
+		)
+		
+		-----------------------------------------------------------------------------------------------------
+		--@fn: boolean | isSelectedSampleFile | indica si hay seleccionado solamente un sample y que además sea de tipo archivo
+		-----------------------------------------------------------------------------------------------------
+		fn isSelectedSampleFile =
+		(
+			_isFile = false
+
+			for _sample in selectedSamples where _sample.filename != undefined do _isFile = true
+			
+			_isFile			
+		)
+		
+		-----------------------------------------------------------------------------------------------------
+		--@fn: boolean | isSelectedSamplePreset | indica si hay seleccionado solamente un sample y que además sea de tipo preset
+		-----------------------------------------------------------------------------------------------------
+		fn isSelectedSamplePreset =
+		(
+			_isPreset = true
+			_samplesTypes = #()
+
+			for _sample in selectedSamples where _isPreset and _sample.filename != undefined do
+			(
+				_type = getFileNameType _sample.filename
+				append _samplesTypes _type
+				if _type != ".prt" then _isPreset = false
+			)--for
+
+			if _samplesTypes.count == 0 then _isPreset = false
+			
+			_isPreset			
+		)
+
+		-----------------------------------------------------------------------------------------------------
+		--@fn: array{strSampleObj} | getActualSamples | devuelve los sampleObj que están realmente seleccionados en función de lo que hemos marcado en el lvNavigation, el lbxAssetSubType y el ddlVersionNumber
+		-----------------------------------------------------------------------------------------------------
+		fn getActualSamples = 
+		(
+			_actualSamples = #()
+			
+			if isSelectedSampleFile() then
+			(
+				for _sample in selectedSamples do
+				(
+					_name = _sample.name
+					_type = _sample.type
+					_subType = if chkAssetSubTypeFilter.checked == false then lbxAssetSubType.selected else lbxAssetSubTypeFilter.selected
+					_versionNumber = try (ddlVersionNumber.selected as integer) catch undefined
+					
+					_candidateSamples = for _s in currentSamples where (_s.name == _name) and (_s.type == _type) and (_s.subtype == _subType) collect _s
+					
+					if _candidateSamples.count > 0 then
+					(
+						--	Si el número de versión está marcado en el control de interface capturamos el sample que corresponda
+						if _versionNumber != undefined then 
+							for _s in _candidateSamples where (_s.versionNumber == _versionNumber) do append _actualSamples _s
+						else	--	Si no está marcado el número de versión es porque hay varios assets seleccionados. Cogemos el de versión más alta
+						(
+							_sampleToAdd = _candidateSamples[1]
+							for _s in _candidateSamples where (_s.versionNumber != undefined) and (_s.versionNumber > _sampleToAdd.versionNumber) do _sampleToAdd = _s
+							append _actualSamples _sampleToAdd
+						)
+					)
+				)
+			)
+			
+			_actualSamples
+		)
+		
+		------------------------------------------------------------------------------
+		--@fn: array{strSampleObj} | getSamplesFromPath | Devuelve un array de strSampleObj con todos los elementos encontrados en la carpeta folder
+		--@gets: string | folder | carpeta de la que hay que extraer los samples
+		------------------------------------------------------------------------------
+		fn getSamplesFromPath folder =
+		(
+			_fileTypeFolder = if tbFileTypes.selectedTabPage != undefined then (tbFileTypes.selectedTabPage.text) else ""
+
+			if samplesCachePath != folder do
+			(
+				samplesCache = #()
+				samplesCacheFolders = #()
+				samplesCachePath = folder
+			)
+
+			_fileTypeFolderIndex = finditem samplesCacheFolders _fileTypeFolder
+
+			if _fileTypeFolderIndex == 0 then
+			(
+				append samplesCacheFolders _fileTypeFolder
+				append samplesCache #()
+				_fileTypeFolderIndex = samplesCacheFolders.count
+
+				case editMode of
+				(
+					#asset:
+					(
+						_nonAssetFolders = #()
+						_assetFolders = #()
+						_assetFiles = #()
+						
+						if rollMainDef.isAssetFolder folder then --	comprobamos si es una carpeta de asset 
+						(
+							--	recopilamos todos los ficheros que cumplan naming convention
+							_fileType = if _fileTypeFolder == "preset" then "prt" else "max"
+							_files = getFiles (folder + "version\\" +  _fileTypeFolder + "\\*." + _fileType) 
+							_assetFiles = for _file in _files where lb.nc.ncOK _file type:#assetFile collect _file
+						)					
+						else --	la carpeta no contiene un asset, pero puede haber más colgando
+						(
+							_dirs = getDirectories (folder + "*")
+							
+							--	Clasificamos las carpetas entre las que son de assets y las que no
+							for _dir in _dirs do
+							(
+								_dirParts = filterstring _dir "\\"
+								_lastDirPart = _dirParts[_dirParts.count]
+								
+								if finditem nonListableFolders _lastDirPart == 0 then
+								(
+									if rollMainDef.isAssetFolder _dir then 
+										append _assetFolders _dir 
+									else 
+										append _nonAssetFolders _dir
+								)
+							)
+						)
+						
+						--	rellenamos en orden los elementos del array samplesCache
+						for _f in _nonAssetFolders 	do append (samplesCache[_fileTypeFolderIndex]) (strSampleObj type:#folder path:_f)
+						for _f in _assetFolders 	do append (samplesCache[_fileTypeFolderIndex]) (strSampleObj type:#assetFolder path:_f)
+						for _f in _assetFiles		do append (samplesCache[_fileTypeFolderIndex]) (strSampleObj type:(("asset" + _fileTypeFolder) as name) path:folder fileName:_f)
+					)
+					
+					#sequence:
+					(
+						_folders = #()
+						_seqFiles = #()
+						_seqPresets = #()
+						
+						if rollMainDef.isCamFolder folder then
+						(
+	 						--_folder = substituteString folder "cam" "cam\\cam"
+							_seqFiles = getFiles (folder + _fileTypeFolder + "\\" + "*.max")
+							_seqPresets = getFiles (folder + _fileTypeFolder + "\\" + "*.prt")						
+						)
+						else if rollMainDef.isSequenceFolder folder then
+						(
+							_dirs = getDirectories (folder + "cam\\cam*")
+							_folders = _dirs
+						)
+						else	-- carpeta general. Mostramos sus directorios
+						(
+							_dirs = getDirectories (folder + "*")
+							
+							--	Clasificamos las carpetas entre las que son de assets y las que no
+							for _dir in _dirs do
+							(
+								_dirParts = filterstring _dir "\\"
+								_lastDirPart = _dirParts[_dirParts.count]
+								if finditem nonListableFolders _lastDirPart == 0 do
+									append _folders _dir
+							)
+						)
+						
+						for _f in _folders 	do append (samplesCache[_fileTypeFolderIndex]) (strSampleObj type:#folder path:_f)
+						for _f in _seqFiles do append (samplesCache[_fileTypeFolderIndex]) (strSampleObj type:#seqFile path:folder filename:_f)
+						for _f in _seqPresets do append (samplesCache[_fileTypeFolderIndex]) (strSampleObj type:#seqPreset path:folder filename:_f)
+					)
+				)
+			)
+
+			return samplesCache[_fileTypeFolderIndex]
+		)
+		
+		------------------------------------------------------------------------------
+		--@fn: string | getBasePath | Devuelve la ruta de base donde se van a ubicar los assets sobre los que estamos navegando: assets o sequences. 
+		------------------------------------------------------------------------------
+		fn getBasePath =
+		(
+			(projectFolder + (if editMode == #asset then assetsFolder else if editMode == #sequence then sequencesFolder))
+		)
+		
+		------------------------------------------------------------------------------
+		--@fn: string | getCurrentPath | devuelve la ruta que se está representando actualmente en el interface.
+		------------------------------------------------------------------------------
+		fn getCurrentPath =
+		(
+			if trvExplorer.selectedNode != undefined then
+				_fullPath = basePath + trvExplorer.selectedNode.fullPath + "\\"
+			else if currentSamples.count > 0 then
+				if currentSamples[1].type == #folder then
+					_fullPath = lb.io.getDirName currentSamples[1].path + "\\"
+				else
+					_fullPath = currentSamples[1].path
+			else 
+				_fullPath = ""
+			
+			if editMode == #sequence then
+				_fullPath = substituteString _fullPath "cam" "cam\\cam"
+			
+			_fullPath 
+		)
+		
+		------------------------------------------------------------------------------
+		--@fn: array{string} | getFolderDirectories | devuelve todas las carpetas encontradas en la ruta FOLDER exceptuando las ".svn" de SubVersion
+		------------------------------------------------------------------------------
+		fn getFolderDirectories folder dirs:#() =
+		(
+			_dirs = getDirectories folder
+			
+			--	Eliminamos todos los directorios que no hay que listar
+			for i = _dirs.count to 1 by -1 do 
+			(
+				_folderParts = filterstring _dirs[i] "\\"
+				_lastFolderPart = _folderParts[_folderParts.count]
+				
+				if findItem nonListableFolders _lastFolderPart != 0 then 
+					deleteItem _dirs i
+			)
+			
+			_dirs	
+		)
+		
+		------------------------------------------------------------------------------
+		--@fn: boolean | isAssetFolder | Indica si la ruta pasada en FOLDER corresponde a un Asset o a una Cámara de secuencia
+		------------------------------------------------------------------------------
+		fn isAssetFolder folder = 
+		(
+			_isAssetFolder = false
+			
+			_folderParts = (filterstring folder "\\")
+			
+			if _folderParts.count > 0 then
+			(
+				_lastFolderPart = _folderParts[_folderParts.count]
+				_lastFolderParts = filterstring _lastFolderPart "_"
+				_assetPrefixList = lb.nc.NC_assetTypes
+				
+				_isAssetFolder = 	(_lastFolderParts.count == lb.nc.NC_assetFolderNameLength and (finditem lb.nc.NC_assetTypes _lastFolderParts[1] != 0))
+ 									--(_folderParts[_folderParts.count-1] == lb.nc.NC_camPrefix and (findstring _lastFolderPart lb.nc.NC_camPrefix != 0))
+			)
+			
+			_isAssetFolder
+		)
+		
+		------------------------------------------------------------------------------
+		--@fn: boolean | isSequenceFolder | Indica si la ruta pasada en FOLDER corresponde a una Secuencia
+		------------------------------------------------------------------------------
+		fn isSequenceFolder folder = 
+		(
+			_isSequenceFolder = false
+			
+			_folderParts = (filterstring folder "\\")
+			
+			if _folderParts.count > 0 then
+			(
+				_lastFolderPart = _folderParts[_folderParts.count]
+				_lastFolderParts = filterstring _lastFolderPart "_"
+				
+				_isSequenceFolder = 	 (matchPattern _lastFolderPart pattern:(lb.nc.NC_seqPrefix + "_" + "???*-*")) or (matchPattern _lastFolderPart pattern:(lb.nc.NC_seqPrefix + "_" + "???*-*"))
+			)
+			
+			_isSequenceFolder
+		)
+		
+		------------------------------------------------------------------------------
+		--@fn: boolean | isCamFolder | Indica si la ruta pasada en FOLDER corresponde a una cámara
+		------------------------------------------------------------------------------
+		fn isCamFolder folder = 
+		(
+			_isCamFolder = false
+			
+			_parts = (filterstring folder "\\")
+			
+			if _parts.count > 0 then
+			(
+				_lastPart = _parts[_parts.count]
+				
+				_isCamFolder = matchPattern _lastPart pattern:(lb.nc.NC_camPrefix + "???*")
+			)
+			
+			_isCamFolder
+		)
+		
+		------------------------------------------------------------------------------
+		--	Busca en el treeView un nodo cuya propiedad NAME nombre contenga los caracteres 
+		--	pasados en TXT. Si la opción BYTEXT se pasa a TRUE entonces lo busca en la propiedad TEXT de cada nodo
+		------------------------------------------------------------------------------
+		fn findTreeNode txt byText:false nodes:trvExplorer.nodes = 
+		(
+			_items = #()
+			
+			for i = 1 to nodes.count do
+			(
+				_node = nodes.item[i-1]
+				_nodeText = if byText then _node.text else _node.name
+				
+				if (findString _nodeText txt != undefined) then
+					append _items nodes.item[i-1]
+				
+				join _items (findTreeNode txt byText:byText nodes:_node.nodes)
+			)
+			
+			_items
+		)
+		
+		------------------------------------------------------------------------------
+		--@fn: undefined | searchNextNode | Busca en el treeView un nodo cuyo nombre contenga los caracteres  del texto en edtFindNode
+		------------------------------------------------------------------------------
+		fn searchNextNode =
+		(
+			if edtFindNode.text != "" then
+			(
+				_nodes = findTreeNode edtFindNode.text byText:true
+				
+				if _nodes != #() then
+				(
+					_index = 1
+					_selNodeIndex = finditem _nodes trvExplorer.selectedNode
+						
+					if _selNodeIndex != 0 then
+						_index = _selNodeIndex + 1
+					
+					if _index > _nodes.count then _index = 1
+					
+					trvExplorer.selectedNode = _nodes[_index]
+					rollMainDef.fillSamplesGrid()
+				)
+			)
+		)
+		
+		------------------------------------------------------------------------------
+		--@fn:  undefined | createTreeViewNodes | Crea todos los nodos del treeView a partir de la ruta inicial indicada en FOLDERS. Cada nodo equivale a una carpeta. 
+		------------------------------------------------------------------------------	
+		fn createTreeViewNodes treeNodeCollection folders = 
+		(
+			for _folder in folders do
+			(
+				--Saco en un array las partes del directorio
+				_folderParts = filterstring _folder "\\"
+				
+				--Cogemos el nombre de la carpeta actual y le quitamos el sufijo de versión de asset (si es que lo tiene)
+				_folderName =  _folderParts[_folderParts.count]
+				_newNode = dotnetObject "System.Windows.Forms.TreeNode" _folderName
+				_newNode.name = _folder
+				_assetType = (filterstring _folderName "_")[1]
+				
+				treeNodeCollection.add _newNode
+				
+				-- Si estamos en una carpeta que no es de un asset buscamos sus subcarpetas
+				case editMode of
+				(
+					#asset:
+					(
+						if not (isAssetFolder _folder) then
+						(
+							_subDirs = getFolderDirectories (_folder + "*")
+							createTreeViewNodes _newNode.nodes _subDirs
+						)
+					)
+					
+					#sequence:
+					(
+						if not (isCamFolder _folder) then
+						(
+							if not (isSequenceFolder _folder) then
+							(
+								_subDirs = getFolderDirectories (_folder + "*")-- + lb.nc.NC_camPrefix + "\*")
+								createTreeViewNodes _newNode.nodes _subDirs
+							)
+							else
+							(
+								_subDirs = getFolderDirectories (_folder + lb.nc.NC_camPrefix + "\*")
+								createTreeViewNodes _newNode.nodes _subDirs
+							)
+						)
+					)
+				)
+			)
+		)
+		
+		------------------------------------------------------------------------------
+		--@fn: undefined | fillTreeView | Rellena el treeView buscando las carpetas del modo en que estemos trabajando: #asset o #sequence
+		------------------------------------------------------------------------------
+		fn fillTreeView =
+		(
+			--Limpiamos los nodos del árbol para poder volver a rellenarlos
+			trvExplorer.nodes.clear()
+			
+			--Cogemos los directorios del path inicial salvo el de .svn
+			_dirs = getFolderDirectories (basePath + "*")
+			
+			--Rellenamos los nodos del arbol con los directorios que hemos cogido antes
+			createTreeViewNodes trvExplorer.nodes _dirs
+		)
+		
+		------------------------------------------------------------------------------
+		--@fn: undefined | fillProjectName | Rellena el label del nombre del proyeto capturándolo de los proyectos oficiales publicados en la base de datos
+		------------------------------------------------------------------------------
+		fn fillProjectName =
+		(
+			_project = (lb.project.getProjectByPath projectFolder)
+			_projectName = if _project == undefined then _projectName = "UNKNOWN PROJECT" else _projectName = _project.getName()
+			lblProjectName.text = toUpper _projectName
+		)
+		
+		-----------------------------------------------------------------------------------------------------
+		-- Rellena la ruta del sample seleccionado actualmente
+		-----------------------------------------------------------------------------------------------------
+		fn fillSampleInfo =
+		(
+			--Estabelecemos el estado inicial como desactivado y cerrado.
+			lb.presetInfoManager.close()
+			ckbPresetInfo.enabled = false 
+			ckbPresetInfo.checked = false
+
+			_actualSamples = getActualSamples()
+			
+			if (isSelectedSampleFile()) and (_actualSamples.count > 0) then
+			(
+				lblAssetFolder.text = if _actualSamples[1].filename != undefined then (filenameFromPath _actualSamples[1].filename) else _actualSamples[1].path
+				
+				if _actualSamples[1].isAssetFileSample() then
+				(
+					if _actualSamples[1].type == #assetPreset or _actualSamples[1].type == #seqPreset then
+					(
+						ckbPresetInfo.enabled = true
+						ckbPresetInfo.checked = lb.presetInfoManager.isOpen()
+					)
+
+					case _actualSamples[1].checked of
+					(
+						#checked:
+						(
+							lblAssetChecked.text = "checked"
+							lblAssetChecked.backcolor = lblAssetCheckedColor
+						)
+
+						#unChecked:
+						(
+							lblAssetChecked.text = "unChecked"
+							lblAssetChecked.backcolor = lblAssetUnCheckedColor
+						)
+
+						#warning:
+						(
+							lblAssetChecked.text = "warning"
+							lblAssetChecked.backcolor = lblAssetWarningColor
+						)
+					)--case
+				)
+			)
+			else
+			(
+				lblAssetFolder.text = ""
+				lblAssetChecked.text = ""
+				lblAssetChecked.backColor = lblAssetNeutralColor
+			)
+		)
+		
+		------------------------------------------------------------------------------
+		--	Rellena el listado de los números de versión del asset localizados en 
+		--	la carpeta del asset seleccionado en el treeView 
+		------------------------------------------------------------------------------
+		fn fillVersionNumbers =
+		(
+			ddlVersionNumber.items = #()
+			ddlVersionNumber.enabled = false
+
+			if (selectedSamples.count == 1) then
+			(
+				_versionNumbers = #()
+				
+				_subType = if chkAssetSubTypeFilter.checked == false then lbxAssetSubType.selected else lbxAssetSubTypeFilter.selected
+				for _sample in currentSamples where (_sample.name == selectedSamples[1].name) and (_sample.subType == _subType) and (_sample.versionNumber != undefined) do
+					append _versionNumbers (formattedPrint _sample.versionNumber format:"02d")
+				
+				ddlVersionNumber.items = _versionNumbers
+			)
+
+			if ddlVersionNumber.items.count > 0 do
+			(
+				ddlVersionNumber.selection = ddlVersionNumber.items.count
+				ddlVersionNumber.enabled = true
+			)
+		)
+		
+		------------------------------------------------------------------------------
+		--	Rellena el listado de los tipos de asset localizados en la carpeta
+		--	del asset seleccionado en el treeView 
+		------------------------------------------------------------------------------
+		fn fillTypes =
+		(
+			--	Si tenemos más de un elemento seleccionado anulamos los paneles de datos y no permitimos la carga
+			if isSelectedSampleFile() then
+			(
+				_subTypes = #()
+				_allSubTypes = #()
+				
+				--	anotamos los subtipos encontrados de cada asset seleccionado
+				for i = 1 to selectedSamples.count do
+				(
+					_subTypes[i] = #()
+					for _sample in currentSamples where (_sample.Name == selectedSamples[i].name) and _sample.isAssetFileSample() do
+					(
+						appendIfUnique _subTypes[i] _sample.subType
+						appendIfUnique _allSubTypes _sample.subType
+					)
+				)
+				
+				_commonSubTypes = #()
+				--	solo nos quedamos con los subTypes comunes a todos los elementos seleccionados
+				for _subType in _allSubTypes do
+				(
+					_found = true
+					for i = 1 to _subTypes.count where findItem _subTypes[i] _subType == 0 do
+						_found = false
+					
+					if _found then appendIfUnique _commonSubTypes _subType
+				)
+				
+				lbxAssetSubType.items = for _st in #(lb.nc.NC_animFileName, lb.nc.NC_facialFileName, lb.nc.NC_meshFileName, lb.nc.NC_layoutFileName, lb.nc.NC_draftFileName, lb.nc.NC_morphFileName, lb.nc.NC_hairFileName, lb.nc.NC_clothFileName, lb.nc.NC_fxFileName) where (findItem _commonSubTypes _st) != 0 collect _st
+				if _commonSubTypes.count > 0 then 
+				(
+					lbxAssetSubType.enabled = true
+					lbxAssetSubType.selection = 1
+				)
+			)
+			else
+			(
+				lbxAssetSubType.items = #()
+				lbxAssetSubType.enabled = false
+			)
+		)
+		
+		------------------------------------------------------------------------------
+		--	rellena el dataGridView
+		------------------------------------------------------------------------------
+		fn fillSamplesGrid reloadSamples:true = 
+		(
+			_SamplesToShow = #() 			--	samples que se van a mostrar en el lvNavigation
+			_sampleObjNamesAux = #()		--	array auxiliar para almacenar los nombres completos de los samples y comprobar si son únicos			
+
+			currentSamples = getSamplesFromPath currentPath
+
+			--	Filtros de variations
+			_currentVariations = for _sample in currentSamples where _sample.variation != "" collect _sample.variation
+			_currentVariationFilters = #()
+			_activeVariationFilters = #()
+			for i=(dgvAssetVariations.rows.count - 1) to 0 by -1 do
+			(
+				_variation = dgvAssetVariations.rows.item[i].cells.item[1].value
+				if findItem _currentVariations _variation == 0 then
+					dgvAssetVariations.rows.remove(dgvAssetVariations.rows.item[i])
+				else
+				(
+					appendIfUnique _currentVariationFilters _variation
+					if dgvAssetVariations.rows.item[i].cells.item[0].value == true do
+						appendIfUnique _activeVariationFilters _variation
+				)
+			)
+			for _variation in _currentVariations where (findItem _currentVariationFilters _variation) == 0 do
+			(
+				_row = (dotNetObject "System.Windows.Forms.DataGridViewRow")
+				_row.height = 20
+				dgvAssetVariations.rows.add _row
+				_row.cells.item[0].value = true
+				_row.cells.item[1].value = _variation
+				appendIfUnique _currentVariationFilters _variation
+				appendIfUnique _activeVariationFilters _variation --se añade activado
+			)
+			
+			--	Nos aseguramos de que solo mostramos un fichero por cada asset y de que aplicamos el filtro seleccionado (incluido el de variation)
+			for _sample in currentSamples do
+			(
+				-- Pasa el filtro de subtipos
+				if chkAssetSubTypeFilter.checked == false or lbxAssetSubTypeFilter.selected == _sample.subtype do
+				(
+					_sampleName = _sample.name + "|" + (_sample.type as string)
+					_itemIndex = findItem _sampleObjNamesAux _sampleName
+					
+					if  _itemIndex == 0 then
+					(
+						-- Pasa el filtro de variaciones
+						if (findItem _activeVariationFilters _sample.variation) != 0  or _currentVariationFilters.count == 0 do
+						(
+							append _sampleObjNamesAux _sampleName
+							append _SamplesToShow _sample
+						)
+					)
+					else
+					(
+						--	si se ha encontrado, vemos si su número de versión es mayor y  lo reemplazamos
+						if (_SamplesToShow[_itemIndex].subType == _sample.subType) and (_SamplesToShow[_itemIndex].versionNumber < _sample.versionNumber) then _SamplesToShow[_itemIndex] = _sample
+					)
+				)
+			)
+			
+			--	si sobran controles de tipo sample los quitamos
+			for i = lvNavigation.controls.count to (_SamplesToShow.count + 1) by -1 do
+				lvNavigation.controls.remove lvNavigation.controls.item[i-1]
+			
+			--	ajustamos el número de items que hacen falta representar 
+			for i = lvNavigation.items.count to _samplesToShow.count do lvNavigation.items.add "newItem"
+			for i = lvNavigation.items.count to (_samplesToShow.count + 1) by -1 do lvNavigation.items.removeAt (i-1)
+			
+			--	eliminamos las imágenes del listview a partir de la 5 (las primeras son las genéricas)
+			for i = lvNavigation.largeImageList.images.count to commonImages.count + 1 by -1 do lvNavigation.largeImageList.images.removeAt (i-1)
+			
+			--	Creamos los items con sus imágenes
+			for i = 1 to _SamplesToShow.count do 
+			(
+				_sample = _SamplesToShow[i]
+				_sample.uiObj = lvNavigation.items.item[i-1]
+				_sample.uiObj.text = _SamplesToShow[i].name
+				
+				case _sample.checked of
+				(
+					#checked: _sample.uiObj.backcolor = lvBackColor
+					#UnChecked: _sample.uiObj.backcolor = lblAssetUnCheckedColor
+					#warning: _sample.uiObj.backcolor = lblAssetWarningColor
+				)--case				
+				
+				_sample.uiObj.selected = false
+				
+				--	Establecemos la imagen de la celda
+				if _sample.sampleFile != undefined then 
+				(
+					lvNavigation.largeImageList.images.add (dotnetobject "system.drawing.bitmap" _sample.sampleFile)
+					_sample.uiObj.imageIndex = lvNavigation.largeImageList.images.count - 1
+				)
+				else if _sample.type == #seqFile or _sample.type == #seqPreset then
+					_sample.uiObj.imageIndex = 1
+				else if (matchPattern (tolower _sample.name) pattern:("???_*("+lb.nc.NC_classAddonsRig+"-*)")) then
+					_sample.uiObj.imageIndex = 5
+				else if (matchPattern (tolower _sample.name) pattern:("???_*("+lb.nc.NC_classSkeletonRig+"-*)")) then
+					_sample.uiObj.imageIndex = 4
+				else if (matchPattern (tolower (_sample.type as string)) pattern:"asset*") then
+					_sample.uiObj.imageIndex = 0
+				else 
+					_sample.uiObj.imageIndex = 2
+
+			)
+			
+			--	Mostramos u ocultamos los tabas dependiendo de si estamos o no en una carpeta de asset
+			tbFileTypes.visible = (isAssetFolder currentPath) or (isCamFolder currentPath)
+			tbFileTypes.height = if tbFileTypes.visible then 20 else 0
+			
+			selectedSamples = getSelectedSamples()
+		)
+		
+		------------------------------------------------------------------------------
+		--	Establece el estado de los controles Load Type según el tipo de
+		--	asset que se tiene seleccionado actualmente
+		------------------------------------------------------------------------------
+		fn fillLoadOptions =
+		(
+			_showAssetLoadOptions = true
+			_showPresetLoadOptions = false
+
+			_enableControls = false 
+			_placeAssetEnabled = true
+			_actualSamples = getActualSamples()
+			
+			if isSelectedSampleFile() and (_actualSamples.count > 0) then
+			(
+				-- capturamos el tipo de asset y el tipo de fichero de asset seleccionado
+				_actualSample = _actualSamples[1]
+
+				_fileNameParts = (filterString (getFileNameFile _actualSample.filename) "_")
+				_assetType = _fileNameParts[1]
+				_fileType = _fileNameParts[3]
+				if _assetType == lb.nc.NC_seqPrefix then _fileType = _fileNameParts[4]
+
+				_filePathParts = (filterString (getFileNamePath _actualSample.filename) "\\/")
+				_lastFolder = _filePathParts[_filePathParts.count]
+
+				rdoAssetLoadType.state = 1 --por defecto modo open
+				rdoPresetLoadType.state = 1 --por defecto modo load
+				
+				if _assetType != lb.nc.NC_seqPrefix then --si es un asset
+				(
+					case _fileType of
+					(
+						(lb.nc.NC_meshFileName):
+						(
+							if _lastFolder == lb.nc.NC_partFolderName then
+							(
+								rdoAssetLoadType.state = 5
+								if _assetType == lb.nc.NC_setPrefix then (rdoAssetLoadType.state = 6; _placeAssetEnabled = false)
+							)
+							else (rdoAssetLoadType.state = 1; _placeAssetEnabled = false)
+						)
+
+						(lb.nc.NC_proxyFileName):
+						(
+							if _lastFolder == lb.nc.NC_partFolderName then (rdoAssetLoadType.state = 2)
+							else (rdoAssetLoadType.state = 1; _placeAssetEnabled = false)
+						)
+
+						(lb.nc.NC_puppetFileName):
+						(
+							if _lastFolder == lb.nc.NC_partFolderName then (rdoAssetLoadType.state = 2)
+							else (rdoAssetLoadType.state = 1; _placeAssetEnabled = false)
+						)
+
+						(lb.nc.NC_draftFileName):
+						(
+							if _lastFolder == lb.nc.NC_partFolderName then
+							(
+								rdoAssetLoadType.state = 5
+								if _assetType == lb.nc.NC_setPrefix then (rdoAssetLoadType.state = 6; _placeAssetEnabled = false)
+							)
+							else (rdoAssetLoadType.state = 1; _placeAssetEnabled = false)
+						)
+
+						(lb.nc.NC_morphFileName):
+						(
+							rdoAssetLoadType.state = 1
+							_placeAssetEnabled = false
+						)
+
+						(lb.nc.NC_facialFileName):
+						(
+							if _lastFolder == lb.nc.NC_partFolderName then (rdoAssetLoadType.state = 5)
+							else (rdoAssetLoadType.state = 1; _placeAssetEnabled = false)
+						)
+
+						(lb.nc.NC_layoutFileName):
+						(
+							if _lastFolder == lb.nc.NC_partFolderName then (rdoAssetLoadType.state = 5)
+							else (rdoAssetLoadType.state = 1; _placeAssetEnabled = false)
+						)
+
+						(lb.nc.NC_animEditFileName):
+						(
+							rdoAssetLoadType.state = 1
+							_placeAssetEnabled = false
+						)
+
+						(lb.nc.NC_animFileName):
+						(
+							if _lastFolder == lb.nc.NC_partFolderName then
+							(
+								rdoAssetLoadType.state = 5
+								--if _assetType == lb.nc.NC_chrPrefix then rdoAssetLoadType.state = 2
+								if _assetType == lb.nc.NC_fxPrefix then rdoAssetLoadType.state = 2
+							)
+							else if _lastFolder == lb.nc.NC_animBaseFolderName then (rdoAssetLoadType.state = 2)
+							else (rdoAssetLoadType.state = 1; _placeAssetEnabled = false)
+						)
+
+						(lb.nc.NC_clothFileName):
+						(
+							if _lastFolder == lb.nc.NC_partFolderName then (rdoAssetLoadType.state = 5)
+							else (rdoAssetLoadType.state = 1; _placeAssetEnabled = false)
+						)
+
+						(lb.nc.NC_hairFileName):
+						(
+							if _lastFolder == lb.nc.NC_partFolderName then (rdoAssetLoadType.state = 2)
+							else (rdoAssetLoadType.state = 1; _placeAssetEnabled = false)
+						)
+
+						(lb.nc.NC_fxFileName):
+						(
+							if _lastFolder == lb.nc.NC_partFolderName then (rdoAssetLoadType.state = 2)
+							else (rdoAssetLoadType.state = 1; _placeAssetEnabled = false)
+						)
+
+						default:
+						(
+							rdoAssetLoadType.state = 1
+							_placeAssetEnabled = false
+						)--default
+					)--case
+				)
+				else --si es un archivo de secuencia
+				(
+					--por defecto se asume que lo que se quiere hacer es abrirlo para trabajar en el
+					rdoAssetLoadType.state = 1
+					_placeAssetEnabled = false
+				)--if else
+
+				_enableControls = true
+
+				if _actualSample.type == #assetPreset or _actualSample.type == #seqPreset then
+				(
+					_showPresetLoadOptions = true
+					_showAssetLoadOptions = false
+					_enableControls = true
+					_placeAssetEnabled = false
+				)
+			)
+			else
+			(
+				_showAssetLoadOptions = false
+				_showPresetLoadOptions = false
+				_enableControls = false
+				_placeAssetEnabled = false
+			)
+			
+			-----------------------------------------------
+			--opciones de habilitar y ocultar controles
+
+			grpLoadOptions.enabled = _enableControls
+
+			rdoAssetLoadType.visible = _showAssetLoadOptions
+			rdoPresetLoadType.visible = _showPresetLoadOptions
+
+			chkAutoGrid.visible = _showAssetLoadOptions or _showPresetLoadOptions
+			chkRenameParts.visible = _showPresetLoadOptions
+			chkRenameParts.enabled = _showPresetLoadOptions
+
+			chkRenamePartsMaterials.visible = chkRenameParts.visible
+			-- chkRenamePartsMaterials.checked = chkRenameParts.enabled and chkRenameParts.checked
+			chkRenameParts.enabled = chkRenameParts.visible
+
+			rdoPresetLoadType.enabled = rdoAssetLoadType.enabled = _enableControls
+			chkAutoGrid.enabled = ckbPlace.enabled = _placeAssetEnabled
+			
+			btnLoad.enabled = _enableControls
+			-----------------------------------------------
+		)
+		
+		------------------------------------------------------------------------------
+		--	actualiza el icono del sample seleccionado actualmente
+		------------------------------------------------------------------------------
+		fn fillIcon =
+		(
+			if selectedSamples.count == 1 and selectedSamples[1].iconFile != undefined then
+				if selectedSamples[1].uiObj.imageIndex >= lvNavigation.largeImageList.images.count then
+					bmpIcon.image = lvNavigation.largeImageList.images.item[selectedSamples[1].uiObj.imageIndex]
+				else
+					bmpIcon.image = undefined
+			else
+				bmpIcon.image = undefined
+		)
+		
+		----------------------------------------------------------------------------------------------------------
+		--	actualiza la casilla Rename Parts Materials, si es archivo de mesh -> Desactivado, si no Activado ----
+		----------------------------------------------------------------------------------------------------------
+		fn fillRenameAssetPartsMaterials =
+		(
+			if lbxAssetSubType.selected != undefined then
+			(
+				if lbxAssetSubType.selected == "mesh" then
+				(
+					chkRenamePartsMaterials.checked = false
+				)
+				else 
+				(
+					chkRenamePartsMaterials.checked = true
+				)
+			)
+			--Si es diferent a undefined, segons el tipus actualitzar el rename parts material: 
+		)
+		------------------------------------------------------------------------------
+		--@fn: undefined | updateSampleControls | actualiza el estado de los controles del UI en funcion de la seleccion del treeview y los listados. Hay que indicar a partir de qué control se quiere actualizar
+		--@gets: name | fromControl | Indica desde qué control se quiere actualizar
+		------------------------------------------------------------------------------
+		fn updateSampleControls fromControl:#treeView =
+		(
+			_fromIndex = findItem #(#treeView, #samplesGrid, #types, #versionNumbers, #loadOptions, #sampleInfo, #icon) fromControl
+			
+			setWaitCursor()
+			
+			if _fromIndex < 2 then fillTreeView()
+			if _fromIndex < 3 then (fillSamplesGrid(); fillTabsByFolder currentPath)
+			if _fromIndex < 4 then fillTypes()
+			if _fromIndex < 5 then (fillVersionNumbers(); fillRenameAssetPartsMaterials())
+			if _fromIndex < 6 then fillLoadOptions()
+			if _fromIndex < 7 then fillSampleInfo()
+			if _fromIndex < 8 then fillIcon()
+			
+			setArrowCursor()
+		)
+		
+		------------------------------------------------------------------------------
+		--carga los assets que proceda segun el interface
+		--devuelve los roots de los assets en un array, si no puede cargar nada, devuelve un array vacio
+		------------------------------------------------------------------------------
+		fn loadAssets mode:undefined renameParts:true renamePartsMaterials:true =
+		(
+			_samplesToLoad = getActualSamples()
+			
+			for _sample in _samplesToLoad where _sample.filename != undefined do
+			(
+				if _sample.type == #assetPreset or _sample.type == #seqPreset then
+				(
+					--	si no se ha especificado modo de carga usamos el que marca el rdoPresetLoadType
+					if mode == undefined then
+					(
+						case rdoPresetLoadType.state of
+						(
+							1: mode = #load
+							2: mode = #loadNewScene
+							3: mode = #saveAnimBase
+						)--case
+					)--if
+
+					_load = true
+					
+					if (mode == #loadNewScene) or (mode == #saveAnimBase) then
+					(
+						if getSaveRequired() then
+						(
+							_load = lb.message.show "File has changes, you will lose them. Do you want to continue?" type:#query
+
+							if _load and lb.message.show "Save changes?" type:#query do
+							(
+								_savefilename = getSaveFileName()
+								if _savefilename != undefined then
+									saveMaxFile _savefilename quiet:true
+								else
+									_load = false
+							)
+						)
+						if mode == #saveAnimBase do
+						(
+							if _sample.checked != #checked do
+							(
+								_load = false
+								lb.message.show "Asset not checked, can't continue" type:#message modal:true
+							)
+
+							for _subdir in #("version\\preset", "version\\base", "version\\part", "rig") where _load do 
+							(
+								_folder = _sample.path + _subdir
+								if not lb.svn.isFolderUpdated _folder do
+								(
+									_load = false
+									lb.message.show (_subdir + " folder not updated, can't continue") type:#message modal:true
+								)
+							)
+
+						)
+						if _load then resetMaxFile #noPrompt
+					) else if mode == #load do
+					(
+						lComponents = lb.presets.getPresetComponents _sample.filename
+						lComponents = for c in lComponents collect toLower c
+						if (finditem lComponents (toLower (maxfilepath + maxfilename))) != 0 do
+						(
+							_load = false
+							lb.message.show ("Trying to open preset that includes current open file\nAborting") type:#message modal:true
+						)
+					)
+
+					if _load == true do
+					(
+						if (lb.presets.getPresetCheckedState _sample.filename) != #checked do
+							_load = lb.message.show "Preset is not updated. Do you want to continue?" type:#query
+					)
+					
+					if _load then
+					(
+						if mode == #load or mode == #loadNewScene then
+							lb.presets.load _sample.filename renameParts:renameParts renamePartsMaterials:renamePartsMaterials
+						else if mode == #saveAnimBase then
+						(
+							if lb.presets.loadAndSaveAsAnimBase _sample.filename renameParts:renameParts renamePartsMaterials:renamePartsMaterials then
+								lb.message.show ("Anim base successfully created") type:#message modal:true
+							else
+								lb.message.show ("Failed creating Anim base") type:#message modal:true
+						)
+					)
+				)
+				else
+				(
+					--	si no se ha especificado modo de carga usamos el que marca el rdoAssetLoadType
+					if mode == undefined then
+					(
+						case rdoAssetLoadType.state of
+						(
+							1: mode = #open
+							2: mode = #merge
+							3: mode = #xrefScene
+							4: mode = #xrefObjects
+							5: mode = #xrefMeshObjects
+							6: mode = #xrefMeshObjectsAll
+						)--case
+
+						--NOTA: Esta linea creo que sobra, si la dejas intenta cargar todo como preset y carga los presets dos veces
+						--lb.presets.load _sample.filename 
+					)--if
+
+					_load = true
+
+					if _sample.type == #assetAnimBase do
+					(
+						_presetPath = (lb.presets.presetFileFromAnimBase _sample.filename)
+						animBaseFInfo = dotNetObject "System.IO.FileInfo" _sample.filename
+						presetFInfo = dotNetObject "System.IO.FileInfo" _presetPath
+						if (animBaseFInfo.CreationTime.CompareTo presetFInfo.lastwritetime) < 0 then
+						(
+							_load = false
+							lb.message.show ("Anim base older than preset, can't continue") type:#message modal:true
+						)
+						else
+						(
+							_presetFiles = for _file in (lb.presets.readPresetData(_presetPath)).FILES collect _file.file
+							
+							for _file in _presetFiles where _load do
+							(
+								if (animBaseFInfo.CreationTime.CompareTo (dotNetObject "System.IO.FileInfo" _file).lastwritetime) < 0 do
+								(
+									_load = false
+									lb.message.show ("Anim base older than \n" + _file + ",\ncan't continue") type:#message modal:true
+								) 
+							)
+
+							if _load do
+							(
+								if not (lb.svn.svnIsFileUpdated _presetPath) then
+								(
+									_load = false
+									lb.message.show ("Preset file not updated, can't continue") type:#message modal:true
+								)
+								else
+								(
+									for _file in _presetFiles where _load do
+									(
+										if not (lb.svn.svnIsFileUpdated _file) do
+										(
+											_load = false
+											lb.message.show (_file + " not updated, can't continue") type:#message modal:true
+										) 
+									)
+								)
+							)
+						)
+					)
+
+					if _load == true do
+					(
+						if not lb.svn.svnIsFileUpdated _sample.filename do
+							_load = lb.message.show "File is not updated. Do you want to continue?" type:#query
+					)
+
+					if _load == true do
+					(
+						_breakXrefsOnmerge = true
+
+						if mode == #open then 
+						(
+							if getSaveRequired() then
+							(
+								_load = lb.message.show "File has changes, you will lose them. Do you want to continue?" type:#query
+
+								if _load and lb.message.show "Save changes?" type:#query do
+								(
+									_savefilename = getSaveFileName()
+									if _savefilename != undefined then
+										(
+											saveMaxFile _savefilename quiet:true
+											resetMaxFile #noPrompt
+										)
+									else
+										_load = false
+								)
+							)
+						)
+							
+						if mode == #merge and (findString (getFileNamePath _sample.filename) lb.nc.NC_animBaseFolderName) != undefined then _breakXrefsOnmerge = false
+						if _load == true do
+						(
+							lb.asset.loadAsset _sample.filename mode breakXrefsOnmerge:_breakXrefsOnmerge
+						)
+					)
+				)
+			)
+			
+			if lb.presetManager.isOpen() then 
+			(
+				lb.presetManager.rollMain.refreshUI()
+			)
+		)
+		
+		--------------------------------------------------------------------------
+		-- Carga el sample de video del preset de fx en el reproductor de video
+		--------------------------------------------------------------------------
+		fn loadFxPreview =
+		(
+			_samples = getActualSamples()
+			if _samples.count > 0 and _samples[1].type == #assetPreset and (filterString _samples[1].name "_")[1] == lb.nc.NC_fxPrefix then
+			(
+				--Encuentro video
+				if (doesFileExist (substituteString (_samples[1].path + "image\\sample\\"+ _samples[1].name + ".mov") "\\" "\\\\")) \
+				or (doesFileExist (substituteString (_samples[1].path + "image\\sample\\"+ _samples[1].name + ".avi") "\\" "\\\\"))then
+				(
+					--Encuentro quicktime
+					if (doesFileExist "C:\\winapp\\utilities\\QuickTime\\QuickTimePlayer.exe") then
+					(
+						--MOV
+						if (doesFileExist (substituteString (_samples[1].path + "image\\sample\\"+ _samples[1].name + ".mov") "\\" "\\\\")) then
+						(
+							ShellLaunch "C:\\winapp\\utilities\\QuickTime\\QuickTimePlayer.exe " (substituteString (_samples[1].path + "image\\sample\\"+ _samples[1].name + ".mov") "\\" "\\\\")
+						)
+						--AVI
+						else
+						(
+							ShellLaunch "C:\\winapp\\utilities\\QuickTime\\QuickTimePlayer.exe " (substituteString (_samples[1].path + "image\\sample\\"+ _samples[1].name + ".avi") "\\" "\\\\")
+						)
+					)
+					--Windows media
+					else if (doesFileExist @"C:\Program Files\Windows Media Player\wmplayer.exe") then
+					(
+						--MOV
+						if (doesFileExist (substituteString (_samples[1].path + "image\\sample\\"+ _samples[1].name + ".mov") "\\" "\\\\")) then
+						(
+							ShellLaunch "C:\\Program Files\\Windows Media Player\\wmplayer.exe " (substituteString (_samples[1].path + "image\\sample\\"+ _samples[1].name + ".mov") "\\" "\\\\")
+						)
+						--AVI
+						else
+						(
+							ShellLaunch "C:\\Program Files\\Windows Media Player\\wmplayer.exe " (substituteString (_samples[1].path + "image\\sample\\"+ _samples[1].name + ".avi") "\\" "\\\\")
+						)
+					)
+					else
+					(
+						lb.message.show "Movie player not found on your computer, contact tools & IT department."
+					)
+				)
+				else
+				(
+					lb.message.show "Fx video preview doesn't exist. Can't load it."
+				)
+			)
+			else
+			(
+				lb.message.show "Select one fx preset to proceed."
+			)
+		)
+
+		--------------------------------------------------------------------------
+		--@fn: undefined | openSamplesInExplorer | Funcion del menu contextual que lanza la carpeta actual en una ventana de windows
+		--@gets: 
+		--------------------------------------------------------------------------
+		fn openSamplesInExplorer =
+		(
+			_pathsToOpen = #()
+
+			if selectedSamples.count != 0 then
+			(
+				for _sample in selectedSamples do
+				(
+					if selectedSamples[1].fileName != undefined then append _pathsToOpen (getFilenamePath _sample.fileName)
+					else append _pathsToOpen _sample.path
+				)--for	
+			)
+			else
+			(
+				append _pathsToOpen currentPath
+			)--if else
+
+			--abre los paths seleccionados
+			makeUniqueArray _pathsToOpen
+			for _path in _pathsToOpen do shellLaunch _path ""
+		)
+
+		--------------------------------------------------------------------------
+		--@fn: undefined | svnUpdate | Funcion del menu contextual que actualiza por svn la seleccion
+		--@gets: 
+		--------------------------------------------------------------------------
+		fn svnUpdate =
+		(
+			_pathsToOpen = #()
+
+			if selectedSamples.count != 0 then
+			(
+				for _sample in selectedSamples do
+				(
+					if selectedSamples[1].fileName != undefined then append _pathsToOpen _sample.fileName
+					else append _pathsToOpen _sample.path
+				)--for	
+			)
+			else
+			(
+				append _pathsToOpen currentPath
+			)--if else
+
+			------------------------------------------------
+			makeUniqueArray _pathsToOpen
+			_svnCommand = "/command:update /path:\""
+			for _path in _pathsToOpen do _svnCommand += _path + "*"
+			_svnCommand = substring _svnCommand 1 (_svnCommand.count - 1)
+			
+			_svnCommand += "\""
+			_svnCommand += " /closeonend:1"
+			------------------------------------------------
+			
+			--actualiza los paths seleccionados
+			shellLaunch "TortoiseProc" _svnCommand
+		)
+
+		--------------------------------------------------------------------------
+		--@fn: undefined | svnCleanup | Funcion del menu contextual que hace cleanup por svn a la seleccion
+		--@gets: 
+		--------------------------------------------------------------------------
+		fn svnCleanup =
+		(
+			_pathsToOpen = #()
+
+			if selectedSamples.count != 0 then
+			(
+				for _sample in selectedSamples do
+				(
+					if selectedSamples[1].fileName != undefined then append _pathsToOpen (getFilenamePath _sample.fileName)
+					else append _pathsToOpen _sample.path
+				)--for	
+			)
+			else
+			(
+				append _pathsToOpen currentPath
+			)--if else
+
+			------------------------------------------------
+			_pathsToOpen = makeUniqueArray _pathsToOpen
+
+			_svnCommand = "/command:cleanup /path:\""
+			for _path in _pathsToOpen do _svnCommand += _path + "*"
+			_svnCommand = substring _svnCommand 1 (_svnCommand.count - 1)
+			
+			_svnCommand += "\""
+			_svnCommand += " /closeonend:1"
+			--------------------------------------------------
+			
+			----cleanup en los paths seleccionados
+			shellLaunch "TortoiseProc" _svnCommand
+		)
+
+		--------------------------------------------------------------------------
+		--@fn: undefined | svnSelectiveUpdate | Funcion del menu contextual que abre el actualizador selectivo de SVN
+		--@gets: 
+		--------------------------------------------------------------------------
+		fn svnSelectiveUpdate =
+		(
+			_pathsToOpen = #()
+
+			if selectedSamples.count != 0 then
+			(
+				for _sample in selectedSamples do
+				(
+					if selectedSamples[1].fileName != undefined then append _pathsToOpen _sample.fileName
+					else append _pathsToOpen _sample.path
+				)--for	
+			)
+			else
+			(
+				append _pathsToOpen currentPath
+			)--if else
+
+			makeUniqueArray _pathsToOpen
+
+			--actualiza los paths seleccionados
+			for _path in _pathsToOpen do			
+				shellLaunch @"R:\Resource\technical\utilities\0030_svnCustomUpdater\svnUpdaterUI.exe" _path
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+			
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+			
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollMain | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollMainDef open do
+		(
+			setWaitCursor()
+			
+			dialogWidth = rollMainDef.width
+			dialogHeight = rollMainDef.height
+			
+			--Iniciamos las rutas
+			basePath = getBasePath()
+			currentPath = basePath
+
+			initUI() 
+			
+			loadSettings()
+			
+			setEditMode editMode
+
+			if lastSessionPath != "" and currentPath != lastSessionPath do
+			(
+				currentPath = lastSessionPath
+				updateSampleControls()
+			)
+			
+			setArrowCursor()
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollMain | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollMainDef close do
+		(
+			saveSettings()
+			
+			parent.opened = false --indica que la herramienta está cerrada.
+			updateToolbarButtons()
+		)
+		
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollMain | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		--@gets: point2 | size | tamaño al que se ha redimensionado el rollout
+		------------------------------------------------
+		on rollMainDef resized size do
+		(
+			if size.x < minRollWidth then size.x = rollMainDef.width = minRollWidth
+			if size.y < minRollHeight then size.y = rollMainDef.height = minRollHeight
+			
+			_difX = size.x - dialogWidth
+			_difY = size.y - dialogHeight
+			
+			trvExplorer.height += _difY
+			lvNavigation.height += _difY
+			dgvAssetVariations.height += _difY
+			lvNavigation.width += _difX
+			lblAssetFolder.width += _difX
+			grpProjectName.width += _difX
+			tbFileTypes.width += _difX
+			
+			for _c in rollMainDef.controls where _c.pos.y > 200 do
+				_c.pos.y += _difY
+			
+			for _c in rollMainDef.controls where _c.pos.x >  400 do
+				_c.pos.x += _difX
+			
+			dialogWidth = rollMainDef.width
+			dialogHeight = rollMainDef.height
+		)
+		
+
+		------------------------------------------------
+		--CUSTOM
+		------------------------------------------------
+
+		on ckbPresetInfo changed state do 
+		(
+			if state then 
+			(
+				_actualSamples = getActualSamples()
+				lb.presetInfoManager.run presetFileName:(_actualSamples[1].fileName )
+			)
+			else lb.presetInfoManager.close()
+		)
+
+		------------------------------------------------------------------------------
+		on btnBrowse pressed do
+		(
+			dir = getSavePath initialDir:basePath --abre la ventana de busqueda de paths
+			
+			if dir != undefined then --pone el nuevo path de proyecto en el treeview
+			(
+				if dir[dir.count] != "\\" then dir = dir + "\\"
+
+				--	Iniciamos como nueva ruta la seleccionada
+				projectFolder = dir
+				basePath = getBasePath()
+				currentPath = basePath
+				
+				edtProjectFolder.text = dir
+				fillProjectName()
+				
+				updateSampleControls()
+			)
+		)
+		
+		------------------------------------------------------------------------------
+		on ckbModeAssets changed state do
+			setEditMode (if state then #asset else #sequence)
+		
+		------------------------------------------------------------------------------
+		on ckbModeSequences changed state do
+			setEditMode (if state then #sequence else #asset)
+		
+		------------------------------------------------------------------------------
+		on chkAssetSubTypeFilter changed state do
+		(
+			lbxAssetSubType.visible = not state
+			lbxAssetSubTypeFilter.visible = state
+			updateSampleControls fromControl:#samplesGrid
+		)
+		
+		------------------------------------------------------------------------------
+	 	on edtFindNode entered k do
+	 		searchNextNode()
+		
+		------------------------------------------------------------------------------
+		on btnSearch pressed do
+			searchNextNode()
+		
+		------------------------------------------------------------------------------
+		on tbFileTypes selectedPageChanged events do
+		(
+			if not updatingTabs then
+			(
+				if events.page != undefined then updateSampleControls fromControl:#samplesGrid
+			)
+		)
+		
+		---------------------------------------------------------------------------
+		on lvNavigation mouseUp events do
+		(
+			_btn = events.Button.toString() --obtiene el boton con el que se ha pulsado
+
+			--primero actualiza la seleccion y el interfaz
+			selectedSamples = getSelectedSamples()
+			updateSampleControls fromControl:#types
+			
+			--Si hemos pulsado el botón derecho del ratón muestra el menu
+			if _btn == "Right" then
+			(
+				createRmenu mouse.screenPos #samplesMenu
+			)
+		)
+		
+		---------------------------------------------------------------------------
+		--ESTO SE HA CAMBIADO AL MOUSE UP
+		/*on lvNavigation itemSelectionChanged events do
+		(
+			selectedSamples = getSelectedSamples()
+			updateSampleControls fromControl:#types
+		)*/
+		
+		---------------------------------------------------------------------------
+		on lvNavigation doubleClick events do
+		(
+			selectedSamples = getSelectedSamples()
+			currentPath = selectedSamples[1].path
+			
+			trvExplorer.selectedNode = (findTreeNode selectedSamples[1].path)[1]
+		)
+		
+		---------------------------------------------------------------------------
+		on lvNavigation mouseWheel events do
+		(
+			if keyboard.controlPressed then
+			(
+				_deltaSign = lb.math.sign events.delta
+				if _deltaSign > 0 then setIconSize #up
+				if _deltaSign < 0 then setIconSize #down
+			)
+		)
+		
+		------------------------------------------------------------------------------
+		on trvExplorer mouseMove events do
+		(
+			_tolerance = 5
+			
+			if (events.x > (trvExplorer.size.width - _tolerance)) and (events.x < (trvExplorer.size.width + _tolerance)) then
+				cursor.current = (dotnetclass "System.Windows.Forms.Cursors").sizeWE
+		)
+		
+		------------------------------------------------------------------------------
+		on trvExplorer afterSelect events do
+		(
+			--	Tenemos que gestionar el color de fondo de la selección porque cuando
+			--	el control pierde el foco se deja de mostrar
+			if oldTrvNode != undefined then
+			(
+				oldTrvNode.backColor = trvNodeBackColor
+				oldTrvNode.foreColor = trvNodeForeColor
+			)
+			
+			events.node.backColor = trvNodeSelBackColor 
+			events.node.foreColor = trvNodeBackColor 
+			
+			oldTrvNode = events.node
+			
+			--	actualizamos el Interface
+			currentPath = getCurrentPath()
+			updateSampleControls fromControl:#samplesGrid
+		)
+		
+		------------------------------------------------------------------------------
+		on btnIconSizeUp mouseDown events do
+		(
+			setIconSize #up
+		)
+		
+		------------------------------------------------------------------------------
+		on btnIconSizeDown mouseDown events do
+		(
+			setIconSize #down
+		)
+		
+		------------------------------------------------------------------------------
+		on lbxAssetSubType selected item do
+		(
+			updateSampleControls fromControl:#versionNumbers
+		)
+		
+		------------------------------------------------------------------------------
+		on lbxAssetSubTypeFilter selected item do
+		(
+			updateSampleControls fromControl:#samplesGrid
+		)
+		
+		------------------------------------------------------------------------------
+		on ddlVersionNumber selected item do
+		(
+			updateSampleControls fromControl:#loadOptions
+		)
+		
+		------------------------------------------------------------------------------
+		on rdoAssetLoadType changed state do
+		(
+			ckbPlace.enabled = chkAutoGrid.enabled = (rdoAssetLoadType.state == 2 or rdoAssetLoadType.state == 4 or rdoAssetLoadType.state == 5)
+			--Si el estado actual es Load entonces si hay más de uno seleccionado tendremos que bloquearlo. Sino lo dejamos activado.
+			currFolder  = getCurrentPath noVersion:true
+			if state == 1 then btnLoad.enabled = ((selGridAssets.count == 1) or ((isAssetFolder currFolder) or (isCamFolder currFolder))) else btnLoad.enabled = true
+		)
+		
+		------------------------------------------------------------------------------
+		on btnLoad pressed do
+		(
+			loadAssets renameParts:chkRenameParts.checked renamePartsMaterials:chkRenamePartsMaterials.checked
+		)
+		------------------------------------------------------------------------------
+		on ckbPlace changed state do
+		(
+			
+		)
+		
+		------------------------------------------------------------------------------
+		on chkRenameParts changed state do
+		(
+			-- chkRenamePartsMaterials.checked = chkRenameParts.checked
+			-- chkRenamePartsMaterials.enabled = chkRenameParts.checked
+		)
+
+		------------------------------------------------------------------------------
+		on btnRefresh pressed do
+		(
+			basePath = getBasePath()
+			
+			updateSampleControls()
+		)	
+		
+		------------------------------------------------------------------------------
+		on rMenu itemclicked events do
+		(
+			_itemName = (events.clickeditem.tostring())
+			menuItemClickedProcess _itemName
+		)
+
+		on dgvAssetVariations CurrentCellDirtyStateChanged events do
+		(
+			dgvAssetVariations.EndEdit()
+			updateSampleControls fromControl:#samplesGrid
+		)
+
+		on btnAllVariations pressed do
+		(
+			for i=0 to dgvAssetVariations.rows.count-1 do
+				dgvAssetVariations.rows.item[i].cells.item[0].value = true
+			updateSampleControls fromControl:#samplesGrid
+		)
+
+		on btnNoneVariations pressed do
+		(
+			for i=0 to dgvAssetVariations.rows.count-1 do
+				dgvAssetVariations.rows.item[i].cells.item[0].value = false
+			updateSampleControls fromControl:#samplesGrid
+		)
+
+		on btnInvVariations pressed do
+		(
+			for i=0 to dgvAssetVariations.rows.count-1 do
+				dgvAssetVariations.rows.item[i].cells.item[0].value = not dgvAssetVariations.rows.item[i].cells.item[0].value
+			updateSampleControls fromControl:#samplesGrid
+		)
+
+		on btnRefreshFolder mouseDown do
+		(
+			samplesCachePath = "FORCE REFRESH" -- nyapa del quince, que dios me perdone
+			updateSampleControls fromControl:#samplesGrid
+		)
+
+		
+	)--rollMainDef
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: passManager | Contiene la herramienta plantilla.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct tl_assetBrowser
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,					--@var: category | Categoria de la tool.
+		className = lb.getFileToolName (getThisScriptFilename() as string),	--@var: className | Nombre de la tool.
+		description = "Asset Browser",		--@var: description | Descripcion de la tool.
+		
+		cfgFile = (lb.config.getToolsIniPath()) + (lb.getFileToolName (getThisScriptFilename() as string)) + ".cfg",	--@var: cfgFile | Archivo de configuracion de la tool.
+		
+		opened = false,			--@var: opened | Indica si la herramienta está abierta.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--ROLLOUTS
+		------------------------------------------------------------------------------------------------
+		
+		rollMain = rollMainDef,	--@var: rollMain | Almacena el rollout principal de la herramienta.
+			
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: boolean | isOpen | Devuelve información true o false, si la herramienta está abierta o cerrada.
+		------------------------------------------------
+		fn isOpen =
+		(
+			this.opened
+		),
+		
+		
+		------------------------------------------------
+		--@fn: undefined | refreshInterface | Refresca el interface inicial de la herramienta
+		------------------------------------------------
+		fn refreshInterface =
+		(
+			--refresca el interface de la herramienta
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | createInterface | Crea el interface inicial de la herramienta
+		------------------------------------------------
+		fn createInterface =
+		(
+			--crea el interface, lo redimensiona y lo reposiciona
+			createDialog this.rollMain lockwidth:false lockheight:false pos:[-10000,0] style:#(#style_toolwindow, #style_titlebar, #style_sysmenu, #style_resizing)
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | destroyInterface | Destruye el interface de la herramienta.
+		------------------------------------------------
+		fn destroyInterface =
+		(
+			destroyDialog this.rollMain --cierra la herramienta.			
+		),--destroyInterface
+		
+		------------------------------------------------
+		--@fn: undefined | run | Lanza la herramienta.
+		------------------------------------------------
+		fn run =
+		(
+			this.createInterface() --crea el interface.
+			this.opened = true --indica que la herramienta está abierta
+		),--execute
+		
+		------------------------------------------------
+		--@fn: undefined | close | Cierra la herramienta.
+		------------------------------------------------
+		fn close =
+		(
+			this.destroyInterface() --destruye el interface.
+			this.opened = false --indica que la herramienta está cerrada.
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addTool this --añade la tool a la libreria principal
+		)		
+		
+	)--tl_assetBrowser
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------	
+	
+ 	--try(lb.assetBrowser.close())catch()
+	tl_assetBrowser() --crea la herramienta
+)

@@ -1,0 +1,329 @@
+<namingConvention name="namingConvention2012">
+
+  <projects>
+    <project id="tdj"  name="Tadeo Jones" />
+    <project id="ctf" name="Capture the Flag" />
+    <project id="gbg" name="Good Bad Guy" />
+  </projects>
+  
+  <symbols>
+    <symbol name="none"               char="" />
+    <symbol name="path"               char="\" />
+    <symbol name="part"               char="_" />
+    <symbol name="subPart"            char="-" />
+    <symbol name="subSubPart"         char="." />
+    <symbol name="content"            char="()" />
+    <symbol name="contentEnumeration" char="," />
+    <symbol name="list"               char="[]" />
+    <symbol name="listEnumeration"    char="." />
+    <symbol name="range"              char="-" />
+    <symbol name="enumeration"        char="#" />
+  </symbols>
+
+  <paths>
+    <path name="asset"            pattern="[root]asset\[assetType]\*\[assetType]_[assetName]\"  description="Asset folder">
+      <path name="documentation"    pattern="doc\"              description="Asset documentation folder" />
+      <path name="concept"          pattern="img.concept\"      description="Asset concept image folder" />
+      <path name="conceptSource"    pattern="img.concept.src\"  description="Asset concept source image folder" />
+      <path name="reference"        pattern="img.ref\"          description="Asset reference image folder" />
+      <path name="sample"           pattern="img.sample\"       description="Asset sample image folder" />
+      <path name="icon"             pattern="img.icon\"         description="Asset icon image folder" />
+      <path name="render"           pattern="img.render\"       description="Asset render image folder" />
+      <path name="pose"             pattern="pose\"             description="Asset animation poses folder" />
+      <path name="rig"              pattern="rig\"              description="Asset rig extra files folder">
+        <path name="facial"           pattern="facial\"           description="Asset facial rig data backup folder" />
+        <path name="skin"             pattern="skin\"             description="Asset skin rig data backup folder">
+          <path name="version"          pattern="v??\"              description="Asset skin rig data backup version folder" />
+        </path>
+      </path>
+      <path name="version"          pattern="version\"          description="Asset version 3d files folder" />
+    </path>
+    <path name="sequence"         pattern="[root]sequence\[sequenceId]\"  description="Sequence folder">
+      <path name="storyboard"       pattern="story\"            description="Sequence stoyboard source folder" />
+      <path name="layout"           pattern="layout\"           description="Sequence layout master files folder" />
+      <path name="animation"        pattern="anim\"             description="Sequence animation master files folder" />
+      <path name="texture"          pattern="texture\"          description="Sequence texture compilation folder" />
+      <path name="lighting"         pattern="render\"           description="Sequence lighting master files folder">
+        <path name="source"           pattern="source\"           description="Sequence lighting master GI precalc files folder" />
+      </path>
+      <path name="compositing"      pattern="comp\"             description="Sequence compositing/postproduction master files folder" />
+      <path name="video"            pattern="video\"            description="Sequence video files folder">
+        <path name="edition"          pattern="edit\"             description="Sequence video edition files folder" />
+        <path name="final"            pattern="final\"            description="Sequence video final files folder" />
+      </path>
+      <path name="sound"            pattern="video\"            description="Sequence sound files folder">
+        <path name="dubbing"          pattern="dub\"              description="Sequence dubbing voices files folder" />
+        <path name="effects"          pattern="fx\"               description="Sequence sound effects files folder" />
+        <path name="music"            pattern="music\"            description="Sequence music files folder" />
+      </path>
+      <path name="camera"           pattern="cam\[cameraId]\"   description="Sequence camera folder">
+        <path name="animation"        pattern="anim\"             description="Camera animation files folder" />
+        <path name="cache"            pattern="cache\"            description="Camera cached animation files folder">
+          <path name="source"           pattern="source\"           description="Camera cached animation files per object folder" />
+        </path>
+        <path name="lighting"         pattern="render\"           description="Camera lighting files folder">
+          <path name="source"           pattern="source\"           description="Camera lighting GI precalc files folder" />
+        </path>
+        <path name="compositing"      pattern="comp\"             description="Camera compositing/postproduction files" />
+        <path name="video"            pattern="video\"            description="Camera video files folder" />
+        <path name="sound"            pattern="sound\"            description="Camera sound files folder" />
+      </path>
+    </path>
+    <path name="frame"            pattern="[networkRoot]frame\[sequenceId]\[cameraId]\"  description="Frames folder">
+      <path name="storyboard"       pattern="story\"            description="Frames from camera storyboard source file" />
+      <path name="final"            pattern="final\"            description="Final frames" />
+      <path name="passes"           pattern="pass\"             description="Pass frames" />
+    </path>
+    <path name="simulation"       pattern="[networkRoot]simulation\"          description="Simulation files folder">
+      <path name="asset"            pattern="asset\*\[assetType]_[assetName]\"  description="Assets specific simulation folders">
+        <path name="function"         pattern="*\"                                description="Subfolder by asset indicating simulation function and/or software used" />
+      </path>
+      <path name="sequence"         pattern="sequence\[sequenceId]\[cameraId]\" description="Sequence specific simulation folders">
+        <path name="function"         pattern="*\"                                description="Subfolder by sequence camera indicating simulation function and/or software used" />
+      </path>
+    </path>
+    <path name="video"            pattern="[root]video\"      description="Video folder">
+      <path name="final"            pattern="final\"            description="Final videos folder" />
+      <path name="edition"          pattern="edit\"             description="Edition video files folder" />
+      <path name="sound"            pattern="sound\"            description="Sound files folder" />
+    </path>
+  </paths>    
+  
+  <layers>
+    <layer name="asset"             separator="part"      description="Asset layer name">
+      <part name="assetType"          optional="false"      description="File content asset type" />
+      <part name="assetName"          optional="false"      description="File content asset name" />
+    </layer>
+    <layer name="auxiliary"         separator="subPart"   description="Asset layer name">
+      <part name="auxPrefix"          optional="false"      description="Auxiliary prefix" />
+      <part name="defaultPattern"     optional="false"      description="Default pattern. Any number of any characters" />
+    </layer>
+  </layers>
+
+  <files>
+    <file name="asset"                separator="part"      description="Asset file name">
+      <part name="assetType"            optional="false"      description="File content main asset type" />
+      <part name="assetName"            optional="false"      description="File content main asset name" />
+      <part name="assetFileType"         optional="false"      description="File content purpose type" />
+      <part name="fileVersion"          optional="false"      description="File content version" />
+    </file>
+    <file name="sequence"             separator="part"      description="Sequence file name">
+      <part name="sequenceId"           optional="false"      description="Sequence identifier" />
+      <part name="cameraId"             optional="false"      description="Camera identifiere" />
+      <part name="sequenceFileType"     optional="false"      description="Sequence file content purpose type" />
+      <part name="renderFileContent"    optional="true"       description="Sequence render file content purpose and type" />
+    </file>
+  </files>
+  
+  <nodes>
+    <node name="asset"              separator="part"      description="Asset node name">
+      <part name="assetType"          optional="false"      description="Asset type" />
+      <part name="assetName"          optional="false"      description="Asset name" />
+      <part name="assetNodeType"      optional="false"      description="Assset node purpose type" />
+      <part name="assetNodeLocation"  optional="false"      description="Assset node location" />
+      <part name="assetNodeName"      optional="false"      description="Assset node name" />
+      <part name="assetNodeCacheType" optional="false"      description="Asset node cache type" />
+      <part name="assetNodeFlags"     optional="false"      description="Asset node flags" />
+    </node>   
+  </nodes>
+  
+  <materials>
+    <material name="asset"          separator="part"      description="Asset material name">
+      <part name="assetType"          optional="false"      description="Asset type" />
+      <part name="assetName"          optional="false"      description="Asset name" />
+      <part name="assetMaterialName"  optional="false"      description="Assset material name" />
+    </material>  
+  </materials>
+
+  
+  <bitmaps>
+    <bitmap name="asset"            separator="part"      description="Asset bitmap name">
+      <part name="assetType"          optional="false"      description="Asset type" />
+      <part name="assetName"          optional="false"      description="Asset name" />
+      <part name="assetBitmapName"    optional="false"      description="Assset bitmap name" />
+      <part name="assetBitmapType"    optional="false"      description="Assset bitmap type" />
+      <part name="assetBitmapDetail"  optional="false"      description="Assset bitmap detail" />
+      <part name="assetBitmapSize"    optional="true"       description="Asset bitmap size" />
+    </bitmap>
+  </bitmaps>
+    
+  <parts>
+    <part name="assetType"      optional="false"  description="Asset type">
+      <option name="generic"      pattern="ast"     type="string"   description="Generic asset type. For asset construction, etc." />
+      <option name="character"    pattern="chr"     type="string"   description="Character and character-prop asset type" />
+      <option name="prop"         pattern="prp"     type="string"   description="Prop asset type" />
+      <option name="effects"      pattern="fx"      type="string"   description="Effects asset type" />
+      <option name="light"        pattern="li"      type="string"   description="Light asset type" />
+      <option name="set"          pattern="set"     type="string"   description="Set and set-prop asset type" />
+    </part>
+    <part name="assetName"      optional="false"    separator="enumeration"   description="Asset complete name">
+      <part name="assetName"      optional="false"    separator="content"       description="Asset name, asset version and subasset name">
+        <part name="assetName"      optional="false"    separator="subPart"       description="Asset name and asset version">
+          <part name="assetName"      optional="false"    description="Asset name">
+            <option name="free"         pattern="*"         type="string"     description="Asset name" />
+          </part>
+          <part name="assetVersion"   optional="true"     description="Asset version name">
+            <option name="free"         pattern="*"         type="string"     description="Asset version" />
+          </part>
+        </part>
+        <part name="subAssetName"   optional="true"     description="Asset type">
+          <option name="free"         pattern="*"         type="string"     description="Subasset name" />
+        </part>
+      </part>
+      <part name="assetNumber"        optional="true"     description="Asset copy number">
+        <option name="index"        pattern="???"       type="integer"     description="Asset numerical index" />
+      </part>
+    </part>
+    <part name="assetNodeType"    optional="false"    description="Assset node purpose type">
+      <option name="auxiliary"      pattern="aux"       type="string"     description="Auxiliary node type" />
+      <option name="camera"         pattern="cam"       type="string"     description="Camera node type" />
+      <option name="mesh"           pattern="mesh"      type="string"     description="Mesh node type" />
+      <option name="draft"          pattern="draft"     type="string"     description="Mesh draft node type" />
+      <option name="morph"          pattern="morph"     type="string"     description="Mesh facial node type. For facial expressions" />
+      <option name="puppet"         pattern="puppet"    type="string"     description="Mesh puppet node type. Mesh volume for rig nodes" />
+      <option name="driver"         pattern="driver"    type="string"     description="Mesh cloth, hair node type. For cloth simulation" />
+      <option name="cloth"          pattern="cloth"     type="string"     description="Cloth node type" />
+      <option name="hair"           pattern="hair"      type="string"     description="Hair node type" />
+      <option name="light"          pattern="light"     type="string"     description="Light node type" />
+      <option name="effects"        pattern="fx"        type="string"     description="Effects node type" />
+      <option name="animatable"     pattern="anim"      type="string"     description="Animatable rig node type" />
+      <option name="layout"         pattern="layout"    type="string"     description="Layout animatable rig node type" />
+      <option name="skinnable"      pattern="skin"      type="string"     description="Skinnable rig node type" />      
+    </part>
+    <part name="assetNodeLocation"    optional="false"    description="Assset node location">
+      <option name="undefined"          pattern="x"         type="string"     description="Asset node undefined location" />
+      <option name="left"               pattern="l"         type="string"     description="Asset node left location" />
+      <option name="right"              pattern="r"         type="string"     description="Asset node right location" />
+      <option name="top"                pattern="t"         type="string"     description="Asset node top location" />
+      <option name="bottom"             pattern="b"         type="string"     description="Asset node bottom location" />
+      <option name="front"              pattern="f"         type="string"     description="Asset node front location" />
+      <option name="back"               pattern="k"         type="string"     description="Asset node back location" />      
+    </part>
+    <part name="assetNodeName"    optional="false"    description="Asset node name">
+      <option name="free"           pattern="*"         type="string"     description="Default pattern. Any number of any character" />
+    </part>
+    <part name="assetNodeCacheType"   optional="false"    description="Assset node cache type">
+      <option name="undefined"          pattern="x"         type="string"     description="Default cache type. Not specified cache" />
+      <option name="pointCache"         pattern="pc"        type="string"     description="Point cache cache type" />
+      <option name="transformCache"     pattern="tc"        type="string"     description="Transform cache type" />
+      <option name="inheritedCache"     pattern="ic"        type="string"     description="Inherited cache type" />
+      <option name="noExportCache"      pattern="nc"        type="string"     description="No cache export type" />      
+    </part>
+    <part name="assetNodeFlags"   optional="false"    count="n"     countSeparator="none"     description="Assset node flags">
+      <option name="undefined"      pattern="x"         type="string"     description="Asset node default flag. Not specified flag" />
+      <option name="cached"         pattern="p"         type="string"     description="Asset cached animation flag" />
+      <option name="skinnable"      pattern="s"         type="string"     description="Asset skin rig node flag. For nodes to be skinned" />
+      <option name="animatable"     pattern="d"         type="string"     description="Asset animatable rig node flag. For rig nodes to be animated" />
+      <option name="dynamic"        pattern="y"         type="string"     description="Asset dynamic rig node flag. For rig nodes to be animated and/or physically simulated" />
+      <option name="control"        pattern="c"         type="string"     description="Asset animatable rig node control flag. For rig control nodes to be animated" />
+      <option name="automatic"      pattern="a"         type="string"     description="Asset automatic rig node flag. For rig nodes to be automatically animated" />
+      <option name="frozen"         pattern="f"         type="string"     description="Asset frozen node flag. For frozen nodes" />
+      <option name="hidden"         pattern="h"         type="string"     description="Asset hidden node flag. For hidden nodes" />
+    </part>
+    <part name="assetMaterialName"  optional="false"  description="Asset material name">
+      <option name="free"             pattern="*"       type="string"     description="Default pattern. Any number of any character" />
+    </part>
+    <part name="assetBitmapName"    optional="false"  description="Asset bitmap name">
+      <option name="free"             pattern="*"       type="string"     description="Default pattern. Any number of any character" />
+    </part>
+    <part name="assetBitmapType"  optional="false"    description="Assset bitmap type">
+      <option name="difusse"        pattern="d"         type="string"     description="Diffuse map" />
+      <option name="bump"           pattern="b"         type="string"     description="Bump map" />
+      <option name="normal"         pattern="n"         type="string"     description="Normal map" />
+      <option name="displace"       pattern="p"         type="string"     description="Displace map" />
+      <option name="cavity"         pattern="c"         type="string"     description="Cavity map" />
+      <option name="specular"       pattern="s"         type="string"     description="Specular map" />
+      <option name="mask"           pattern="m"         type="string"     description="Mask map" />
+      <option name="reflection"     pattern="r"         type="string"     description="Reflection map" />
+      <option name="translucency"   pattern="t"         type="string"     description="Transliucency map" />
+    </part>
+    <part name="assetBitmapDetail"  optional="false"    description="Assset bitmap detail">
+      <option name="undefined"        pattern="x"         type="string"   description="Not specified detail" />
+      <option name="low"              pattern="l1"        type="string"   description="Low level detail" />
+      <option name="high"             pattern="l2"        type="string"   description="High level detail" />
+    </part>
+    <part name="assetBitmapSize"    optional="true"    description="Assset bitmap size">
+      <option name="total"            pattern="1x1"      type="string"    description="Total size" />
+      <option name="half"             pattern="1x2"      type="string"    description="Half size" />
+      <option name="third"            pattern="1x3"      type="string"    description="One third of the size" />
+      <option name="quarter"          pattern="1x4"      type="string"    description="Quarter of size" />
+      <option name="eighth"           pattern="1x8"      type="string"    description="One eighth of the size" />      
+    </part>
+    <part name="assetFileType"      optional="false"   description="Asset file content complete purpose">
+      <option name="draft"            pattern="draft"    type="string"    description="Draft file (for layout sets)" />
+      <option name="mesh"             pattern="mesh"     type="string"    description="Mesh file" />
+      <option name="puppet"           pattern="puppet"   type="string"    description="Puppet meshes for rig file" />
+      <option name="layout"           pattern="layout"   type="string"    description="Layout rig file" />
+      <option name="facial"           pattern="facial"   type="string"    description="Facial mesh expressions and facial rig file" />
+      <option name="anim"             pattern="anim"     type="string"    description="Animation rig file" />
+      <option name="cloth"            pattern="cloth"    type="string"    description="CLoth rig file" />
+      <option name="hair"             pattern="hair"     type="string"    description="Hair rig file" />      
+      <option name="pose"             pattern="pose"     type="string"    description="Animation pose file for facial and rig poses generation" />
+      <option name="render"           pattern="render"   type="string"    description="Render file for shading and texture testing" />      
+    </part>
+    <part name="sequenceId"           optional="false"   separator="subPart" description="Sequence identifier">
+      <part name="sequenceId"             optional="false"   description="Sequence identifier">
+        <option name="sequence"             pattern="seq???"   type="string"   description="Sequence name/number" />
+        <option name="subSequence"          pattern="seq????"  type="string"   description="Sequence name/number and subsequence specification" />
+      </part>
+      <part name="sequenceSpecification"  optional="true"  description="Sequence specification">
+        <option name="free"                 pattern="*"        type="string"   description="Default pattern. Any number of any character" />
+      </part>
+    </part>
+    <part name="cameraId"             optional="false"   description="Sequence identifier">
+      <option name="cameraNumber"       pattern="cam???"        type="string"  description="Camera specific number" />
+      <option name="cameraRange"        pattern="cam???-cam???" type="string"  description="Camera specific range" />
+    </part>
+    <part name="sequenceId"           optional="false"   separator="subPart"   description="Sequence identifier">
+      <part name="sequenceId"             optional="false"   description="Sequence identifier">
+        <option name="sequence"             pattern="seq???"   type="string"   description="Sequence name/number" />
+        <option name="subSequence"          pattern="seq????"  type="string"   description="Sequence name/number and subsequence specification" />
+      </part>
+      <part name="sequenceSpecification"  optional="true"  description="Sequence specification">
+        <option name="free"                 pattern="*"        type="string"   description="Default pattern. Any number of any character" />
+      </part>
+    </part>
+    <part name="sequenceFileType"   optional="false"   description="Sequence file type">
+      <option name="layout"           pattern="layout"         type="string"   description="Sequence layout file type" />
+      <option name="animation"        pattern="anim"           type="string"   description="Sequence animation file type" />
+      <option name="cloth"            pattern="cloth"          type="string"   description="Sequence cloth simulation file type" />
+      <option name="hair"             pattern="hair"           type="string"   description="Sequence hair simulation file type" />
+      <option name="dynamics"         pattern="dynamic"        type="string"   description="Sequence dynamic simulation file type" />
+      <option name="cache"            pattern="cache"          type="string"   description="Sequence cache file type" />
+      <option name="effects"          pattern="fx"             type="string"   description="Sequence effects simulation file type" />
+      <option name="render"           pattern="render"         type="string"   description="Sequence render file type" />
+    </part>
+    <part name="renderFileContent"    optional="true"   separator="content"      description="Sequence render file content purpose and type">
+      <part name="renderFileName"       optional="false"  description="Sequence render file content name">
+        <option name="free"               pattern="*"        type="string"   description="Default pattern. Any number of any character" />
+      </part>
+      <part name="renderFileContent"  optional="false"   separator="subSubPart" description="Sequence render file content purpose">
+        <part name="renderFileContent"  optional="false"   separator="subPart"    description="Sequence render file content purpose">
+          <part name="renderFileContentLocation"  optional="false"                  description="Sequence render file content location">
+            <option name="fg"             pattern="fg"      type="string"             description="Foreground render file content" />
+            <option name="bg"             pattern="bg"      type="string"             description="Background render file content" />
+            <option name="all"            pattern="all"     type="string"             description="Mix foregroung-background render file content" />
+          </part>
+          <part name="renderFileContentUse"       optional="false"              description="Sequence render file content purpose">
+            <option name="pass"           pattern="pass"    type="string"             description="Render file with lighting passes/calculations" />
+            <option name="cameraMapping"  pattern="cmap"    type="string"             description="Render file with camera mapping passes/calculations" />
+            <option name="auxiliary"      pattern="aux"     type="string"             description="Render file with auxiliary use content" />
+          </part>
+        </part>
+        <part name="renderFileContentSpecificUse"  optional="true"              description="Sequence render file content specific uset">
+          <option name="source"           pattern="src"     type="string"             description="Sequence render file with source material for calculations (GI precalclation, Camera mapping generation, etc.)" />
+        </part>
+      </part>      
+    </part>
+    <part name="fileVersion"  optional="false"  description="File content version">
+      <option name="version"    pattern="v??"     type="string"   description="File version" />
+    </part>
+    <part name="auxPrefix"    optional="false"  description="Auxiliary prefix">
+      <option name="auxiliary"  pattern="aux"     type="string"   description="Auxiliary prefix" />
+    </part>
+    <part name="deafultPattern" optional="false"  description="Default pattern. Any number of any character">
+      <option name="free"         pattern="*"       type="string"   description="Default pattern. Any number of any character" />
+    </part>
+  </parts>
+  
+</namingConvention>

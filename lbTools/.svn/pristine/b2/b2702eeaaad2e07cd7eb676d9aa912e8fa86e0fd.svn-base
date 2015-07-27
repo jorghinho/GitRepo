@@ -1,0 +1,37 @@
+<info>
+  <id>cmn</id>
+  <name>common</name>
+  <drive>r</drive>
+  
+  <resources>
+
+    <resource>
+      <type>svn</type>
+      <name>resource</name>
+      <url>https://lbdata001/svn/common_resource</url>
+      <localPath>r:\resource</localPath>
+      <networkPath>\\lbsrvdev-001\r\resource</networkPath>
+    </resource>
+  
+  </resources>
+
+  <parameters>
+
+    <paramblock>
+      <type>general</type>
+      <name>common</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>1108</height>
+        <width>2048</width>
+        <aspect>1.0</aspect>
+      </size>
+      <gamma>
+        <input>1.84</input>
+        <output>1.0</output>
+      </gamma>
+    </paramblock>
+
+  </parameters>
+  
+</info>

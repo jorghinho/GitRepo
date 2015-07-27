@@ -1,0 +1,353 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--@Desc: libreria de documentación
+------------------------------------------------------------------------------------------------------------------------------------------------
+(	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: templateLib | Contiene la libreria de documentación.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct lib_documentation
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,					--@var: category | Categoria de la libreria.
+		className = lb.getFileLibName (getThisScriptFilename() as string),	--@var: className | Nombre de la libreria.
+		description = "Libreria de documentacion",	--@var: description | Descripcion de la libreria.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+
+		------------------------------------------------
+		--@fn: string | getDocFilePath | Devuelve el path de documentación para la tool suministrada
+		--@gets: file | file | El nombre (classname) de la libreria, si no se le suministra abre un opendialog para buscar el archivo.
+		--@returns: string | _resource | El path del archivo dentro de la libreria.
+		------------------------------------------------		
+		fn getDocFilePath _file =
+		(
+			_resource = undefined
+			if _file == undefined then 
+			(
+				_resource = getOpenFilename types:"Maxscript File (*.ms)|*.ms" caption: "Select the Resource to generate the documentation" filename:(lb.config.getScriptsPath())
+			)
+			else 
+			(
+				_tool = (lb.getTool _file)
+				if _tool != undefined do _resource = _tool.defFile  
+
+				_script = (lb.getScript _file)
+				if _script != undefined do _resource = _script.defFile 
+
+				_library = (lb.getLibrary _file)
+				if _library != undefined do _resource = _library.defFile  
+			)
+
+			_resource
+		),
+
+		------------------------------------------------
+		--@fn: boolean | generateDoc | Crea el archivo de texto de documentación de la tool.
+		--@gets: (opt) file | file | El nombre (classname) de la libreria, si no se le suministra abre un opendialog para buscar el archivo.
+		--@returns: boolean | _success | Devuelve si la operación se ha realizado correctamente.
+		------------------------------------------------			
+		fn generateDoc _file:undefined = 
+		(
+			--Obtenemos el path de la tool suministrada
+			_resourcePath = getDocFilePath _file
+
+			if _resourcePath != undefined do 
+			(
+				--Obtenemos la definición del fichero para crear el txt correspondiente.
+				_resourceParts = FilterString _resourcePath "\\"
+				_fileType = (filterstring _resourceParts[_resourceParts.count] "_")[1]
+				_fileName = (filterstring ((filterstring _resourceParts[_resourceParts.count] "_")[2]) ".")[1]
+
+				--Abrimos el fichero de la tool en modo lectura
+				_f = openFile _resourcePath mode:"r"
+				if _f != undefined do 
+				(
+					--En esta array se almacenaran en orden todos los tags de comentario, --@
+					_docuInfo = #()
+					while not EOF _f do
+					(
+						local _currLine = readLine _f
+						if matchpattern _currLine pattern:"*--@*" do 
+						(
+							append _docuInfo _currLine
+						)
+					)
+
+					_documentation = #()
+					--print _docuInfo
+					--hay que filtrar a una nueva array el contenido. #(Descripcion resource, #(vars),#(functions))
+					for _line in _docuInfo do 
+					(
+						_success = false
+
+						--miramos en que posicion se encuentra el caracter --@
+						_offset = findString _line "--@"
+						--limpiamos la string de cosas que pueda tener antes para quedarnos solo con la definicion del comentario.
+						_filteredString = substring _line _offset _line.count
+
+						_currIndex = 1 
+						--buscaremos la cabezera
+						_stop = false
+						--Aqui se guarda la definicion o heading 	
+						_heading = ""
+						--aqui se guarda el contenido (tantos registros como | encontremos)
+						_contents =#()
+						for i = 1 to _filteredString.count where not _stop do
+						(
+							if _filteredString[i] == ":" then _stop = true
+							else 
+							(
+								_heading += _filteredString[i]
+								_currIndex = i
+							)
+						) 
+
+						--Si el indice que busca el heading llega hasta el final de la linea significa 
+						if _currIndex == _filteredString.count do _success = false
+
+						_heading = substituteString _heading "--@" ""
+
+						_filteredString = substring _filteredString (_currIndex+2) _filteredString.count
+
+						_docuRow = #()
+						_filteredParts = FilterString _filteredString "|"
+						for i = 1 to _filteredParts.count do 
+						(
+							if _filteredParts[i][1]==" " do  _filteredParts[i][1] = ""
+							if _filteredParts[i][_filteredParts[i].count]==" " do  _filteredParts[i][_filteredParts[i].count] = ""
+							append _contents _filteredParts[i]
+						)
+						append _docuRow _heading 
+						append _docuRow _contents
+						append _documentation _docuRow
+					)
+					--print _documentation
+
+					--for i=1 to _s.count do print _s[i]
+
+					--Una vez almacenados todos los comentarios se creará el archivo txt para la infomacion.
+					_txtPath = lb.config.getToolsDocPath() + ((filterstring _resourceParts[_resourceParts.count] ".")[1]) + ".txt"
+					
+					_process = true
+					--Si el archivo de docu existe preguntamos si quiere sobreescribirlo.
+					if doesFileExist _txtPath do 
+					(
+						_process = lb.message.show ("file "+_txtPath+" already exists,\n Delete old file? ") type:#query
+						if _process do 
+						(
+							deletefile _txtPath
+						)
+					)
+					if _process do 
+					(
+						_infoFile = createFile _txtPath
+
+						--Aqui va la definicion del archivo de texto.
+						_heading = "======= "
+						case _fileType of 
+						(
+							"lib": _heading += "Libreria "
+							"pmov": _heading += "Override "
+							"pmovUI": _heading += "Common Properties Override "
+							"rsa": _heading += "Rig Solution "
+							"rse": _heading += "Rig Solution "
+							"rss": _heading += "Rig Solution "
+							"sc": _heading += "Script "
+							"tl": _heading += "Tool "
+							default: _heading += lb.message.show "Tipo de archivo no definido, entrar el tipo manualmente" type:#queryString 
+						)
+						_heading+= (_fileName + " =======\n\n")
+						
+						format _heading to:_infoFile
+
+						--Un indice de control para el iterador, en caso de que no haya descripción de la app, que no genere el campo de descripción.
+						_startat = 1
+						if tolower _documentation[1][1] == tolower "Desc" do 
+						(
+							_nextLine = "====== Descripcion ======\n"
+							format _nextLine to:_infoFile
+							_nextLine = _documentation[1][2][1] + "\n"
+							format _nextLine to:_infoFile
+							_startat = 2 
+						)
+
+						for i = _startat to _documentation.count do 
+						(
+							--Si encontramos un struct o un rollout empieza la fiesta
+							if (tolower _documentation[i][1] == tolower "Struct") or (tolower _documentation[i][1] == tolower "Rollout") then 
+							(
+								_nextLine = "====== " + _documentation[i][1] + "  " + _documentation[i][2][1] + " ======\n"
+								format _nextLine to:_infoFile
+								_nextLine =  _documentation[i][2][2]+"\n"
+								format _nextLine to:_infoFile
+								
+								_printOnceVar = false
+								_printOnceFunc = false 
+								_printOnceEvents = false
+								_manualIterator = i + 1
+								while _manualIterator<_documentation.count and (tolower _documentation[_manualIterator][1] != tolower "Struct") and (tolower _documentation[_manualIterator][1] != tolower "Rollout") do 
+								(
+									if not _printOnceVar do 
+									(
+										_nextLine = "===== Local Variables =====\n"
+										format _nextLine to:_infoFile
+										_printOnceVar = true 
+
+										format ("^ Type       ^ Name        ^ Description          ^\n") to:_infoFile
+									)
+									while (tolower _documentation[_manualIterator][1] == tolower "Var") do 
+									(
+										_nextLine = "| //" + _documentation[_manualIterator][2][1] + "// |"
+										_nextLine += "**" +_documentation[_manualIterator][2][2] + "**|" +_documentation[_manualIterator][2][3] +"|\n"
+										format _nextLine to:_infoFile
+
+										_manualIterator += 1
+									)
+
+									if not _printOnceFunc do 
+									(
+										_nextLine = "===== Functions =====\n"
+										format _nextLine to:_infoFile
+										_printOnceFunc = true 
+									)
+									_lastTypeInput = ""
+									while _manualIterator<_documentation.count and (tolower _documentation[_manualIterator][1] != tolower "Struct") and (tolower _documentation[_manualIterator][1] != tolower "Rollout") and (tolower _documentation[_manualIterator][1] != tolower "Event") do 
+									(
+										_printOnceHeader = false 
+										_printOnceReturns = false
+										_function = ""
+										_params = #()
+										_returns = ""
+										if tolower _documentation[_manualIterator][1] == tolower "Fn" do 
+										(
+											_returns = _documentation[_manualIterator][2][1]
+											_function = _documentation[_manualIterator][2][2]
+											_nextLine = "==== " + _documentation[_manualIterator][2][2] + " ====\n"
+											format _nextLine to:_infoFile
+											_nextLine =  _documentation[_manualIterator][2][3] +"\n"
+											format _nextLine to:_infoFile
+										)
+										if tolower _documentation[_manualIterator][1] == tolower "Usage" do 
+										(
+											format "==Uso:==\n" to:_infoFile 
+											_nextLine = "<code> " + _documentation[_manualIterator][2][1] + " </code>\n"
+											format _nextLine to:_infoFile
+										)
+										if tolower _documentation[_manualIterator][1] == tolower "Deprecated" do 
+										(
+											_nextLine = "== " + _documentation[_manualIterator][2][1] + " ==\n"
+											format _nextLine to:_infoFile
+										)
+										if tolower _documentation[_manualIterator][1] == tolower "Gets" do 
+										(
+											if not _printOnceHeader and (tolower _lastTypeInput == tolower "Deprecated" or tolower _lastTypeInput== tolower "Fn" or tolower _lastTypeInput== tolower "Usage") do 
+											(
+												format "==Parametros:==\n" to:_infoFile 
+												format ("^ Type       ^ Parameter        ^ Description          ^\n") to:_infoFile
+												_printOnceHeader = true
+											)
+
+											_nextLine = "| //" + _documentation[_manualIterator][2][1] + "// |"
+											_nextLine += "**" +_documentation[_manualIterator][2][2] + "**|" +_documentation[_manualIterator][2][3] +"|\n"
+											format _nextLine to:_infoFile		
+										)
+										if tolower _documentation[_manualIterator][1] == tolower "returns" do 
+										(
+											if not _printOnceHeader and (tolower _lastTypeInput == tolower "Deprecated" or tolower _lastTypeInput== tolower "Gets") do 
+											(
+												format "==Returns:==\n" to:_infoFile 
+												format "\n" to:_infoFile
+												format ("^ Type       ^ Returns        ^ Description          ^\n") to:_infoFile
+												_printOnceReturns = true
+											)
+
+											_nextLine = "| //" + _documentation[_manualIterator][2][1] + "// |"
+											_nextLine += "**" +_documentation[_manualIterator][2][2] + "**|" +_documentation[_manualIterator][2][3] +"|\n"
+											format _nextLine to:_infoFile		
+										)
+										_lastTypeInput = _documentation[_manualIterator][1]
+										_manualIterator += 1
+									)
+									
+									_manualIterator+=1
+								)
+
+								i = _manualIterator
+							)
+						)
+						close _infoFile
+					)
+					close _f 
+				)
+			)
+		),	
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+			
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addLibrary this --añade la libreria a la principal
+		)
+		
+	)--lib_templateLib
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	
+	lib_documentation() --crea la libreria
+)

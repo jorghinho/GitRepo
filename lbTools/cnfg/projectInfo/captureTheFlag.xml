@@ -1,0 +1,696 @@
+<info>
+  
+  <id>ctf</id>
+  <name>Capture the Flag</name>
+  <drive>y</drive>
+  
+  <resources>
+    
+    <resource>
+      <type>svn</type>
+      <name>asset</name>
+      <url>https://lbdata001/svn/ctf_asset</url>
+      <localPath>y:\asset</localPath>
+      <networkPath>\\lbdata001\y\asset</networkPath>
+    </resource>
+
+    <resource>
+      <type>svn</type>
+      <name>documentation</name>
+      <url>https://lbdata001/svn/ctf_documentation</url>
+      <localPath>y:\documentation</localPath>
+      <networkPath>\\lbdata001\y\documentation</networkPath>
+    </resource>
+    
+    <resource>
+      <type>share</type>
+      <name>frame</name>
+      <url>none</url>
+      <localPath>none</localPath>
+      <networkPath>\\lbdata002\y\frame</networkPath>
+    </resource>
+
+    <resource>
+      <type>share</type>
+      <name>frameR</name>
+      <url>none</url>
+      <localPath>none</localPath>
+      <networkPath>\\lbdata002\y\frameR</networkPath>
+    </resource>
+
+    <resource>
+      <type>svn</type>
+      <name>management</name>
+      <url>https://lbdata001/svn/ctf_management</url>
+      <localPath>y:\management</localPath>
+      <networkPath>\\lbdata001\y\management</networkPath>
+    </resource>
+
+    <resource>
+      <type>svn</type>
+      <name>marketing</name>
+      <url>https://lbdata001/svn/ctf_marketing</url>
+      <localPath>y:\marketing</localPath>
+      <networkPath>\\lbdata001\y\marketing</networkPath>
+    </resource>
+    
+    <resource>
+      <type>svn</type>
+      <name>resource</name>
+      <url>https://lbdata001/svn/ctf_resource</url>
+      <localPath>y:\resource</localPath>
+      <networkPath>\\lbdata001\y\resource</networkPath>
+    </resource>
+
+    <resource>
+      <type>svn</type>
+      <name>sequence</name>
+      <url>https://lbdata001/svn/ctf_sequence</url>
+      <localPath>y:\sequence</localPath>
+      <networkPath>\\lbdata001\y\sequence</networkPath>
+    </resource>
+
+    <resource>
+      <type>svn</type>
+      <name>sound</name>
+      <url>https://lbdata001/svn/ctf_sound</url>
+      <localPath>y:\asset</localPath>
+      <networkPath>\\lbdata001\y\sound</networkPath>
+    </resource>
+
+    <resource>
+      <type>svn</type>
+      <name>video</name>
+      <url>https://lbdata001/svn/ctf_video</url>
+      <localPath>y:\video</localPath>
+      <networkPath>\\lbdata001\y\video</networkPath>
+    </resource>
+
+    <resource>
+      <type>share</type>
+      <name>simulation</name>
+      <url>none</url>
+      <localPath>none</localPath>
+      <networkPath>\\lbdata002\y\simulation</networkPath>
+    </resource>
+  </resources>
+
+  <parameters>
+
+    <paramblock>
+      <type>general</type>
+      <name>common</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>872</height>
+        <width>2048</width>
+        <aspect>1.0</aspect>
+      </size>
+      <gamma>
+        <input>1.84</input>
+        <output>1.0</output>
+      </gamma>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-amyJuanchoLick</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>2048</height>
+        <width>2048</width>
+      </size>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-amyLookingMobile</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>2048</height>
+        <width>2048</width>
+      </size>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-amyMobileLG</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>2048</height>
+        <width>2048</width>
+      </size>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-amyStandingOld</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>2048</height>
+        <width>2048</width>
+      </size>
+    </paramblock> 
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-carsonShowingDollar</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>2048</height>
+        <width>2048</width>
+      </size>
+    </paramblock>    
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-carsonStdRing</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>2048</height>
+        <width>2048</width>
+      </size>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-carsonVictory</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>2048</height>
+        <width>2048</width>
+      </size>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-frankAstronautStanding</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>2048</height>
+        <width>2048</width>
+      </size>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-frankNasaWalkie</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>2048</height>
+        <width>2048</width>
+      </size>
+    </paramblock>   
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-frankStandingOld</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>2048</height>
+        <width>2048</width>
+      </size>
+    </paramblock>   
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-gagsExplain</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>2048</height>
+        <width>2048</width>
+      </size>
+    </paramblock>   
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-gigsScared</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>2048</height>
+        <width>2048</width>
+      </size>
+    </paramblock>     
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-jackAstronautThumbUp</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>2048</height>
+        <width>2048</width>
+      </size>
+    </paramblock> 
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-jackStdPickle</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>2048</height>
+        <width>2048</width>
+      </size>
+    </paramblock> 
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-juanchoStdFist</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>2048</height>
+        <width>2048</width>
+      </size>
+    </paramblock>   
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-juanchoStdIgorToolbox</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>2048</height>
+        <width>2048</width>
+      </size>
+    </paramblock>   
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-juanchoStdRocket</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>2048</height>
+        <width>2048</width>
+      </size>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-martyStdChecking</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>2048</height>
+        <width>2048</width>
+      </size>
+    </paramblock>   
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-martyStdCool</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>2048</height>
+        <width>2048</width>
+      </size>
+    </paramblock> 
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-martyStdIgor</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>2048</height>
+        <width>2048</width>
+      </size>
+    </paramblock>   
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-martyStdIgorController</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>2048</height>
+        <width>2048</width>
+      </size>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-mikeNeopreneKiteSurfBoard</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>2048</height>
+        <width>2048</width>
+      </size>
+    </paramblock>  
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-mikeStdRocket</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>2048</height>
+        <width>2048</width>
+      </size>
+    </paramblock>   
+
+     <paramblock>
+      <type>override</type>
+      <name>seq_500-presidentStdStanding</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>2048</height>
+        <width>2048</width>
+      </size>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-samanthaStdStanding02</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>2048</height>
+        <width>2048</width>
+      </size>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-samanthaStdTess</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>2048</height>
+        <width>2048</width>
+      </size>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-scottCasualLookingUp</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>2048</height>
+        <width>2048</width>
+      </size>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-scottNasaCoolSalute</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>2048</height>
+        <width>2048</width>
+      </size>
+    </paramblock> 
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-scottStdTie</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>2048</height>
+        <width>2048</width>
+      </size>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-tessStdAngry</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>2048</height>
+        <width>2048</width>
+      </size>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-tessStdBirthdayHat</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>2048</height>
+        <width>2048</width>
+      </size>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-tessStdPuppet</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>2048</height>
+        <width>2048</width>
+      </size>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-final</name>
+      <frameRate>24.0</frameRate>
+      <size>
+        <height>6000</height>
+        <width>6000</width>
+      </size>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-cine</name>
+      <frameRate>25.0</frameRate>
+      <size>
+        <height>1080</height>
+        <width>1920</width>
+      </size>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-cine(cin)</name>
+      <frameRate>25.0</frameRate>
+      <size>
+        <height>1080</height>
+        <width>1920</width>
+      </size>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-cine(mkb)</name>
+      <frameRate>25.0</frameRate>
+      <size>
+        <height>1080</height>
+        <width>1920</width>
+      </size>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-ctDueloA</name>
+      <frameRate>25.0</frameRate>
+      <size>
+        <height>1080</height>
+        <width>1920</width>
+      </size>
+    </paramblock>    
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-ctDueloA(nos)</name>
+      <frameRate>25.0</frameRate>
+      <size>
+        <height>1080</height>
+        <width>1920</width>
+      </size>
+    </paramblock>    
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-ctDueloB</name>
+      <frameRate>25.0</frameRate>
+      <size>
+        <height>1080</height>
+        <width>1920</width>
+      </size>
+    </paramblock>    
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-ctDueloB(nos)</name>
+      <frameRate>25.0</frameRate>
+      <size>
+        <height>1080</height>
+        <width>1920</width>
+      </size>
+    </paramblock>      
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-ctElGranDictador</name>
+      <frameRate>25.0</frameRate>
+      <size>
+        <height>1080</height>
+        <width>1920</width>
+      </size>
+    </paramblock> 
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-ctElGranDictador(nos)</name>
+      <frameRate>25.0</frameRate>
+      <size>
+        <height>1080</height>
+        <width>1920</width>
+      </size>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-ctIgorVsBrasabotA</name>
+      <frameRate>25.0</frameRate>
+      <size>
+        <height>1080</height>
+        <width>1920</width>
+      </size>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-ctIgorVsBrasabotA(nos)</name>
+      <frameRate>25.0</frameRate>
+      <size>
+        <height>1080</height>
+        <width>1920</width>
+      </size>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-ctIgorVsBrasabotB</name>
+      <frameRate>25.0</frameRate>
+      <size>
+        <height>1080</height>
+        <width>1920</width>
+      </size>
+    </paramblock> 
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-ctIgorVsBrasabotB(nos)</name>
+      <frameRate>25.0</frameRate>
+      <size>
+        <height>1080</height>
+        <width>1920</width>
+      </size>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-ctMoonWalk</name>
+      <frameRate>25.0</frameRate>
+      <size>
+        <height>1080</height>
+        <width>1920</width>
+      </size>
+    </paramblock> 
+    
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-ctMoonWalk(mkb)</name>
+      <frameRate>25.0</frameRate>
+      <size>
+        <height>1080</height>
+        <width>1920</width>
+      </size>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-uvas2015</name>
+      <frameRate>25.0</frameRate>
+      <size>
+        <height>1080</height>
+        <width>1920</width>
+      </size>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-pfIgorRocket(pf2)</name>
+      <frameRate>25.0</frameRate>
+      <size>
+        <height>1080</height>
+        <width>1920</width>
+      </size>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-pfMoonWalk</name>
+      <frameRate>25.0</frameRate>
+      <size>
+        <height>1080</height>
+        <width>1920</width>
+      </size>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-pfMoonWalk(pf1)</name>
+      <frameRate>25.0</frameRate>
+      <size>
+        <height>1080</height>
+        <width>1920</width>
+      </size>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-pfCoundown5</name>
+      <frameRate>25.0</frameRate>
+      <size>
+        <height>1080</height>
+        <width>1920</width>
+      </size>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-pfGrandpa</name>
+      <frameRate>25.0</frameRate>
+      <size>
+        <height>1080</height>
+        <width>1920</width>
+      </size>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-pfGrandpa(pf4)</name>
+      <frameRate>25.0</frameRate>
+      <size>
+        <height>1080</height>
+        <width>1920</width>
+      </size>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-pfIgorRocket</name>
+      <frameRate>25.0</frameRate>
+      <size>
+        <height>1080</height>
+        <width>1920</width>
+      </size>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-auryn</name>
+      <frameRate>25.0</frameRate>
+      <size>
+        <height>1080</height>
+        <width>1920</width>
+      </size>
+    </paramblock>
+
+    <paramblock>
+      <type>override</type>
+      <name>seq_500-pfCoundown5(pf3)</name>
+      <frameRate>25.0</frameRate>
+      <size>
+        <height>1080</height>
+        <width>1920</width>
+      </size>
+    </paramblock>
+  </parameters> 
+
+</info>

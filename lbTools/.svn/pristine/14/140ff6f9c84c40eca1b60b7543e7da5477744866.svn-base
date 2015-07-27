@@ -1,0 +1,249 @@
+<namingConvention id="namingConvention2013">
+  
+  <partsCount>
+    <count id="asset"                     value="2"                           category="folder"             description="Numero de partes del nombre de las carpetas de asset"/>
+    <count id="sequence"                  value="2"                           category="folder"             description="Numero de partes del nombre de las carpetas de secuencia"/>
+    
+    <count id="asset"                     value="4"                           category="file"               description="Numero de partes del nombre de los archivos de asset"/>
+    <count id="sequence"                  value="4"                           category="file"               description="Numero de partes del nombre de los archivos de secuencia"/>
+    <count id="sequenceRender"            value="5"                           category="file"               description="Numero de partes del nombre de los archivos de secuencia de render"/>
+    <count id="sequenceRenderLastPart"    value="2"                           category="filePart"           description="Numero de partes del nombre de los archivos de secuencia de render"/>
+    <count id="bitmap"                    value="5"                           category="file"               description="Numero de partes del nombre de las texturas"/>
+
+    <count id="object"                    value="7"                           category="name"               description="Numero de partes del nombre de los objetos"/>
+    <count id="layer"                     value="2"                           category="name"               description="Numero de partes del nombre de las capas"/>
+    <count id="material"                  value="3"                           category="name"               description="Numero de partes del nombre de los materiales"/>
+    <count id="bitmap"                    value="5"                           category="name"               description="Numero de partes del nombre de los bitmaps"/>
+    <count id="camera"                    value="2"                           category="name"               description="Numero de partes del nombre de las camaras"/>
+
+    <count id="lpmPass"                   value="4"                           category="pass"               description="Numero de partes del nombre de los pases de render"/>
+    <count id="pmPass"                    value="4"                           category="pass"               description="Numero de partes del nombre de los pases de render"/>
+  </partsCount>
+
+  <prefixes>
+    <prefix id="material"               value="mat"                         description="Prefijo para materiales"/>
+    <prefix id="camera"                 value="cam"                         description="Prefijo para camaras"/>
+    <prefix id="library"                value="lib"                         description="Prefijo para carpetas y objetos de librería"/>
+    <prefix id="layoutAux"              value="LAY"                         description="Prefijo para los objetos auxiliares del archivo de layout exportado para animación"/>
+    <prefix id="projectionCameraName"   value="CMAP"                        description="Prefijo para camaras de proyección"/>
+  </prefixes>
+
+  <types>
+    <file>
+      <type id="draft"                    value="draft"                       category="generic"          description="Tipo de archivo de draft para assets y secuencias"/>
+      <type id="layout"                   value="layout"                      category="generic"          description="Tipo de archivo de layout para assets y secuencias"/>
+      <type id="anim"                     value="anim"                        category="generic"          description="Tipo de archivo de animacion para assets y secuencias"/>
+      <type id="cloth"                    value="cloth"                       category="generic"          description="Tipo de archivo de cloth para assets y secuencias"/>
+      <type id="hair"                     value="hair"                        category="generic"          description="Tipo de archivo de hair para assets y secuencias"/>
+      <type id="effects"                  value="fx"                          category="generic"          description="Tipo de archivo de effectos para assets y secuencias"/>
+      <type id="production"               value="production"                  category="generic"          description="Tipo de archivo de production para assets y secuencias"/>
+
+      <type id="mesh"                     value="mesh"                        category="asset"            description="Tipo de archivo de mesh para assets"/>
+      <type id="proxy"                    value="proxy"                       category="asset"            description="Tipo de archivo de proxy para assets"/>
+      <type id="facial"                   value="facial"                      category="asset"            description="Tipo de archivo de facial para assets"/>
+      <type id="facialEdit"               value="facialEdit"                  category="asset"            description="Tipo de archivo de facialEdit para assets"/>
+      <type id="skinRig"                  value="skinRig"                     category="asset"            description="Tipo de archivo de skinRig para assets"/>
+      <type id="puppet"                   value="puppet"                      category="asset"            description="Tipo de archivo de puppet para assets"/>
+      <type id="animEdit"                 value="animEdit"                    category="asset"            description="Tipo de archivo de edicion de rig para assets"/>
+
+      <type id="cache"                    value="cache"                       category="sequence"         description="Tipo de archivo de cache para secuencias"/>
+      <type id="render"                   value="render"                      category="sequence"         description="Tipo de archivo de render para secuencias"/>
+      <type id="light"                    value="light"                       category="sequence"         description="Tipo de archivo de light para secuencias"/>
+      <type id="cacheFx"                  value="cacheFx"                     category="sequence"         description="Tipo de archivo de effectos en cache para secuencias"/>
+      <type id="cacheCloth"               value="cacheCloth"                  category="sequence"         description="Tipo de archivo de telas en cache para secuencias"/>
+      <type id="renderFx"                 value="renderFx"                    category="sequence"         description="Tipo de archivo de efectos en render para secuencias"/>
+    </file>
+
+    <asset>
+      <type id="character"                value="chr"                         description="Prefijo para assets de tipo personaje"/>
+      <type id="prop"                     value="prp"                         description="Prefijo para assets de tipo prop"/>
+      <type id="set"                      value="set"                         description="Prefijo para assets de tipo set"/>
+      <type id="setProp"                  value="spr"                         description="Prefijo para assets de tipo set prop"/>
+      <type id="effects"                  value="fx"                          description="Prefijo para assets de tipo efectos"/>
+      <type id="light"                    value="lit"                         description="Prefijo para assets de tipo luz"/>
+    </asset>
+
+    <class>
+      <type id="morph"                    value="morph"                       category="generic"          description="Objetos de gestos del sistema facial"/>
+      <type id="draft"                    value="draft"                       category="generic"          description="Objetos de tipo draft (mallas de baja)"/>
+      <type id="proxy"                    value="proxy"                       category="generic"          description="Objetos de tipo proxy"/>
+      <type id="bip"                      value="bip"                         category="generic"          description="Objetos de biped"/>
+      <type id="connect"                  value="connect"                     category="generic"          description="Objetos de tipo de conexión"/>
+      <type id="facialEdit"               value="facialEdit"                  category="generic"          description="Objetos del sistema de edición facial"/>
+      <type id="animEdit"                 value="animEdit"                    category="generic"          description="Objetos del sistema de rig de animación"/>
+      <type id="puppet"                   value="puppet"                      category="generic"          description="Objetos de adecuacion de volumen del rig con la maya"/>
+      <type id="skin"                     value="skin"                        category="generic"          description="Objetos del sistema de rig de skin"/>
+      <type id="hair"                     value="hair"                        category="generic"          description="Objetos de tipo pelo"/>
+      <type id="cloth"                    value="cloth"                       category="generic"          description="Objetos de tipo tela"/>
+      <type id="dyn"                      value="dyn"                         category="generic"          description="Objetos dinamicos de simulación"/>
+      <type id="fx"                       value="fx"                          category="generic"          description="Objetos de efectos"/>
+      <type id="light"                    value="light"                       category="generic"          description="Objetos de luces"/>
+
+      <type id="mesh"                     value="mesh"                        category="geometry"         description="Objetos de geometria (mesh)"/>
+      <type id="facial"                   value="facial"                      category="animatable"       description="Objetos del sistema de rig facial"/>
+      <type id="anim"                     value="anim"                        category="animatable"       description="Objetos del sistema de rig de edición"/>
+      <type id="cam"                      value="cam"                         category="camera"           description="Objetos de tipo camara"/>
+    </class>
+
+    <location>
+      <type id="notSpecified"             value="x"                           description="Localizacion sin especificar"/>
+      <type id="left"                     value="l"                           description="Localizacion izquierda"/>
+      <type id="right"                    value="r"                           description="Localizacion derecha"/>
+      <type id="middle"                   value="m"                           description="Localizacion central"/>
+      <type id="front"                    value="f"                           description="Localizacion frontal"/>
+      <type id="back"                     value="k"                           description="Localizacion trasera"/>
+      <type id="top"                      value="t"                           description="Localizacion superior"/>
+      <type id="bottom"                   value="b"                           description="Localizacion inferior"/>
+    </location>
+
+    <cache>
+      <type id="notSpecified"             value="x"                           description="Cache sin especificar"/>
+      <type id="point"                    value="pc"                          description="Cache de puntos"/>
+      <type id="transform"                value="tc"                          description="Cache de transformacion"/>
+      <type id="inherited"                value="ic"                          description="Cache heredado"/>
+      <type id="void"                     value="nc"                          description="Sin cache"/>
+    </cache>
+
+    <flag>
+      <type id="notSpecified"             value="x"                           category="object"           description="Sin especificar"/>
+      <type id="skin"                     value="s"                           category="object"           description="Huesos de skin que van a ser pesados en skin del personaje"/>
+      <type id="extra"                    value="e"                           category="object"           description="Huesos de tipo extra, ya sean de skin o de animacion"/>
+      <type id="automatic"                value="a"                           category="object"           description="Huesos u objetos de mecanismo automatico, como musculos..."/>
+      <type id="control"                  value="c"                           category="object"           description="Objetos que se usan como controles en los rigs"/>
+      <type id="hidden"                   value="h"                           category="object"           description="Objetos que deben estar ocultos"/>
+      <type id="frozen"                   value="f"                           category="object"           description="Objetos que deben estar congelados"/>
+      <type id="inherit"                  value="i"                           category="object"           description="Objetos que puedan tener desactivada la herencia de escala"/>
+      <type id="cache"                    value="p"                           category="object"           description="Objetos de tipo mesh que sean de cache"/>
+      <type id="draft"                    value="l0"                          category="object"           description="Indica nivel draft de modelado"/>
+      <type id="lowRes"                   value="l1"                          category="object"           description="Indica nivel bajo de modelado"/>
+      <type id="midRes"                   value="l2"                          category="object"           description="Indica nivel medio de modelado"/>
+      <type id="highRes"                  value="l3"                          category="object"           description="Indica nivel alto de modelado"/>
+      <type id="dynamic"                  value="y"                           category="object"           description="Objetos con sistema de dinámicas (spring, reactor...)"/>
+
+      <type id="keepConnected"            value="k"                           category="modifier"         description="Flag para no desconectar un modificador"/>
+      <type id="cache"                    value="p"                           category="modifier"         description="Flag para no eliminar un modificador en la exportación de caches"/>
+
+      <type id="bump"                     value="b"                           category="bitmap"           description="Flag para mapas de bump"/>
+      <type id="diffuse"                  value="d"                           category="bitmap"           description="Flag para mapas de difuso"/>
+      <type id="mask"                     value="m"                           category="bitmap"           description="Flag para mapas de mascaras"/>
+      <type id="normal"                   value="n"                           category="bitmap"           description="Flag para mapas de normales"/>
+      <type id="displace"                 value="p"                           category="bitmap"           description="Flag para mapas de desplazamiento"/>
+      <type id="reflection"               value="r"                           category="bitmap"           description="Flag para mapas de refexion"/>
+      <type id="specular"                 value="s"                           category="bitmap"           description="Flag para mapas de especular"/>
+      <type id="translucency"             value="t"                           category="bitmap"           description="Flag para mapas de translucencia y/o refraccion"/>
+      <type id="ambienOcclusion"          value="a"                           category="bitmap"           description="Flag para mapas de ambient occlusion"/>
+      <type id="cavity"                   value="c"                           category="bitmap"           description="Flag para mapas de cavity"/>
+    </flag>
+
+    <passContent>
+      <type id="background"               value="bg"                          description="Pases de Background"/>
+      <type id="foreground"               value="fg"                          description="Pases de Foreground"/>
+      <type id="effects"                  value="fx"                          description="Pases de Efectos"/>
+      <type id="all"                      value="all"                         description="Pases de Background y Foregound (Mixtos o indefinidos)"/>
+    </passContent>
+
+    <passType>
+      <type id="light"                    value="lit"                         description="Pases de luces"/>
+      <type id="pass"                     value="pass"                        description="Pases sin luces"/>
+    </passType>
+
+    <passUse>
+      <type id="GI"                       value="GI"                          category="light"            description="Pases de luces con iluminacion global"/>
+      <type id="noGI"                     value="noGI"                        category="light"            description="Pases de luces sin iluminacion global"/>
+      
+      <type id="ambientOcclusion"         value="AO"                          category="pass"             description="Pases de ambient occlusion"/>
+      <type id="zdepth"                   value="Z"                           category="pass"             description="Pases de zdepth"/>
+      <type id="ydepth"                   value="Y"                           category="pass"             description="Pases de ydepth"/>
+      <type id="mask"                     value="mask"                        category="pass"             description="Pases de máscaras"/>
+      <type id="matte"                    value="matte"                       category="pass"             description="Pases de matte"/>
+      <type id="selfIlum"                 value="selfIlum"                    category="pass"             description="Pases de materiales con autoiluminacion"/>
+      <type id="velocity"                 value="vel"                         category="pass"             description="Pases de velocidad"/>
+      <type id="reflection"               value="refl"                        category="pass"             description="Pases de reflexion"/>
+      <type id="cameraMap"                value="cmap"                        category="pass"             description="Pases de proyeccion de camaras"/>
+      <type id="element"                  value="element"                     category="pass"             description="Pases de render elements"/>
+    </passUse>
+
+    <rig>
+      <type id="handIk"                   value="handIk"                      category="shape"            description="Shape para los controles de IK de las manos"/>
+      <type id="elbow"                    value="elbow"                       category="shape"            description="Shape para los controles del codo"/>
+      <type id="breakElbow"               value="breakElbow"                  category="shape"            description="Shape para los controles de ajuste del codo"/>
+      <type id="footStep"                 value="footStep"                    category="shape"            description="Shape para los controles del pie"/>
+      <type id="knee"                     value="knee"                        category="shape"            description="Shape para los controles de la rodilla"/>
+      <type id="breakKnee"                value="breakKnee"                   category="shape"            description="Shape para los controles de ajuste de la rodilla"/>
+      <type id="fkIk"                     value="fkIk"                        category="shape"            description="Shape para los controles de paso de ik a fk"/>
+
+      <type id="head"                     value="head"                        category="bone"             description="Hueso de cabeza"/>
+      <type id="neck"                     value="neck"                        category="bone"             description="Hueso de cuello"/>
+      <type id="arm"                      value="arm"                         category="bone"             description="Hueso de brazo"/>
+      <type id="clavicle"                 value="clavicle"                    category="bone"             description="Hueso de clavicula"/>
+      <type id="spine"                    value="spine"                       category="bone"             description="Hueso de columna"/>
+      <type id="spineFkIk"                value="spineFkIk"                   category="bone"             description="Hueso de columna fk-ik"/>
+      <type id="root"                     value="root"                        category="bone"             description="Hueso de root"/>
+      <type id="pelvis"                   value="pelvis"                      category="bone"             description="Hueso de pelvis"/>
+      <type id="leg"                      value="leg"                         category="bone"             description="Hueso de pierna"/>
+      <type id="thigh"                    value="thigh"                       category="bone"             description="Hueso de muslo"/>
+      <type id="calf"                     value="calf"                        category="bone"             description="Hueso de pantorrilla"/>
+      <type id="base"                     value="base"                        category="bone"             description="Hueso de base"/>
+
+      <type id="pivotInside"              value="pivotInside"                 category="helper"           description="Pivote interior de rotacion del pie"/>
+      <type id="pivotOutside"             value="pivotOutside"                category="helper"           description="Pivote exterior de rotacion del pie"/>
+      <type id="pivotFootHeel"            value="pivotFootHeel"               category="helper"           description="Pivote de rotacion del talon del pie"/>
+      <type id="pointScripts"             value="pointScripts"                category="helper"           description="Point de scripts para los rigs"/>
+      <type id="facialParent"             value="facialParent"                category="helper"           description="Point padre del rig facial"/>
+
+      <type id="driver"                   value="drv"                         category="cloth"            description="Driver de cloth"/>
+    </rig>
+  </types>
+
+  <patterns>
+    <pattern id="sequencePath"              value="?:\\sequence\\*\\seq_???*\\"                                 category="path"         description="Patron para las carpetas de secuencias"/>
+    <pattern id="sequenceLayoutPath"        value="?:\\sequence\\*\\seq_???*\\layout\\"                         category="path"         description="Patron para las carpetas de layout de secuencias"/>
+    <pattern id="sequenceTexturePath"       value="?:\\sequence\\*\\seq_???*\\texture\\"                        category="path"         description="Patron para las carpetas de texturas de secuencias"/>
+
+    <pattern id="cameraPath"                value="?:\\sequence\\*\\seq_???*\\cam\\cam???\\"                    category="path"         description="Patron para las carpetas de las cámaras"/>
+    <pattern id="cameraAnimPath"            value="?:\\sequence\\*\\seq_???*\\cam\\cam???\\anim\\"              category="path"         description="Patron para las carpetas de animacion de las cámaras"/>
+    <pattern id="cameraCachePath"           value="?:\\sequence\\*\\seq_???*\\cam\\cam???\\cache\\"             category="path"         description="Patron para las carpetas de cache de las cámaras"/>
+    <pattern id="cameraCacheExtraPath"      value="?:\\sequence\\*\\seq_???*\\cam\\cam???\\cache\\*"            category="path"         description="Patron para las carpetas de cache de extras de las cámaras"/>
+    <pattern id="cameraCacheSourcePath"     value="?:\\sequence\\*\\seq_???*\\cam\\cam???\\cache\\source\\"     category="path"         description="Patron para las carpetas de cache de las cámaras"/>
+    <pattern id="cameraCacheSourcePath"     value="?:\\sequence\\*\\seq_???*\\cam\\cam???\\cache\\*\\source\\"  category="path"         description="Patron para las carpetas de cache de extras de las cámaras"/>
+    <pattern id="cameraRenderPath"          value="?:\\sequence\\*\\seq_???*\\cam\\cam???\\render\\"            category="path"         description="Patron para las carpetas de render de las cámaras"/>
+    <pattern id="cameraRenderFxPath"        value="?:\\sequence\\*\\seq_???*\\cam\\cam???\\render\\"            category="path"         description="Patron para las carpetas de render de efectos de las cámaras"/>
+    <pattern id="cameraRenderSourcePath"    value="?:\\sequence\\*\\seq_???*\\cam\\cam???\\render\\source\\"    category="path"         description="Patron para las carpetas de source de render de las cámaras"/>
+    <pattern id="cameraPostPath"            value="?:\\sequence\\*\\seq_???*\\cam\\cam???\\post\\"              category="path"         description="Patron para las carpetas de composición de las cámaras"/>
+    <pattern id="cameraFramePath"           value="\\\\lbdata002\\z\\frame\\*\\seq_???*\\cam\\cam???\\"         category="path"         description="Patron para las carpetas de frames de las cámaras"/>
+
+    <pattern id="cameraMaxFile"             value="seq_???*_cam???_*.max"                                       category="file"         description="Patron para los archivos max de las cámaras"/>
+    <pattern id="cameraAnimFile"            value="seq_???*_cam???_anim.max"                                    category="file"         description="Patron para los archivos de animacion de las cámaras"/>
+    <pattern id="cameraAnimExtraFile"       value="seq_???*_cam???_anim-*.max"                                  category="file"         description="Patron para los archivos de animacion de extras de las cámaras"/>
+    <pattern id="cameraCacheFile"           value="seq_???*_cam???_cache.max"                                   category="file"         description="Patron para los archivos de cache de las cámaras"/>
+    <pattern id="cameraCacheExtraFile"      value="seq_???*_cam???_cache-*.max"                                 category="file"         description="Patron para los archivos de cache de extras de las cámaras"/>
+    <pattern id="cameraCacheFxFile"         value="seq_???*_cam???_cacheFx.max"                                 category="file"         description="Patron para los archivos de cache de las cámaras"/>
+    <pattern id="cameraRenderFile"          value="seq_???*_cam???_render_*(*-*).max"                           category="file"         description="Patron para los archivos de render de las cámaras"/>
+    <pattern id="cameraRenderFxFile"        value="seq_???*_cam???_renderFx_*(*-*).max"                         category="file"         description="Patron para los archivos de render de efectos de las cámaras"/>
+    <pattern id="cameraPostFile"            value="seq_???*_cam???_post_v??.*"                                  category="file"         description="Patron para los archivos de composicion de las cámaras"/>
+    <pattern id="cameraFrameFile"           value="seq_???*_cam???_render_*(*-*-*)_????.*"                      category="file"         description="Patron para los archivos de frames de las cámaras"/>
+    <pattern id="cameraFrameFxFile"         value="seq_???*_cam???_renderFx_*(*-*-*)_????.*"                    category="file"         description="Patron para los archivos de frames de efectos de las cámaras"/>
+    <pattern id="cameraFrameFinalFile"      value="seq_???*_cam???_final_*(*-*-*)_????.tif*"                    category="file"         description="Patron para los archivos de frames finales de las cámaras"/>
+    
+    <pattern id="asset"                 value="?*_?*"                       category="layer"                description="Patron para las capas de asset"/>
+    <pattern id="camera"                value="_cam_"                       category="layer"                description="Patron para la capa de camaras"/>
+    <pattern id="light"                 value="_light_"                     category="layer"                description="Patron para la capa de luces"/>
+    <pattern id="layout"                value="_layout_"                    category="layer"                description="Patron para la capa auxiliar de layout"/>
+    <pattern id="auxObj"                value="_auxObj_"                    category="layer"                description="Patron para la capa de objetos auxiliares"/>
+    <pattern id="auxPointConstraint"    value="_auxObj-pointConstraint_"    category="layer"                description="Patron para la capa de objetos de point constraint"/>
+    <pattern id="aux"                   value="_auxObj-?*_"                 category="layer"                description="Patron para las auxiliares"/>
+    <pattern id="lpm"                   value="zz-LPM"                      category="layer"                description="Patron para la capa de L Pass Manager"/>
+
+    <pattern id="lpm"                   value="*(*-*-*)"                    category="pass"                 description="Patron para los pases de iluminacion de L Pass Manager"/>    
+    <pattern id="pm"                    value="*(*-*-*)"                    category="pass"                 description="Patron para los pases de iluminacinn de Pass Manager"/>    
+
+    <pattern id="asset"                 value="*_*_*_*_*_*_*"               category="object"               description="Patron para los objetos de un asset"/>
+    <pattern id="camera"                value="cam_???"                     category="object"               description="Patron para los objetos de un asset"/>
+    <pattern id="pFlowAuxNode"          value="*-\x3e*"                     category="object"               description="Patron para los objetos auxiliares que crea particle flow automaticamente"/>
+
+    <pattern id="asset"                 value="*_*_*"                       category="material"             description="Patron para los materiales de un asset"/>
+
+    <pattern id="asset"                 value="*_*_*_*_x"                   category="bitmap"               description="Patron para los materiales de un asset"/>
+  </patterns>
+
+</namingConvention>

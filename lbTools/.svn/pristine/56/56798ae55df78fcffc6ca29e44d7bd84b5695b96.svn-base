@@ -1,0 +1,1255 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--Descripcion: Herramienta CreatorBoneExtra.
+------------------------------------------------------------------------------------------------------------------------------------------------
+(
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollMain | Contiene la herramienta CreatorBoneExtra.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollMainDef "CreatorBoneExtra" width:220 height:300
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) --@var : parent | Herramienta o rolllout del que depende y/o contiene el rollout actual
+		
+		local minRollWidth = 220		--@var: minRollWidth | Ancho mínimo de la herramienta.
+		local minRollHeight = 300		--@var: minRollHeight | Alto mínimo de la herramienta.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		local _selectSkPart = #()
+			
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		--@control | controlName | Plantilla de comentario para controles
+		groupBox grp2CreatorBoneExtra "Creator Bone Extra" pos:[5,5] width:210 height:153
+		
+		label lblArm "Arm" pos:[15,20] width:136 height:16
+		checkbox chkCreatorElbow "Elbow Part" pos:[20,35] width:96 height:16 enabled:true checked:false
+		checkbox chkCreatorWrist "Wrist Part" pos:[115,35] width:96 height:16 enabled:true checked:false
+		checkbox chkCreatorFinger "Finger Part" pos:[20,57] width:96 height:16 enabled:true checked:false
+		
+		label lblLeg "Leg" pos:[15,77] width:136 height:16
+		checkbox chkCreatorKnee "Knee Part" pos:[20,95] width:96 height:16 enabled:true checked:false
+		checkbox chkCreatorToes "Toes Part" pos:[115,95] width:96 height:16 enabled:true checked:false
+		
+		label lblSpine "Spine" pos:[15,118] width:136 height:16
+		checkbox chkBreast "Breast" pos:[20,135] width:96 height:16 enabled:false checked:false
+		
+		groupBox grp2SimplePart "Simple Part" pos:[5,160] width:210 height:58
+		checkbox chkSimplePart "Simple Part" pos:[20,177] width:96 height:16 enabled:true checked:false
+		checkbox chkUpper "Upper / Front" pos:[115,177] width:96 height:16 enabled:false checked:false
+		checkbox chkLower "Lower / Back" pos:[115,197] width:96 height:16 enabled:false checked:false
+		checkbox chkScale "scale" pos:[20,197] width:96 height:16 enabled:false checked:false
+		
+		groupBox grp2Muscle "Muscle" pos:[5,220] width:210 height:40
+		checkbox chkCreatorPectoral "Pectoral Part" pos:[20,237] width:96 height:16 enabled:true checked:false
+		checkbox chkCreatorPelvis "Pelvis Part" pos:[115,237] width:96 height:16 enabled:true checked:false
+		
+		button btnCreatorBoneExtra "Create Bone" pos:[10,270] width:95 height:25
+		button btnDeleteBoneExtra "Delete Bone" pos:[115,270] width:95 height:25
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		------------------------------------------------------------------------------
+		--@fn: _boneAndPoint | getBoneAndPoint | Función que devuelve 2 objetos un point y un hueso ya configurados.
+		--@gets: node | bon |  pasa la selección de huesos.
+		------------------------------------------------------------------------------
+		fn getBoneAndPoint bon =
+		(
+			_lengthSelectPart = bon.length --longitud del hueso seleccionado
+			_widthSelectPart = bon.width
+			_heightSelectPart = bon.height
+			_boneAndPoint = #()
+			
+			--creación de los point extra y configuración.			
+			_createPoint = lb.rig.createPointFromObj bon
+			_createPoint.size = ((_lengthSelectPart*_heightSelectPart*_widthSelectPart)/10)
+			_createPoint.cross = off
+			_createPoint.axistripod = off
+			_createPoint.wirecolor = color 252 252 0	--color amarillo.
+			
+			--creación de los huesos extra y configuración.
+			_createBoneExtra = lb.rig.createNewBone bon.transform.pos (bon.transform.pos + (_lengthSelectPart/9)) bon
+			_createBoneExtra.wirecolor = color 255 112 0		--color naranja.
+			_createBoneExtra.taper = 90
+			_createBoneExtra.sidefins = false
+			_createBoneExtra.length = ((_lengthSelectPart*_heightSelectPart*_widthSelectPart)/10)
+			_createBoneExtra.width = _widthSelectPart
+			_createBoneExtra.height = _heightSelectPart
+			
+			--colocación del hueso en posición, rotación y freeseo del mismo.
+			_createPoint.transform = bon.transform
+			_createPoint.parent = bon
+			_createBoneExtra.transform = _createPoint.transform
+			_createBoneExtra.parent = _createPoint
+			lb.controller.freezeTransform _createBoneExtra #all
+			lb.controller.freezeTransform _createPoint #all
+			
+			--creación del orientation constraint y añadido de los elementos que tienen que aparecer.
+			_createPoint.rotation.controller.Available.controller = Orientation_Constraint ()
+			_createPoint.rotation.controller.Orientation_Constraint.controller.appendTarget bon 50
+			_createPoint.rotation.controller.Orientation_Constraint.controller.appendTarget bon.parent 50
+			_createPoint.rotation.controller.Orientation_Constraint.controller.relative = on
+			
+			--configuración de layer
+			_typeLayer = bon.layer.name
+			_lyChr = layermanager.getLayerFromName _typeLayer
+			_lyChr.addNode _createBoneExtra
+			_lyChr.addNode _createPoint
+			
+			append _boneAndPoint _createPoint  --añade en un array el point creado anteriormente.
+			append _boneAndPoint _createBoneExtra  --añade en un array el bone creado anteriormente.
+			_boneAndPoint --devuelve un array con dos objetos point y bone.
+		)
+		
+		------------------------------------------------------------------------------
+		--@fn: _expose | createScale | Crea y configura los objetos necesarios para la escala.
+		--@gets: node | bon |  pasa la selección de huesos.
+		------------------------------------------------------------------------------
+		fn createScale bon =
+		(
+			--creación de un point aux y su configuración. Gestión del NC.
+			_pointExtra = point()
+			_pointExtra.cross = false
+			_pointExtra.box = true
+			_pointExtra.size =  (bon.width)+(bon.length)/5
+			_pointExtra.wirecolor = color 255 255 0 -- Yellow
+			_pointExtra.transform = bon.transform
+			_pointExtra.parent = bon.parent
+			lb.controller.freezeTransform _pointExtra #all
+			_pointExtra.name = bon.parent.name
+			_filterName = FilterString _pointExtra.name "_"
+			_pointExtra.name = lb.nc.replaceNamePart _pointExtra.name 5 (_filterName[5] + "Upper-hlp-hlp-skPart")
+			_pointExtra.name = lb.nc.replaceNamePart _pointExtra.name 7 (lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag)
+			
+			--creación del expose y configuración. Gestión del NC.
+			_exposeHLp = ExposeTm()
+			_exposeHLp.centermarker = true
+			_exposeHLp.axistripod = true
+			_exposeHLp.cross = false
+			_exposeHLp.size = (bon.width)+(bon.length)/5
+			_exposeHLp.wirecolor = color 255 255 0 -- Yellow
+			_exposeHLp.transform = bon.transform
+			_exposeHLp.parent = bon
+			_exposeHLp.exposeNode = bon
+			_exposeHLp.useParent = false
+			_exposeHLp.localReferenceNode = _pointExtra
+			lb.controller.freezeTransform _exposeHLp #all
+			_exposeHLp.name = bon.name
+			_filterName = FilterString _exposeHLp.name "_"
+			_exposeHLp.name = lb.nc.replaceNamePart _exposeHLp.name 5 (_filterName[5] + "Upper-Expose-hlp-skPart")
+			_exposeHLp.name = lb.nc.replaceNamePart _exposeHLp.name 7 (lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag)
+			
+			--Gestión de los objetos en su capa.
+			_typeLayer = bon.layer.name
+			_lyChr = layermanager.getLayerFromName _typeLayer
+			_lyChr.addNode _exposeHLp
+			_lyChr.addNode _pointExtra
+			
+			--Haca función devuelva el expose para poder manipularlo posteriormente.
+			_expose = #()
+			append _expose _exposeHLp
+			_expose
+		)
+		
+		------------------------------------------------------------------------------
+		--@fn: undefined | createSimplePart | Crea los huesos extra de forma manual, seleccionando nosotros donde lo queremos y en que posición.
+		------------------------------------------------------------------------------
+		fn createSimplePart =
+		(
+			_selectPart = GetCurrentSelection()
+			
+			--creación de los huesos y points extra tanto superior como inferior, posicion, constraint, y configuración.
+			for _o in _selectPart do
+			(
+				if  chkScale.checked == true then
+				(
+					_expose = createScale _o --saca los objetos necesarios para la escala (expose y point)
+				)
+
+				if chkUpper.checked == true then
+				(
+					_boneAndPoint = getBoneAndPoint _o --saca los objetos necesarios para la orientación (hueso y point)
+					
+					_boneAndPoint[1].rotation.controller[#Frozen_rotation].controller[#Z_Rotation].value = -90 --rota el point para dejarlo bien colocado según la posición Upper/Front
+					
+					--Naming NC
+					_boneAndPoint[1].name = _o.name
+					_filterName = filterString _boneAndPoint[1].name "_"
+					_boneAndPoint[1].name = lb.nc.replaceNamePart _boneAndPoint[1].name 5 (_filterName[5] + "Upper-extra-hlp-skPart")
+					_boneAndPoint[1].name = lb.nc.replaceNamePart _boneAndPoint[1].name 7 (lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag)
+					
+					--Naming NC
+					_boneAndPoint[2].name = _o.name
+					_filterName = filterString _boneAndPoint[2].name "_"
+					_boneAndPoint[2].name = lb.nc.replaceNamePart _boneAndPoint[2].name 5 (_filterName[5] + "Upper-extra-bon-skPart")
+					
+					--Meter float expresion en los huesos para controlar la escala según la rotación.
+					if  chkScale.checked == true then
+					(
+						_FloatExprStrech = _boneAndPoint[2].Scale.controller[#Zero_Scale_XYZ][#X_Scale].controller = Float_Expression()  --Añadimos el Float Expression.
+						_FloatExprStrech.AddScalarTarget "scale" _expose[1].LocalEulerZ.controller
+						_FloatExprStrech.setExpression ("if (scale < 0, ((-scale+1)*0.2)+0.8, 1)")
+					)
+				)
+				
+				if chkLower.checked == true then 
+				(
+					_boneAndPoint = getBoneAndPoint _o --saca los objetos necesarios para la orientación (hueso y point)
+					
+					_boneAndPoint[1].rotation.controller[#Frozen_rotation].controller[#Z_Rotation].value = 90 --rota el point para dejarlo bien colocado según la posición Lower/Back
+					
+					--Naming NC
+					_boneAndPoint[1].name = _o.name
+					_filterName = filterString _boneAndPoint[1].name "_"
+					_boneAndPoint[1].name = lb.nc.replaceNamePart _boneAndPoint[1].name 5 (_filterName[5] + "Lower-extra-hlp-skPart")
+					_boneAndPoint[1].name = lb.nc.replaceNamePart _boneAndPoint[1].name 7 (lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag)
+					
+					--Naming NC
+					_boneAndPoint[2].name = _o.name
+					_filterName = filterString _boneAndPoint[2].name "_"
+					_boneAndPoint[2].name = lb.nc.replaceNamePart _boneAndPoint[2].name 5 (_filterName[5] + "Lower-extra-bon-skPart")
+					
+					--Meter float expresion en los huesos para controlar la escala según la rotación.
+					if  chkScale.checked == true then
+					(
+						_FloatExprStrech = _boneAndPoint[2].Scale.controller[#Zero_Scale_XYZ][#X_Scale].controller = Float_Expression()  --Añadimos el Float Expression.
+						_FloatExprStrech.AddScalarTarget "scale" _expose[1].LocalEulerZ.controller
+						_FloatExprStrech.setExpression ("if (scale > 0, ((scale+1)*0.2)+0.8, 1)")
+					)
+				)
+			)
+		)
+		
+		------------------------------------------------------------------------------
+		--@fn: undefined | createBoneExtraFinger | Crea los huesos extra en los dedos y nudillos.
+		------------------------------------------------------------------------------
+		fn createBoneExtraFinger =
+		(
+			_fingers = #() --Array que contiene los huesos de los dedos.
+			_asset = lb.asset.getSceneAssets()
+			
+			--Recorre las piezas de skin del asset.
+			for _o in _asset[1].skinNodesAll do
+			(	
+				_nameParts = filterString _o.name "_"  -- Filtramos el nombre para obtener los huesos de los dedos.
+				
+				if (findstring _nameParts[5] "finger") != undefined then
+					append _fingers _o
+			)
+			
+			--Listado de huesos para la excepción que se da mas adelante.
+			_finger00r = ($'chr_*_skin_r_finger00_x_*')[1].name
+			_finger10r =  ($'chr_*_skin_r_finger10_x_*')[1].name
+			_finger20r =  ($'chr_*_skin_r_finger20_x_*')[1].name
+			_finger30r =  ($'chr_*_skin_r_finger30_x_*')[1].name
+			_finger40r =   ($'chr_*_skin_r_finger40_x_*')[1].name
+			
+			_finger00l =  ($'chr_*_skin_l_finger00_x_*')[1].name
+			_finger10l =  ($'chr_*_skin_l_finger10_x_*')[1].name
+			_finger20l =  ($'chr_*_skin_l_finger20_x_*')[1].name
+			_finger30l =   ($'chr_*_skin_l_finger30_x_*s')[1].name
+			_finger40l =   ($'chr_*_skin_l_finger40_x_*')[1].name
+			_finger11Dist = ($'chr_*_skin_l_finger11_x_*')[1]
+			_LengthFinger = _finger11Dist.length
+			
+			--Recorre los huesos de los dedos para crear la parte extra. 
+			for _o in _fingers do
+			(
+				--excepciones para excluirlos y no meterles la parte extra.
+				if (_o.name != _finger00r) and (_o.name != _finger10r) and (_o.name != _finger20r) and (_o.name != _finger30r)  and (_o.name != _finger40r) and (_o.name != _finger00l) and (_o.name != _finger10l) and (_o.name != _finger20l) and (_o.name != _finger30l)  and (_o.name != _finger40l) do
+				(
+					_boneAndPoint = getBoneAndPoint _o --saca los objetos necesarios para la orientación (hueso y point)
+					
+					_boneAndPoint[1].rotation.controller[#Frozen_rotation].controller[#Z_Rotation].value = -90 --rota el point para dejarlo bien colocado según la posición Upper/Front
+					
+					--Naming NC
+					_boneAndPoint[1].name = _o.name
+					_filterName = filterString _boneAndPoint[1].name "_"
+					_boneAndPoint[1].name = lb.nc.replaceNamePart _boneAndPoint[1].name 5 (_filterName[5] + "Upper-extra-hlp-skPart")
+					_boneAndPoint[1].name = lb.nc.replaceNamePart _boneAndPoint[1].name 7 (lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag)
+					
+					--Naming NC
+					_boneAndPoint[2].name = _o.name
+					_filterName = filterString _boneAndPoint[2].name "_"
+					_boneAndPoint[2].name = lb.nc.replaceNamePart _boneAndPoint[2].name 5 (_filterName[5] + "Upper-extra-bon-skPart")
+				)
+			)
+		)
+		
+		------------------------------------------------------------------------------
+		--@fn: undefined | createBoneExtraElbow | Crea los huesos extra en los codos.
+		------------------------------------------------------------------------------
+		fn createBoneExtraElbow =
+		(
+			_ElbowAll = #()
+			_asset = lb.asset.getSceneAssets()
+			
+			--Recorre las piezas de skin del asset.
+			for _o in _asset[1].skinNodesAll do
+			(	
+				_nameParts = filterString _o.name "_"  -- Filtramos el nombre para obtener los huesos forearm.
+				
+				if (findstring _nameParts[5] "forearm") != undefined then 
+					append _ElbowAll _o
+			)
+			
+			for _o in _ElbowAll do
+			(
+				_boneAndPoint = getBoneAndPoint _o --saca los objetos necesarios para la orientación (hueso y point)
+				
+				_boneAndPoint[1].rotation.controller[#Frozen_rotation].controller[#Z_Rotation].value = 90 --rota el point para dejarlo bien colocado según la posición Lower/Back
+				
+				--Naming NC
+				_boneAndPoint[1].name = _o.name
+				_filterName = filterString _boneAndPoint[1].name "_"
+				_boneAndPoint[1].name = lb.nc.replaceNamePart _boneAndPoint[1].name 5 "elbow-extra-hlp-skPart"
+				
+				--Naming NC
+				_boneAndPoint[2].name = _o.name
+				_filterName = filterString _boneAndPoint[2].name "_"
+				_boneAndPoint[2].name = lb.nc.replaceNamePart _boneAndPoint[2].name 5 "elbow-extra-bon-skPart"
+			)
+		)
+		
+		------------------------------------------------------------------------------
+		--@fn: undefined | createBoneExtraWrist | Crea los huesos extra en las manos.
+		------------------------------------------------------------------------------
+		fn createBoneExtraWrist =
+		(
+			_hand = #()
+			_asset = lb.asset.getSceneAssets()
+			
+			--Recorre las piezas de skin del asset.
+			for _o in _asset[1].skinNodesAll do
+			(	
+				_nameParts = filterString _o.name "_"  -- Filtramos el nombre para obtener los huesos de los dedos.
+				
+				if (findstring _nameParts[5] "hand") != undefined then
+					append _hand _o
+			)
+			
+			--creación de los huesos y points extra tanto superior como inferior, posicion, constraint, y configuración.
+			for _o in _hand do
+			(
+				_boneAndPoint = getBoneAndPoint _o --saca los objetos necesarios para la orientación (hueso y point)
+				_boneAndPoint02 = getBoneAndPoint _o --saca los objetos necesarios para la orientación (hueso y point)
+				
+				_boneAndPoint02[2].transform = _boneAndPoint[1].transform
+				_boneAndPoint02[2].parent = _boneAndPoint[1]
+				lb.controller.freezeTransform _boneAndPoint02[2] #all
+				delete _boneAndPoint02[1] --eliminacion de point sobrante.
+				
+				--Naming NC
+				_boneAndPoint[1].name = _o.name
+				_filterName = filterString _boneAndPoint[1].name "_"
+				_boneAndPoint[1].name = lb.nc.replaceNamePart _boneAndPoint[1].name 5 "Wrist-extra-hlp-skPart"
+				_boneAndPoint[1].name = lb.nc.replaceNamePart _boneAndPoint[1].name 7 (lb.nc.NC_frozenFlag + lb.nc.NC_hiddenFlag)
+				
+				_boneAndPoint[2].rotation.controller[#Frozen_rotation].controller[#Z_Rotation].value = -90
+				_boneAndPoint02[2].rotation.controller[#Frozen_rotation].controller[#Z_Rotation].value = 90
+				
+				--Naming NC
+				_boneAndPoint[2].name = _o.name
+				_boneAndPoint02[2].name = _o.name
+				_filterNameUp = filterString _boneAndPoint[2].name "_"
+				_filterNameDown = filterString _boneAndPoint02[2].name "_"
+				_boneAndPoint[2].name = lb.nc.replaceNamePart _boneAndPoint[2].name 5 "wristUp-extra-bon-skPart"
+				_boneAndPoint02[2].name = lb.nc.replaceNamePart _boneAndPoint02[2].name 5 "wristDown-extra-bon-skPart"
+			)
+		)
+		
+		------------------------------------------------------------------------------
+		--@fn: undefined | createMusclePectoral | Crea los huesos de la rodilla.
+		------------------------------------------------------------------------------
+		fn createBoneExtraKnee =
+		(
+			_knee = #()
+			_asset = lb.asset.getSceneAssets()
+			
+			--Recorre las piezas de skin del asset.
+			for _o in _asset[1].skinNodesAll do
+			(	
+				_nameParts = filterString _o.name "_"  -- Filtramos el nombre para obtener los huesos de los dedos.
+				
+				if (findstring _nameParts[5] "calf") != undefined then
+					append _knee _o
+			)
+			for _o in _knee do 
+			(
+				_boneAndPoint = getBoneAndPoint _o --saca los objetos necesarios para la orientación (hueso y point)
+				
+				_boneAndPoint[1].rotation.controller[#Frozen_rotation].controller[#Z_Rotation].value = 90 --rota el point para dejarlo bien colocado según la posición Lower/Back
+				
+				--Naming NC
+				_boneAndPoint[1].name = _o.name
+				_filterName = filterString _boneAndPoint[1].name "_"
+				_boneAndPoint[1].name = lb.nc.replaceNamePart _boneAndPoint[1].name 5 "Knee-extra-hlp-skPart"
+				
+				--Naming NC
+				_boneAndPoint[2].name = _o.name
+				_filterName = filterString _boneAndPoint[2].name "_"
+				_boneAndPoint[2].name = lb.nc.replaceNamePart _boneAndPoint[2].name 5 "Knee-extra-bon-skPart"
+			)
+		)
+		
+		------------------------------------------------------------------------------
+		--@fn: undefined | createBoneExtraToes | Crea los huesos de los pies
+		------------------------------------------------------------------------------
+		fn createBoneExtraToes =
+		(
+			_toes = #()
+			_asset = lb.asset.getSceneAssets()
+			
+			--Recorre las piezas de skin del asset.
+			for _o in _asset[1].skinNodesAll do
+			(	
+				_nameParts = filterString _o.name "_"  -- Filtramos el nombre para obtener los huesos de los dedos.
+				
+				if (findstring _nameParts[5] "toeCap") != undefined then
+					append _toes _o
+			)
+			for _o in _toes do 
+			(
+				_boneAndPoint = getBoneAndPoint _o --saca los objetos necesarios para la orientación (hueso y point)
+				
+				_boneAndPoint[1].rotation.controller[#Frozen_rotation].controller[#Z_Rotation].value = 90 --rota el point para dejarlo bien colocado según la posición Lower/Back
+				
+				--Naming NC
+				_boneAndPoint[1].name = _o.name
+				_filterName = filterString _boneAndPoint[1].name "_"
+				_boneAndPoint[1].name = lb.nc.replaceNamePart _boneAndPoint[1].name 5 "toes-extra-hlp-skPart"
+				
+				--Naming NC
+				_boneAndPoint[2].name = _o.name
+				_filterName = filterString _boneAndPoint[2].name "_"
+				_boneAndPoint[2].name = lb.nc.replaceNamePart _boneAndPoint[2].name 5 "toes-extra-bon-skPart"
+			)
+		)
+		
+		------------------------------------------------------------------------------
+		--@fn: undefined | createMusclePectoral | Crea los músculos del pectoral.
+		------------------------------------------------------------------------------
+		fn createMusclePectoral =
+		(
+			_createPectoralIzq = #()
+			_createPectoralDere = #()
+			_spine02 = ($'chr_*_skin_m_spine02_x_*')[1]
+			_boneUpperarmL = ($'chr_*_skin_l_upperarm_x_*')
+			_boneUpperarmR = ($'chr_*_skin_r_upperarm_x_*')
+			_lengthMuscle = _spine02.length
+			
+			--creación de los músculos pectorales.
+			_createBoneIzq = lb.rig.createNewBone _spine02.transform.pos (_spine02.transform.pos + _lengthMuscle) _spine02
+			_createBoneDere = lb.rig.createNewBone _spine02.transform.pos (_spine02.transform.pos + _lengthMuscle) _spine02
+			append _createPectoralIzq _createBoneIzq   --añadido al array.
+			append _createPectoralDere _createBoneDere   --añadido al array.
+			
+			_boneIzqEnd = lb.rig.smartCreateEnd _createBoneIzq    --creación de huesos final.
+			_boneDereEnd = lb.rig.smartCreateEnd _createBoneDere   --creación del hueso final.
+			append _createPectoralIzq _boneIzqEnd   --añadido al array.
+			append _createPectoralDere _boneDereEnd   --añadido al array.
+			_boneIzqEnd.parent = _createBoneIzq
+			_boneDereEnd.parent = _createBoneDere
+			
+			--configura algunos parametros de los huesos y el NC
+			for _o in _createPectoralIzq do
+			(
+				lb.controller.freezeTransform _o #all  --freezeo de los huesos.
+				_o.taper = 90
+				_o.width = _spine02.width
+				_o.height = _spine02.width
+				_o.sidefins = on
+				_o.sidefinsSize = _spine02.width
+				_o.wirecolor = color 252 252 0		--color amarillo.
+				
+				_o.name = _spine02.name
+				_filterName = filterString _o.name "_"
+				_o.name = lb.nc.replaceNamePart _o.name 4 lb.nc.NC_locationLeft
+				if _o.children.count == 0 then 
+				(
+					_o.name = lb.nc.replaceNamePart _o.name 5 ("MusclePectoral-02")
+					_o.length = _spine02.width * 2
+				)
+				else
+				(
+					_o.name = lb.nc.replaceNamePart _o.name 5 ("MusclePectoral-01")
+				)
+				_o.name = lb.nc.replaceNamePart _o.name 7 (lb.nc.NC_automaticFlag + lb.nc.NC_frozenFlag + lb.nc.NC_skinFlag)
+			)
+			
+			--configura algunos parametros de los huesos y el NC
+			for _o in _createPectoralDere do
+			(	
+				lb.controller.freezeTransform _o #all  --frezeo de los huesos.
+				_o.taper = 90
+				_o.width = _spine02.width
+				_o.height = _spine02.height
+				_o.sidefins = on
+				_o.sidefinsSize = _spine02.width
+				_o.wirecolor = color 252 252 0		--color amarillo.
+				
+				_o.name = _spine02.name
+				_filterName = filterString _o.name "_"
+				_o.name = lb.nc.replaceNamePart _o.name 4 lb.nc.NC_locationRight
+				if _o.children.count == 0 then 
+				(
+					_o.name = lb.nc.replaceNamePart _o.name 5 ("MusclePectoral-02")
+					_o.length = _spine02.width * 2
+				)
+				else
+				(
+					_o.name = lb.nc.replaceNamePart _o.name 5 ("MusclePectoral-01")
+				)
+				_o.name = lb.nc.replaceNamePart _o.name 7 (lb.nc.NC_automaticFlag + lb.nc.NC_frozenFlag + lb.nc.NC_skinFlag)
+			)
+			
+			_pointStrechIzq = lb.rig.createStretchBoneChain _createPectoralIzq --crea la construcción de strech con sus point y constraint.
+			_pointStrechDere = lb.rig.createStretchBoneChain _createPectoralDere --crea la construcción de strech con sus point y constraint.
+			for _o in _pointStrechIzq do _o.size = _spine02.width
+			for _o in _pointStrechDere do _o.size = _spine02.width
+			
+			_boneUpperarmLLength = _boneUpperarmL[1].length
+			_spine02Length = _spine02.length
+			_pointStrechIzq[1].parent = _spine02
+			_pointStrechIzq[2].parent = _boneUpperarmL[1]
+			_pointStrechIzq[1].transform = _spine02.transform
+			in coordsys local move _pointStrechIzq[1] [(_spine02Length/2),(_boneUpperarmLLength/1.5),(_spine02Length/3)]
+			_pointStrechIzq[2].transform = _boneUpperarmL[1].transform
+			in coordsys local move _pointStrechIzq[2] [(_boneUpperarmLLength/3),0,0]
+			_pointStrechIzq[1].transform = _pointStrechIzq[1].children[1].transform
+			
+			_boneUpperarmRLength = _boneUpperarmR[1].length
+			_pointStrechDere[1].parent = _spine02
+			_pointStrechDere[2].parent = _boneUpperarmR[1]
+			_pointStrechDere[1].transform = _spine02.transform
+			in coordsys local move _pointStrechDere[1] [(_spine02Length/2),(_boneUpperarmRLength/1.5),-(_spine02Length/3)]
+			_pointStrechDere[2].transform = _boneUpperarmR[1].transform
+			in coordsys local move _pointStrechDere[2] [-(_boneUpperarmRLength/3),0,0]
+			_pointStrechDere[1].transform = _pointStrechDere[1].children[1].transform
+			_pointStrechDere[1].scale.controller[#Zero_scale_XYZ].controller[#z_scale].value = -100
+			_boneDereEnd.rotation.controller[#Zero_euler_XYZ].controller[#z_rotation].value = 180
+			for _o in _pointStrechIzq do lb.controller.freezeTransform _o #all  --frezeo de los huesos.
+			for _o in _pointStrechDere do lb.controller.freezeTransform _o #all  --frezeo de los huesos.
+		)
+		
+		------------------------------------------------------------------------------
+		--@fn: undefined | createMusclePevis | Crea los músculos de la pelvis.
+		------------------------------------------------------------------------------
+		fn createMusclePelvis =
+		(
+			_createPelvisIzq = #()
+			_createPelvisDere = #()
+			_pelvis = ($'chr_*_skin_m_pelvis_x_*')[1]
+			_bonethighL = ($'chr_*_skin_l_thigh_x_*')
+			_bonethighR = ($'chr_*_skin_r_thigh_x_*')
+			_lengthMuscle = _pelvis.length
+			
+			--creación de los músculos de la pelvis
+			_createBoneIzq = lb.rig.createNewBone _pelvis.transform.pos (_pelvis.transform.pos + _lengthMuscle) _pelvis --creación del hueso.
+			_createBoneDere = lb.rig.createNewBone _pelvis.transform.pos (_pelvis.transform.pos + _lengthMuscle) _pelvis --creación del hueso.
+			append _createPelvisIzq _createBoneIzq   --añadido al array.
+			append _createPelvisDere _createBoneDere   --añadido al array.
+			
+			_boneIzqEnd = lb.rig.smartCreateEnd _createBoneIzq    --creación de huesos final.
+			_boneDereEnd = lb.rig.smartCreateEnd _createBoneDere   --creación del hueso final.
+			append _createPelvisIzq _boneIzqEnd   --añadido al array.
+			append _createPelvisDere _boneDereEnd   --añadido al array.
+			_boneIzqEnd.parent = _createBoneIzq
+			_boneDereEnd.parent = _createBoneDere
+			
+			--configura algunos parametros de los huesos y el NC
+			for _o in _createPelvisIzq do
+			(
+				lb.controller.freezeTransform _o #all  --freezeo de los huesos.
+				_o.taper = 90
+				_o.width = _pelvis.width
+				_o.height = _pelvis.height
+				_o.sidefinsSize = _pelvis.width
+				_o.sidefins = on
+				_o.wirecolor = color 252 252 0		--color amarillo.
+				
+				_o.name = _pelvis.name
+				_filterName = filterString _o.name "_"
+				_o.name = lb.nc.replaceNamePart _o.name 4 lb.nc.NC_locationLeft
+				if _o.children.count == 0 then 
+				(
+					_o.name = lb.nc.replaceNamePart _o.name 5 ("MusclePelvis-02")
+					_o.length = _pelvis.width * 2
+				)
+				else
+				(
+					_o.name = lb.nc.replaceNamePart _o.name 5 ("MusclePelvis-01")
+				)
+				_o.name = lb.nc.replaceNamePart _o.name 7 (lb.nc.NC_automaticFlag + lb.nc.NC_frozenFlag + lb.nc.NC_skinFlag)
+			)
+				
+			--configura algunos parametros de los huesos y el NC
+			for _o in _createPelvisDere do
+			(	
+				lb.controller.freezeTransform _o #all  --frezeo de los huesos.
+				_o.taper = 90
+				_o.width = _pelvis.width
+				_o.height = _pelvis.height
+				_o.sidefinsSize = _pelvis.width
+				_o.sidefins = on
+				_o.wirecolor = color 252 252 0		--color amarillo.
+				
+				_o.name = _pelvis.name
+				_filterName = filterString _o.name "_"
+				_o.name = lb.nc.replaceNamePart _o.name 4 lb.nc.NC_locationRight
+				if _o.children.count == 0 then 
+				(
+					_o.name = lb.nc.replaceNamePart _o.name 5 ("MusclePelvis-02")
+					_o.length = _pelvis.width * 2
+				)
+				else
+				(
+					_o.name = lb.nc.replaceNamePart _o.name 5 ("MusclePelvis-01")
+				)
+				_o.name = lb.nc.replaceNamePart _o.name 7 (lb.nc.NC_automaticFlag + lb.nc.NC_frozenFlag + lb.nc.NC_skinFlag)
+			)
+			
+			_pointStrechIzq = lb.rig.createStretchBoneChain _createPelvisIzq --crea la construcción de strech con sus point y constraint.
+			_pointStrechDere = lb.rig.createStretchBoneChain _createPelvisDere --crea la construcción de strech con sus point y constraint.
+			for _o in _pointStrechIzq do _o.size = _pelvis.width
+			for _o in _pointStrechDere do _o.size = _pelvis.width
+			
+			_bonethighLLength = _bonethighL[1].length
+			_pointStrechIzq[1].parent = _bonethighL[1]
+			_pointStrechIzq[2].parent = _pelvis
+			_pointStrechIzq[1].transform = _bonethighL[1].transform
+			in coordsys local move _pointStrechIzq[1] [(_bonethighLLength/2),0,0]
+			_pointStrechIzq[2].transform = _pelvis.transform
+			in coordsys local move _pointStrechIzq[2] [0,0,(_bonethighLLength/2)]
+			_pointStrechIzq[1].transform = _pointStrechIzq[1].children[1].transform
+			
+			_bonethighRLength = _bonethighR[1].length
+			_pointStrechDere[1].parent = _bonethighR[1]
+			_pointStrechDere[2].parent = _pelvis
+			_pointStrechDere[1].transform = _bonethighR[1].transform
+			in coordsys local move _pointStrechDere[1] [-(_bonethighRLength/2),0,0]
+			_pointStrechDere[2].transform = _pelvis.transform
+			in coordsys local move _pointStrechDere[2] [0,0,-(_bonethighRLength/2)]
+			_pointStrechDere[1].transform = _pointStrechDere[1].children[1].transform
+			_pointStrechDere[1].scale.controller[#Zero_scale_XYZ].controller[#z_scale].value = -100
+			_boneDereEnd.rotation.controller[#Zero_euler_XYZ].controller[#z_rotation].value = 180
+			for _o in _pointStrechIzq do lb.controller.freezeTransform _o #all  --frezeo de los huesos.
+			for _o in _pointStrechDere do lb.controller.freezeTransform _o #all  --frezeo de los huesos.
+		)
+		
+		------------------------------------------------------------------------------
+		--@fn: undefined | deleteBoneExtraFinger | Elimina las partes Extra de los huesos creados en los dedos.
+		------------------------------------------------------------------------------
+		fn deleteBoneExtraFinger =
+		(
+			_deleteFingers = ($'chr_*_skin_*_finger*-*-*-skPart_x_*')
+			delete _deleteFingers
+		)
+		
+		------------------------------------------------------------------------------
+		--@fn: undefined | deleteBoneExtraElbow | Elimina las partes Extra de los huesos creados en los codos.
+		------------------------------------------------------------------------------
+		fn deleteBoneExtraElbow =
+		(
+			_deleteElbow = ($'chr_*_skin_*_elbow-*-*-skPart_x_*')
+			delete _deleteElbow
+		)
+		
+		------------------------------------------------------------------------------
+		--@fn: undefined | deleteBoneExtraWrist | Elimina las partes Extra de los huesos creados en las muñecas.
+		------------------------------------------------------------------------------
+		fn deleteBoneExtraWrist =
+		(
+			_deleteWrist = ($'chr_*_skin_*_wrist*-*-*-skPart_x_*')
+			delete _deleteWrist
+		)
+		
+		------------------------------------------------------------------------------
+		--@fn: undefined | deleteMusclePectoral | Elimina los músculos del pectoral.
+		------------------------------------------------------------------------------
+		fn deleteMusclePectoral =
+		(
+			_deletePectoral = ($'chr_*_skin_*_MusclePectoral-*_x_*') as array
+			delete _deletePectoral
+		)
+		
+		------------------------------------------------------------------------------
+		--@fn: undefined | deleteMusclePelvis | Elimina los músculos del pectoral.
+		------------------------------------------------------------------------------
+		fn deleteMusclePelvis =
+		(
+			_deletePelvis = ($'chr_*_skin_*_MusclePelvis-*_x_*')
+			delete _deletePelvis
+		)
+		
+		------------------------------------------------------------------------------
+		--@fn: undefined | deleteSimplePart | Elimina las partes extras con skPart
+		------------------------------------------------------------------------------
+		fn deleteSimplePart bon =
+		(
+			for _o in bon do  --Recorremos la selección para filtrar el nombre.
+			(
+				_filterName = filterString _o.name "_"
+				_filtername5Part = filterString _filterName[5] "-"
+				if _filtername5Part.count == 4 then
+				(
+					if _filtername5Part[4] == "skPart" then delete _o
+				)
+			)
+		)
+		
+		------------------------------------------------------------------------------
+		--@fn: undefined | deleteBoneExtraKnee | Elimina las partes Extra de los huesos creados en las rodillas.
+		------------------------------------------------------------------------------
+		fn deleteBoneExtraKnee =
+		(
+			_deleteKnee = ($'chr_*_skin_*_knee-*-*-skPart_x_*')
+			delete _deleteKnee
+		)
+		
+		------------------------------------------------------------------------------
+		--@fn: undefined | deleteBoneExtraToes | Elimina las partes Extra de los huesos creados en los pies.
+		------------------------------------------------------------------------------
+		fn deleteBoneExtraToes =
+		(
+			_deleteToes = ($'chr_*_skin_*_toes-*-*-skPart_x_*')
+			delete _deleteToes
+		)
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+		
+		)
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--almacena posicion
+			lb.xml.setAttribute parent.cfgFile ("rollMain/pos") "x" (((getDialogPos rollMainDef).x) as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/pos") "y" (((getDialogPos rollMainDef).y) as string)
+			
+			--almacena tamaño
+			lb.xml.setAttribute parent.cfgFile ("rollMain/size") "width" (rollMainDef.width as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/size") "height" (rollMainDef.height as string)
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			_width = (lb.xml.getAttribute parent.cfgFile ("rollMain/size") "width") as integer
+			_height = (lb.xml.getAttribute parent.cfgFile ("rollMain/size") "height") as integer
+				
+			--posicion
+			_posX = (lb.xml.getAttribute parent.cfgFile ("rollMain/pos") "x") as integer
+			_posY = (lb.xml.getAttribute parent.cfgFile ("rollMain/pos") "y") as integer
+				
+			--establece minimos
+			if _width < minRollWidth then _width = minRollWidth
+			if _height < minRollHeight then _height = minRollHeight
+			if _posX < 0 then _posX = 0
+			if _posY < 0 then _posY = 0
+				
+			--aplica los valores
+			rollMainDef.width = _width
+			rollMainDef.height = _height
+			setDialogPos rollMainDef [_posX,_posY]
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		---------------------------------------------------------------------------------------------------------------
+		--act. o desact. los botones dentro de simple part y ejecuta las funciones de creación.
+		---------------------------------------------------------------------------------------------------------------
+		on chkSimplePart changed LowerRefChkState do
+		(
+			if chkSimplePart.checked == true then
+			(
+				chkUpper.enabled = true
+				chkLower.enabled = true
+				chkScale.enabled = true
+			)
+			else
+			(
+				chkUpper.enabled = false
+				chkLower.enabled = false
+				chkScale.enabled = false
+			)
+		)
+		
+		---------------------------------------------------------------------------------------------------------------
+		--Crea los huesos según la selección hecha
+		---------------------------------------------------------------------------------------------------------------
+		on btnCreatorBoneExtra pressed do 
+		(
+			suspendEditing() --apaga el command panel
+			
+			--SIMPLE PART
+			if chkSimplePart.state == true do
+			(
+				_selectPart = getCurrentSelection() --obtención del objeto seleccionado.
+				
+				if _selectPart.count == 0 then
+				(
+					MessageBox "There are no selection in scene."
+				)
+				else
+				(
+					createSimplePart()
+				)
+			)
+			
+			--ELBOW
+			if chkCreatorElbow.state == true do
+			(
+				_elbowExtra = ($'chr_*_skin_r_elbow-*-*-skPart_x_*')[1] --Uno de los huesos extra de los codos.
+				
+				--Si el hueso esta creado saca mensaje para recargar o no los huesos Extra de los codos.
+				if _elbowExtra != undefined then
+				(
+					_reload = queryBox "do you want reload Elbow Bone Extra?" 
+					if _reload == true then
+					(
+						deleteBoneExtraElbow() --borra los huesos extra de los codos.
+						createBoneExtraElbow() --crea los huesos extra de los codos.
+					)
+				)
+				else
+				(
+					createBoneExtraElbow() --crea los huesos extra de los codos.
+				)
+			)
+			
+			--FINGER
+			if chkCreatorFinger.state == true then
+			(
+				_finger11Extra = ($'chr_*_skin_l_finger11*-*-*-skPart_x_*')[1] --Uno de los huesos extras que se crean.
+				
+				--Si el hueso esta creado saca mensaje para recargar o no los huesos Extra de los dedos.
+				if _finger11Extra != undefined then
+				(
+					_reload = queryBox "do you want reload fingers Bone Extra?" 
+					if _reload == true then
+					(
+						deleteBoneExtraFinger() --borra los huesos extra de los dedos.
+						createBoneExtraFinger() --crea los huesos extra de los dedos.
+					)
+				)
+				else
+				(
+					createBoneExtraFinger() --crea los huesos extra de los dedos.
+				)
+			)
+			
+			--WRIST
+			if chkCreatorWrist.state == true then
+			(
+				_wristExtra = ($'chr_*_skin_*_wrist*-*-*-skPart_x_*')[1] --Uno de los huesos extras que se crean.
+				
+				--Si el hueso esta creado saca mensaje para recargar o no los huesos Extra.
+				if _wristExtra != undefined then
+				(
+					_reload = queryBox "do you want reload Hand Bone Extra?" 
+					if _reload == true then
+					(
+						deleteBoneExtraWrist() --borra los huesos extra.
+						createBoneExtraWrist() --crea los huesos extra.
+					)
+				)
+				else
+				(
+					createBoneExtraWrist() --crea los huesos extra.
+				)
+			)
+			
+			--KNEE
+			if chkCreatorKnee.state == true then
+			(
+				_kneeExtra = ($'chr_*_skin_r_knee-*-*-skPart_x_*')[1] --Uno de los huesos extra de los codos.
+				
+				--Si el hueso esta creado saca mensaje para recargar o no los huesos Extra de los codos.
+				if _kneeExtra != undefined then
+				(
+					_reload = queryBox "do you want reload Knee Bone Extra?" 
+					if _reload == true then
+					(
+						deleteBoneExtraKnee() --borra los huesos extra de los codos.
+						createBoneExtraKnee() --crea los huesos extra de los codos.
+					)
+				)
+				else
+				(
+					createBoneExtraKnee() --crea los huesos extra de los codos.
+				)
+			)
+			
+			--TOES
+			if chkCreatorToes.state == true then
+			(
+				_toesExtra = ($'chr_*_skin_r_toes-*-*-skPart_x_*')[1] --Uno de los huesos extra de los codos.
+				
+				--Si el hueso esta creado saca mensaje para recargar o no los huesos Extra de los codos.
+				if _toesExtra != undefined then
+				(
+					_reload = queryBox "do you want reload Knee Bone Extra?" 
+					if _reload == true then
+					(
+						deleteBoneExtraToes() --borra los huesos extra de los codos.
+						createBoneExtraToes() --crea los huesos extra de los codos.
+					)
+				)
+				else
+				(
+					createBoneExtraToes() --crea los huesos extra de los codos.
+				)
+			)
+			
+			--PECTORAL
+			if chkCreatorPectoral.state == true then
+			(
+				_MusclePectoral = ($'chr_*_skin_*_MusclePectoral-*_*_*')[1]
+				
+				--Si el hueso esta creado saca mensaje para recargar o no los huesos Extra.
+				if _MusclePectoral != undefined then
+				(
+					_reload = queryBox "do you want reload MusclePectoral?" 
+					if _reload == true then
+					(
+						deleteMusclePectoral() --borra los huesos extra.
+						createMusclePectoral() --crea los huesos extra.
+					)
+				)
+				else
+				(
+					createMusclePectoral() --crea los huesos extra.
+				)
+			)
+			
+ 			--PELVIS
+			if chkCreatorPelvis.state == true then
+			(
+				_MusclePelvis = ($'chr_*_skin_*_MusclePelvis-*_*_*')[1]
+				
+				--Si el hueso esta creado saca mensaje para recargar o no los huesos Extra.
+				if _MusclePelvis != undefined then
+				(
+					_reload = queryBox "do you want reload MusclePectoral?" 
+					if _reload == true then
+					(
+						deleteMusclePelvis() --borra los huesos extra.
+						createMusclePelvis() --crea los huesos extra.
+					)
+				)
+				else
+				(
+					createMusclePelvis() --crea los huesos extra.
+				)
+			)
+			
+			--BREAST
+-- 			if chkCreatorBreast.state == false then
+-- 			(
+-- 				createBreastSkinRig()
+-- 			)
+			resumeEditing() --activa el command panel.
+		)
+		
+		---------------------------------------------------------------------------------------------------------------
+		--Elimina los huesos según la selección hecha
+		---------------------------------------------------------------------------------------------------------------
+		on btnDeleteBoneExtra pressed do 
+		(	
+			suspendEditing() --apaga el command panel.
+
+			_selectSkPart = getCurrentSelection() --obtenemos la selección.
+			
+			deleteSimplePart _selectSkPart --elimina las partes extras de Simple Part
+			
+			--ELBOW			
+			if chkCreatorElbow.state == true then
+			(
+				deleteBoneExtraElbow()
+			)
+			
+			--FINGER
+			if chkCreatorFinger.state == true then
+			(
+				deleteBoneExtraFinger()
+			)
+			
+			--WRIST
+			if chkCreatorWrist.state == true then
+			(
+				deleteBoneExtraWrist()
+			)
+			
+			--KNEE
+			if chkCreatorKnee.state == true then
+			(
+				deleteBoneExtraKnee()
+			)
+			
+			--TOES
+			if chkCreatorToes.state == true then
+			(
+				deleteBoneExtraToes()
+			)
+			
+			--PECTORAL
+			if chkCreatorPectoral.state == true then
+			(
+				deleteMusclePectoral()
+			)
+			
+ 			--PELVIS
+			if chkCreatorPelvis.state == true then
+			(
+				deleteMusclePelvis()
+			)
+			
+			--BREAST
+-- 			if chkCreatorBreast.state == true then
+-- 			(
+-- 				deleteBreastSkinRig()
+-- 			)
+			resumeEditing() --activa el command panel.
+		)
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollMain | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		--@gets: point2 | size | tamaño al que se ha redimensionado el rollout
+		------------------------------------------------
+		on rollMainDef resized size do
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollMainDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollMainDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollMain | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollMainDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollMain | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollMainDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+			
+			parent.opened = false --indica que la herramienta está cerrada.
+			updateToolbarButtons()
+		)
+	)--rollMainDef
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: CreatorBoneExtra | Contiene la herramienta CreatorBoneExtra.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct tl_CreatorBoneExtra
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,					--@var: category | Categoria de la tool.
+		className = lb.getFileToolName (getThisScriptFilename() as string),	--@var: className | Nombre de la tool.
+		description = "Tool plantilla",		--@var: description | Descripcion de la tool.
+		
+		cfgFile = (lb.config.getToolsIniPath()) + (lb.getFileToolName (getThisScriptFilename() as string)) + ".cfg",	--@var: cfgFile | Archivo de configuracion de la tool.
+			
+		opened = false,			--@var: opened | Indica si la herramienta está abierta.
+			
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--ROLLOUTS
+		------------------------------------------------------------------------------------------------
+		
+		rollMain = rollMainDef,	--@var: rollMain | Almacena el rollout principal de la herramienta.
+			
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: boolean | isOpen | Devuelve información true o false, si la herramienta está abierta o cerrada.
+		------------------------------------------------
+		fn isOpen =
+		(
+			this.opened
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | refreshInterface | Refresca el interface inicial de la herramienta
+		------------------------------------------------
+		fn refreshInterface =
+		(
+			--refresca el interface de la herramienta
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | createInterface | Crea el interface inicial de la herramienta
+		------------------------------------------------
+		fn createInterface =
+		(
+			--crea el interface, lo redimensiona y lo reposiciona
+			createDialog this.rollMain lockwidth:false lockheight:false pos:[-10000,0] style:#(#style_toolwindow, #style_titlebar, #style_sysmenu, #style_resizing)
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | destroyInterface | Destruye el interface de la herramienta.
+		------------------------------------------------
+		fn destroyInterface =
+		(
+			destroyDialog this.rollMain --cierra la herramienta.			
+		),--destroyInterface
+		
+		------------------------------------------------
+		--@fn: undefined | run | Lanza la herramienta.
+		------------------------------------------------
+		fn run =
+		(
+			this.createInterface() --crea el interface.
+			this.opened = true --indica que la herramienta está abierta
+		),--execute
+		
+		------------------------------------------------
+		--@fn: undefined | close | Cierra la herramienta.
+		------------------------------------------------
+		fn close =
+		(
+			this.destroyInterface() --destruye el interface.
+			this.opened = false --indica que la herramienta está cerrada.
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addTool this --añade la tool a la libreria principal	
+		)		
+		
+	)--tl_CreatorBoneExtra
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------	
+	
+	tl_CreatorBoneExtra() --crea la herramienta
+)

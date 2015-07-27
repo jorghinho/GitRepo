@@ -1,0 +1,1146 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--@Desc: libreria que contiene funciones relacionadas con las cámaras.
+------------------------------------------------------------------------------------------------------------------------------------------------
+(	
+	----------------------------------------------------------------------------------------
+	--@struct: str_cameraRange | Struct que almacena un intervalo de enteros para el uso en la libreria de cameraFunctions.
+	----------------------------------------------------------------------------------------
+	struct str_cameraRange (start = 0, end = 100)
+
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: lib_cameraFunctions | Contiene la librería cameraFunctions
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct lib_cameraFunctions
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),												--@var: string | def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),									--@var: string | defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,													--@var: name | category | Categoria de la libreria.
+		className = lb.getFileLibName (getThisScriptFilename() as string),	--@var: string | className | Nombre de la libreria.
+		description = "Libreria Camera Functions",							--@var: string | description | Descripcion de la libreria.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+
+		cameraRange = str_cameraRange,										--@var: struct | cameraRange | Struct de tipo camera range que contiene un intervalo.
+
+		camSequencerLayerName = "_auxObj-camSequencer_",					--@var: string | camSequencerLayerName | Nombre de la capa donde ubicar nodos generados por el camSequencer	
+		camParentsLayerName = "_auxObj-camParents_", 						--@var: string | camParentsLayerName | Nombre de la capa donde ubicar nodos que son padres de camaras.
+
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		----------------------------------------------------------------------------------------
+		--@fn: undefined| disableMultiPassEfect | Desactiva la propiedad multi pass efect
+		----------------------------------------------------------------------------------------
+		fn disableMultiPassEfect =
+		(
+			for c in cameras where superclassof c == camera do c.mpassEnabled = false
+		),
+
+		----------------------------------------------------------------------------------------
+		--@fn: boolean| hasCamInfo | Consulta si la camara pasada por parametros tiene el atributo camInfo.
+		--@gets: node | cam | El nodo de la camara a la que se debe realizar la consulta.
+		--@returns: boolean | undefined | Devuelve True si la camara tiene el atributo camInfo.
+		----------------------------------------------------------------------------------------		
+		fn hasCamInfo cam = 
+		(
+			lb.customAttributes.hasAttribute cam #camInfo
+		),	
+
+		----------------------------------------------------------------------------------------
+		--@fn: undefined| removeCamInfo | Elimina el atributo camInfo de una camara, si lo tiene.
+		--@gets: node | cam | El nodo de la camara en la que se debe eliminar el customAttribute.
+		----------------------------------------------------------------------------------------		
+		fn removeCamInfo cam = 
+		(
+			if hasCamInfo cam then 
+				custAttributes.delete cam (custattributes.getdef cam.caminfo) baseobject:false
+		),
+
+		----------------------------------------------------------------------------------------
+		--@fn: undefined| addCamInfo | Añade un custom attribute de tipo camInfo a una camara, si lo tiene lo elimina y después lo añade.
+		--@gets: node | cam | El nodo de la camara al que añadir customAttribute.
+		----------------------------------------------------------------------------------------			
+		fn addCamInfo cam = 
+		(
+			if hasCamInfo cam then removeCamInfo cam
+			custAttributes.add cam lb.customAttributes.camInfoCA #unique baseobject:false
+		),
+
+		----------------------------------------------------------------------------------------
+		--@fn: integer| compareCameraNames | Algoritmo de quickSort que indica si alfabéticamente la cam1 es mayor, menor o igual que cam2
+		--@gets: node | cam1 | El primer nodo de camara al que realizar la consulta.
+		--@gets: node | cam2 | El segundo nodo de camara al que realizar la consulta.
+		--@returns: integer | undefined | Devuelve -1 si el nombre de cam1 debería estar antes que cam 2 , 1 si es al contrario y 0 si son iguales.
+		----------------------------------------------------------------------------------------			
+		fn compareCameraNames cam1 cam2 =
+		(
+			case of
+			(
+				(cam1.name < cam2.name): -1
+				(cam1.name > cam2.name): 1
+				default: 0
+			)
+		),
+
+		----------------------------------------------------------------------------------------
+		--@fn: array| getSceneCameras | Busca las camaras en escena,.
+		--@returns: array | sceneCameras | Array que contiene las camaras, ordenadas por nombre. Solo devuelve las cámaras, no los posibles targets. 
+		----------------------------------------------------------------------------------------				
+		fn getSceneCameras =
+		(
+			local sceneCameras = #() 
+			
+			sceneCameras = for c in cameras where ((superclassof c == camera) and not (isDeleted c)) collect c
+			qsort sceneCameras compareCameraNames
+			
+			sceneCameras
+		),
+
+		----------------------------------------------------------------------------------------
+		--@fn: undefined| setCameraRange | Establece el rango de filmado de la cámara suministrada por parámetros con los parametros start y end
+		--@gets: node | cam | El nodo de camara al que modificar el customAttribute con la información de rango de camara.
+		--@gets: integer | start | El frame donde se inicia la grabación.
+		--@gets: integer | end | El frame donde finaliza la grabación.
+		----------------------------------------------------------------------------------------				
+		fn setCameraRange cam start end =
+		(
+			if not hasCamInfo cam then addCamInfo cam
+			
+			cam.recStart 	= start
+			cam.recEnd 	= end
+		),
+
+		----------------------------------------------------------------------------------------
+		--@fn: interval| getCameraRange | Consulta el rango de camara de una camara pasada por parámetros.
+		--@gets: node | cam | El nodo de camara del que obtener el customAttribute con la información de rango de camara.
+		--@returns: interval | undefined | Devuelve un cameraRange con los rangos de inicio y fin de filmado de la cámara. Si no se encuentran rangos definidos le crea uno de 0 a 100 y lo devuelve.
+		----------------------------------------------------------------------------------------				
+		fn getCameraRange cam =
+		(
+			recordStart = recordEnd = recordRange = undefined
+			
+			--	buscamos la información del rango en el atributo camInfo
+			if hasCamInfo cam then
+			(
+				recordStart = cam.camInfo.recStart
+				recordEnd 	= cam.camInfo.recEnd
+				recordRange = cameraRange start:0 end:100
+			)
+			else	--	si no existe esa información de rango, la buscamos en las propiedades de usuario
+			(
+				recStartPropName = "camRecStart"
+				recEndPropName = "camRecEnd"
+				
+				recordStart = getUserProp cam recStartPropName
+				recordEnd 	= getUserProp cam recEndPropName
+				
+				recordRange = cameraRange start:0 end:100
+			)
+			
+			-- 	Si no encontramos el rango probamos con el método más antiguo (rango especificado en el nombre de la cámara)
+			if recordStart == undefined and recordEnd == undefined then
+			(
+				the_range = ""
+				p1 = (findstring cam.name "(")
+				p2 = findstring cam.name "-" 
+				p3 = (findstring cam.name ")")
+				
+				if (p1 != undefined) and (p2 != undefined) and (p3!=undefined) then
+				(
+					recordStart = (substring cam.name (p1+1) (p2-p1-1)) as integer
+					recordEnd = (substring cam.name (p2+1) (p3-p2-1)) as integer
+					recordRange = cameraRange recordStart recordEnd
+					
+					-- actualizamos el rango de cámara al nuevo sistema
+					setCameraRange cam recordStart recordEnd
+				)
+			)
+			
+			--	si definitivamente la cámara no tiene rangos, le asignamos uno por defecto
+			if recordStart == undefined or recordEnd == undefined then
+			(
+				setCameraRange cam 0 100
+				recordRange = cameraRange start:0 end:100
+			)
+			else
+				recordRange = cameraRange start:recordStart end:recordEnd
+			
+			recordRange
+		),
+
+		----------------------------------------------------------------------------------------
+		--@fn: interval| getCameraRange | Realiza una consulta con el rango total de fotogramas que filman todas las camaras pasadas por parámetro
+		--@gets: array | cams | Array que coniene un conjunto de nodos de camaras de los que realizar la consulta.
+		--@returns: interval | totalRange | Devuelve un cameraRange con los rangos de inicio y fin de filmado que incluyen todas las camaras.
+		----------------------------------------------------------------------------------------		
+		fn getCamerasRange cams =
+		(
+			rangeStart = 999999
+			rangeEnd = -999999
+			
+			for i in 1 to cams.count do
+			(
+				txt = lv.items.item[i-1].subitems.item[0].text
+				if txt != "" do
+				(	
+					the_start 	= (getCameraRange cam[i]).start
+					the_end 	= (getCameraRange cam[i]).end
+					if rangeStart 	> the_start 	do rangeStart = the_start
+					if rangeEnd 	< the_end 		do rangeEnd = the_end
+				)
+			)
+			
+			totalRange = cameraRange start:rangeStart end:rangeEnd
+			
+			totalRange
+		),
+
+		----------------------------------------------------------------------------------------
+		--@fn: undefined| setAnimRangeFromCamera | Actualiza el rango de animación y el slidertime segun la camara pasada por parámetros.
+		--@gets: node | cam | Camara con la que configurar los rangos de tiempo.
+		--@gets: (opt)boolean | goToStart | si vale true el slidertime se configura en el frame inicial del rango de animación de la camara. Por defecto False
+		----------------------------------------------------------------------------------------			
+		fn setAnimRangeFromCamera cam goToStart:false = 
+		(	
+			start 	= (getCameraRange cam).start
+			end 	= (getCameraRange cam).end
+			animationrange = interval start end
+			
+			-- si está activado el botón de ir al inicio del rango movemos la barra de tiempo ahí
+			if goToStart then 
+				slidertime = animationrange.start
+		),
+
+		----------------------------------------------------------------------------------------
+		--@fn: undefined| setAnimRangeFromCameras | Actualiza el rango de animación y el slidertime segun el rango total de las camaras pasada por parámetros.
+		--@gets: array | cams | Array de nodos de camara con la que configurar los rangos de tiempo.
+		--@gets: (opt)boolean | goToStart | si vale true el slidertime se configura en el frame inicial del rango de animación total de las camaras. Por defecto False
+		----------------------------------------------------------------------------------------			
+		fn setAnimRangeFromCameras cams goToStart:false =
+		(
+			local rangeStart = 999999
+			local rangeEnd = -999999
+			
+			for c in cams do
+			(
+				start = (getCameraRange c).start
+				end = (getCameraRange c).end
+				
+				if start < rangeStart then rangeStart = start
+				if end > rangeEnd then rangeEnd = end
+			)
+			
+			animationrange = interval rangeStart rangeEnd
+			if goToStart then slidertime = rangeStart
+		),
+
+		----------------------------------------------------------------------------------------
+		--@fn: undefined| setViewportCamera | activa la cámara seleccionada en el viewport marcado como activo
+		--@gets: integer | viewNum | Numero del viewport en el que activar la camara.
+		--@gets: node | cam | Camara que activar en el visor.
+		----------------------------------------------------------------------------------------		
+		fn setViewportCamera viewNum cam =
+		(
+			temp_active = viewport.activeViewport
+			try viewport.activeViewport = viewNum catch viewport.activeViewport = 1
+			viewport.setCamera cam
+			viewport.activeViewport = temp_active
+		),
+
+		----------------------------------------------------------------------------------------
+		--@fn: undefined| removeCharMaterials | Quita los materiales a un asset de tipo "chr" y lo deja con un wirecolor aleatorio
+		--@gets: struct | asset | Asset al que quitarle los materiales.
+		----------------------------------------------------------------------------------------		
+		fn removeCharMaterials asset =
+		(
+			_parts = (lb.asset.getAssetAnimNodes asset #all excludeExtras:true)
+			_randomColor = random (color 0 0 0) (color 255 255 255)
+			for o in _parts do
+			(
+				if superclassof o == GeometryClass do o.material = undefined
+				o.wirecolor = _randomColor
+			)
+		),
+
+		----------------------------------------------------------------------------------------
+		--@fn: boolean | exportLayoutCameraToAnim | Exporta la cámara de layout pasada por parámetros y la convierte en un fichero de animación
+		--@gets: (opt)boolean | ignoreChecked | Si vale true puede realizarse el proceso sin haber pasado los checks.
+		--@gets: (opt)boolean | returnErrorLog | Si vale true se genera un archivo de log de errores.
+		--@gets: (opt)boolean | skipExisting | Si vale true y los archivos estan generados, no se vuelven a generar.
+		--@returns: boolean | _success | Devuelve true si se ha podido exportar la escena de layout correctamente.
+		----------------------------------------------------------------------------------------			
+		fn exportLayoutCameraToAnim cam ignoreChecked:false returnErrorLog:false skipExisting:false =
+		(
+			_success = false
+			_currentFile = maxFilePath + maxFileName
+			_camTarget = (if classOf cam == targetCamera then cam.target else undefined)
+			_assets = lb.asset.getSceneAssets()
+			_randomColor = undefined
+			_modName = "s" + (filterString (filterString maxfilename "_")[2] "-")[1] + "-" + "c" + (filterString cam.name "_")[2]
+			_camName = cam.name
+			
+			if (lb.nc.ncOK maxfilename type:#seqFile) and (hasCamInfo cam) and (ignoreChecked or (lb.fileInfo.isFileChecked (maxFilePath + maxFileName))) then
+			(
+				if not returnErrorLog do
+					pushPrompt ("Exportando cámara: " + cam.name)
+				
+				-----------------------------------------
+				-- creamos la nueva carpeta con todas sus subcarpetas
+				
+				_newPath = substituteString maxFilePath "\\layout\\" ("\\cam\\" + (substituteString cam.name "_" "") + "\\")
+				makeDir (_newPath  + lb.nc.NC_camAnimFolder + "\\") all:true
+				makeDir (_newPath  + lb.nc.NC_camAssetFolder + "\\") all:true
+				makeDir (_newPath  + lb.nc.NC_camCacheFolder + "\\" + lb.nc.NC_camCacheSourceFolder + "\\") all:true
+				makeDir (_newPath  + lb.nc.NC_camPostFolder + "\\") all:true
+				makeDir (_newPath  + lb.nc.NC_camRenderFolder + "\\" + lb.nc.NC_camRenderSourceFolder + "\\") all:true
+				makeDir (_newPath  + lb.nc.NC_camSimulationFolder + "\\") all:true
+				makeDir (_newPath  + lb.nc.NC_camVideoFolder + "\\" + lb.nc.NC_camVideoReferenceFolder + "\\") all:true
+				-----------------------------------------
+
+				-----------------------------------------
+				-- Comprobamos que vamos a poder escribir en los ficheros
+
+				_filenameParts = filterstring maxFileName "_" -- #("seq", "030d-frank", "layout.max")
+				_layoutFileName = _newPath + "anim\\" + _filenameParts[1] + "_" + _filenameParts[2] + "_" + (substituteString _camName "_" "") + "_" +  lb.nc.NC_layoutFileName + ".max"
+				_newFileName = _newPath + "anim\\" + _filenameParts[1] + "_" + _filenameParts[2] + "_" + (substituteString _camName "_" "") + "_" +  lb.nc.NC_animFileName + ".max"
+				-- _newFileName = (substitutestring maxFileName _filenameParts[3] (_camParts[1] + _camParts[2]))
+				-- _newFileName = _newPath + "\\anim\\" + (substitutestring _newFileName lb.nc.NC_layoutFileName lb.nc.NC_animFileName)
+								
+				-- mirar si hay que saltarselo
+				if ( doesFileExist _newFileName ) and skipExisting do 
+				(
+					_message = (_newFileName + " : " + "File existing. Skipped.")
+					if returnErrorLog then
+						return _message
+					else
+					( 
+						lb.message.show _message type:#message modal:true
+						return false
+					)
+				)
+
+				_neededFiles = #(_layoutFileName, _newFileName)
+
+				for _file in _neededFiles do
+				(
+					if doesFileExist _file and getFileAttribute _file #readOnly do
+					(
+						_sMessage = "Locked file detected, please get lock of these files:\n"
+						_sMessage += (lb.str.join _neededFiles ",\n")
+						if returnErrorLog then
+							return _sMessage
+						else 
+						(
+							lb.message.show _sMessage type:#message modal:true
+							return false
+						)
+					)
+				)
+				
+				-----------------------------------------
+
+				-----------------------------------------
+				--salvar las modificaciones del set
+
+				--busca el set en la escena
+				_setAsset = undefined
+				for _ast in _assets where _ast.type == lb.nc.NC_setPrefix do _setAsset = _ast
+				
+				--si hay set busca los objetos modificados y los salva en un archivo a parte
+				if _setAsset != undefined then
+				(
+					_movedObjets = #()
+
+					--Cambiamos el nombre de las variaciones
+					_variationFilename = "set_" + (substring _setAsset.name 1 (_setAsset.name.count-1)) + "." +_modName + (substring _setAsset.name _setAsset.name.count -1) + "_draft_v01.max"
+
+					--Guardamos el nombre del set para luego volverlo a coger al recargar el archivo.
+					_setAssetFullname = _setAsset.fullname
+					
+
+					--busca los objetos que se han movido mediante xform
+					for _node in _setAsset.meshNodesAll do
+					(
+						_xformMod = undefined
+						for m in _node.modifiers where classof m == XForm do _xformMod = m
+
+						if _xformMod != undefined then
+						(
+							at time 0f (_transformInZero = _xformMod.gizmo.value)
+							_currentTransform = _xformMod.gizmo.value
+							if (_transformInZero as string) != (_currentTransform as string) then 
+							(
+								append _movedObjets _node
+								--Renombramos el XForm
+								_xformMod.name = _modName
+								----Le quitamos la animación al objeto
+								lb.animation.deleteAnimation _node (interval -1000 (cam.camInfo.recStart-1))
+								lb.animation.deleteAnimation _node (interval (cam.camInfo.recEnd+1) (cam.camInfo.recEnd + 1000))
+								lb.animation.deleteAnimation _node (interval cam.camInfo.recStart cam.camInfo.recEnd)
+								----Le quitamos la animación
+								lb.animation.deleteAnimation _xformMod.gizmo (interval -1000 (cam.camInfo.recStart-1))
+								lb.animation.deleteAnimation _xformMod.gizmo (interval (cam.camInfo.recEnd+1) (cam.camInfo.recEnd + 1000))
+								lb.animation.deleteAnimation _xformMod.gizmo (interval cam.camInfo.recStart cam.camInfo.recEnd)
+								--Le quitamos el freeze
+								unfreeze _node
+								setTransformLockFlags _node #all
+							)
+						)--if
+					)--for
+					
+					--si hay objetos movidos los salva en un archivo aparte
+					if _movedObjets.count != 0 then
+					(
+						----------------------------
+						--primero debe eliminar de la escena todos los objetos que no se hayan movido y las capas vacías
+						
+						_nodesToDelete = for o in objects where findItem _movedObjets o == 0 collect o
+						
+						delete _nodesToDelete
+						(LayerManager.getLayerFromName "0").current = true
+						for i=layerManager.count-1 to 0 by -1 do
+						(
+							_currentLayer = LayerManager.getLayer i
+							_layerNodes = #()
+							_currentLayer.nodes &_layerNodes
+							if _currentLayer.name != "0" and _layerNodes.count == 0 then
+							(
+								LayerManager.deleteLayerByName _currentLayer.name
+							)
+						)
+						
+
+						--Salva el archivo de variaciones
+						animationRange = (interval 0 100)
+						saveMaxFile ((_newPath + "asset\\") + _variationFilename) quiet:true
+
+						--Reabre el archivo de layout
+						loadMaxFile _currentFile quiet:true
+					)--if
+				)--if
+
+				-----------------------------------------
+
+								
+				-----------------------------------------
+				-- llevamos todas las piezas de los assets a capas nombradas específicamente como layout y las guardamos en otra escena para cargarla como XRefScene
+
+				_nodesToConserve = #()
+				for _asset in (lb.asset.getSceneAssets()) where _asset.type != lb.nc.NC_setPrefix do
+				(
+					_layerName = _asset.layer.name
+					_layerName = ("_auxObj-layout(" + _asset.layer.name + ")_")
+					_asset.layer.setName _layerName
+					
+					-- quitar los materiales a los personajes y dejarles un wirecolor aleatorio
+					if _asset.type == "chr" do removeCharMaterials _asset
+				)
+
+				_auxLayerNames = for _ln in (lb.layer.getLayersNames()) where (findString _ln "auxObj") != undefined and _ln != camSequencerLayerName collect _ln
+				for _ln in _auxLayerNames do
+				(
+					_auxLayer = lb.layer.getLayerbyName _ln
+					_nodesToConserve += lb.layer.getLayerNodes _auxLayer
+				)
+
+				_nodesToDelete = for o in objects where findItem _nodesToConserve o == 0 collect o
+				delete _nodesToDelete
+				lb.layer.deleteEmptyLayers()
+				saveMaxFile _layoutFileName
+				--Reabre el archivo de layout
+				loadMaxFile _currentFile quiet:true
+				
+				-----------------------------------------
+				
+
+				-----------------------------------------
+				-- Como hemos borrado la cámara durante el proceso tenemos que volver a recuperarla aunque hayamos abierto el archivo de nuevo
+				-- borramos todas las cámaras que no se exportan
+				_cams = getSceneCameras()
+				for i=_cams.count to 1 by -1 do
+				(
+					if _cams[i].name == _camName then
+					(
+						cam = _cams[i]
+					)
+					else
+					(
+						delete _cams[i]
+					)
+				)
+				-----------------------------------------
+
+
+				-----------------------------------------	
+				-- maximizamos el viewport y activamos la cámara a exportar
+				viewport.setlayout #layout_1
+				viewport.setCamera cam
+				animationRange = interval cam.recStart cam.recEnd
+				rendStart = animationRange.start
+				rendEnd = animationRange.end
+				sliderTime = animationRange.start
+				-----------------------------------------
+
+
+				-----------------------------------------
+				-- Clonado de padres de la cámara
+
+				_ancestors = #()
+				_parent = cam
+				while _parent.parent != undefined do
+				(
+					append _ancestors _parent.parent
+					_parent = _parent.parent
+				)
+
+				if _ancestors.count > 0 do
+				(
+					maxOps.CloneNodes _ancestors expandHierarchy:false cloneType:#copy newNodes:&_newNodes
+					cam.parent = _newNodes[1]
+					_camParentsLayer = lb.layer.getLayerbyName camParentsLayerName --intentar que esta layer viaje en el fichero de anim
+					if _camParentsLayer == undefined do
+						_camParentsLayer = LayerManager.newLayerFromName camParentsLayerName
+					for i=1 to _newNodes.count do
+					(
+						_camParentsLayer.addNode _newNodes[i]
+						_newNodes[i].name = cam.name + "-Parent_" + (i as string)
+						if (superclassof _newNodes[i]) == GeometryClass do
+							_newNodes[i].baseobject = Dummy()
+					)
+				)
+
+				-- Comprobación de seguimiento de path
+				if (classof cam.position.controller[1].controller) == Path_Constraint do
+				(
+					_camParentsLayer = lb.layer.getLayerbyName camParentsLayerName --intentar que esta layer viaje en el fichero de anim
+					if _camParentsLayer == undefined do
+						_camParentsLayer = LayerManager.newLayerFromName camParentsLayerName
+					_camParentsLayer.addNode cam.position.controller[1].controller.path
+				)
+				
+				-----------------------------------------
+
+
+				-----------------------------------------
+
+				--Borra los assets que están en el otro fichero
+				for _asset in (lb.asset.getSceneAssets()) where _asset.type != lb.nc.NC_setPrefix do
+					lb.asset.deleteAsset _asset
+				for _ln in _auxLayerNames do
+				(
+					_auxLayer = lb.layer.getLayerbyName _ln
+					if _auxLayer != undefined do
+						delete (lb.layer.getLayerNodes _auxLayer)
+				)
+				lb.layer.deleteEmptyLayers()
+				--Carga la scene como xRef
+				xrefs.addNewXRefFile _layoutFileName
+
+				-----------------------------------------
+
+
+				-----------------------------------------
+				-- borramos también todos los objetos auxiliares del cameraSequencer y la capa
+				_camSeqLayer = layerManager.getLayerFromName camSequencerLayerName
+				delete (lb.layer.getLayerNodes _camSeqLayer)
+				lb.layer.deleteLayerByName camSequencerLayerName
+				-----------------------------------------
+				
+				-----------------------------------------
+				-- si la cámara exportada tiene padre la deslincamos y emparentamos con un point auxiliar. Lo mismo para el target
+				-----------------------------------------
+				if isValidNode _camTarget then
+				(
+					_targetHasParent = (_camTarget != undefined and _camTarget.parent != undefined)
+					if isValidNode cam then
+					(
+						if cam.parent != undefined or _targetHasParent then
+						(
+							_p = point name:(cam.name + ".auxParent")
+							_pTarget = if _targetHasParent then point name:(cam.name + ".auxTargetParent")
+							
+							with animate on
+							(
+								for _frame = animationRange.start to animationRange.end do
+								(
+									at time _frame _p.transform = cam.parent.transform
+									if _targetHasParent then at time _frame _pTarget.transform = cam.target.parent.transform
+								)
+							)
+							
+							cam.parent = _p
+						)--if
+					)
+				)
+								
+				-----------------------------------------
+				-- Mergeamos todos los xRefObjects que no tienen hijos
+				_xrefs = lb.xref.getXrefSceneRootRecords()
+				for _xref in _xrefs do 
+				(
+					_children = #()
+					_xref.GetChildRecords &_children
+					if _children.count==0 do 
+					(
+						objXrefMgr.MergeRecordIntoScene _xref
+					)
+				)
+				-----------------------------------------
+				
+				-----------------------------------------------------------------------------------------
+				-- Recargamos los presets del set si se han cargado como preset, sino, lo dejamos en manos del TD (antiguo)
+
+				for _set in (lb.asset.getSceneAssets()) where _set.type == lb.nc.NC_setPrefix do
+				(
+					_found = false
+					_presetFile = ""
+					for i=1 to _set.meshNodesAll.count where _found == false do
+					(
+						if lb.nodeInfo.hasNodeInfo _set.meshNodesAll[i] do
+						(
+							_found = true
+							for j=1 to _set.meshNodesAll[i].fileHistory.count where _presetFile == "" do
+							(
+								_lFile = lb.str.split _set.meshNodesAll[i].fileHistory[j] "."
+								if (findItem _lFile "prt") != 0 do
+								(
+									_presetFile = _set.meshNodesAll[i].fileHistory[j]
+								)
+							)
+						)
+					)
+					if doesFileExist _presetFile do
+					(
+						lb.asset.deleteAsset _set
+						lb.presets.load _presetFile
+					)
+				)
+				
+
+				-----------------------------------------------------------------------------------------
+
+
+				-----------------------------------------
+				-- Activamos el modo Shaded de visualización y mostramos safe frames
+				(NitrousGraphicsManager.GetActiveViewportSetting()).ViewportViewSettingImpl.VisualStyleMode = #shaded
+				displaySafeFrames = true
+				-----------------------------------------
+				
+				-----------------------------------------
+				-- Deshabilitamos el DOF de todas las cámaras
+				this.disableMultiPassEfect()
+				-----------------------------------------
+
+				-----------------------------------------
+				-- Guardado del fichero
+				saveMaxFile _newFileName
+
+				--Cargar las variaciones
+				_sceneAssets = lb.asset.getSceneAssets()
+				for _asset in _sceneAssets do
+				(
+					if _asset.fullname == _setAssetFullname then
+					(
+						lb.asset.loadAssetCameraVariations _asset type:"draft"
+					)
+				)
+
+				saveMaxFile _newFileName
+				-----------------------------------------
+
+				-----------------------------------------
+				-- añadimos el fileInfo e indicamos que el nuevo fichero está chequeado
+				_fileInfoDoc = lb.fileInfo.createFileInfoXmlDoc checked:true
+				lb.fileInfo.addFileInfo _newFileName (_fileInfoDoc.toString())
+				-----------------------------------------
+				
+				-----------------------------------------
+				-- Cargamos de nuevo el fichero original y finalizamos
+				loadMaxFile _currentFile quiet:true
+				-----------------------------------------
+				--*/
+								
+				_success = true
+			)
+			
+			-- Si queremos devolver un log de error, devolvemos vacio para indicar que no ha habido error
+			if returnErrorLog then
+				return ""
+			else 
+			(	
+				pushPrompt ("Finalizada exportación de la cámara")
+				return _success
+			)
+		),
+
+		----------------------------------------------------------------------------------------
+		--@fn: integer | compareDistanceToCamera | Algoritmo de quickSort que compara la distancia de dos nodos al centro del punto de vista del viewport
+		--@gets: node | node1 | Primer nodo a comparar
+		--@gets: node | node2 | Segundo nodo a comparar
+		--@gets: (opt)node | camera | Si se le pasa un nodo de camara realiza los calculos de posición en función del nodo, sino en función de la posición de la matriz de transfomacion del viewport. Por defecto undefined
+		--@returns: integer | undefined | devuelve -1 si NODE1 esta mas cerca y 1 si NODE2 está mas cerca. 0 si están a la misma distancia.
+		----------------------------------------------------------------------------------------			
+		fn compareDistanceToCamera node1 node2 camera:undefined =
+		(
+			--obtiene las distancias
+			_viewPortCenterPos = if isValidNode camera then camera.pos else (inverse(viewport.getTM())).pos
+			_length1 = length (node1[2].pos - _viewPortCenterPos)
+			_length2 = length (node2[2].pos - _viewPortCenterPos)
+			
+			--devuelve el resultado
+			case of
+			(
+				(_length1 < _length2): -1
+				(_length1 > _length2): 1
+				default:0
+			)
+		),--compareDistanceToViewportCenter
+
+		----------------------------------------------------------------------------------------
+		--@fn: boolean | isPointInCameraField | Consulta si el punto pasado por parámetros se encuentra dentro del campo visual de la camara actual.
+		--@gets: node | thePoint | El punto sobre el que realizar la consulta.
+		--@gets: (opt)node | camera | Si se le pasa un nodo de camara realiza los calculos de posición en función del campo de la campara, sino lo realiza en función de la vision del viewport activo. Por defecto undefined.
+		--@returns: boolean | undefined | Devuelve TRUE si el punto está dentro del campo de la camara actual
+		----------------------------------------------------------------------------------------			
+		fn isPointInCameraField thePoint camera:undefined =
+		(
+			_isVis = false
+			
+			_cameraMatrix = if isValidNode camera then (inverse camera.transform) else viewport.getTM()
+			_cameraFov = if isValidNode camera then camera.fov else getViewFOV()
+			
+			_thePosInCamera = thePoint * _cameraMatrix --calcula el punto pasado, en el espacio de la camara
+			
+			if _thePosInCamera.z < 0 then --si el punto está delante de la cámara
+			(	
+				_thePos = copy _thePosInCamera --duplica el valor original
+				_thePos.y = 0 --resetea el valor de Y
+				_theAngleX = acos (dot (normalize _thePos) [0,0,-1]) --calcula el ángulo en X
+				 
+				_thePos = copy _thePosInCamera --duplica el valor original de nuevo
+				_thePos.x = 0 --resetea el valor de X
+				_theAngleY = acos (dot (normalize _thePos) [0,0,-1]) --calcula el ángulo en Y
+				 
+				--calcula el image aspect, compensado con el pixelAspect:
+				_rAaspect=(renderWidth as float)/renderHeight*renderPixelAspect
+				
+				--calculata la mitad del fov vertical
+				_vFov = atan(tan((_cameraFov)/2.0)/_rAaspect)
+				
+				--si los dos angulos son menores que las mitades de los fov vertical y horizontal, entonces el punto es visible.
+				_isVis = (_theAngleX <= _cameraFov/2) and (_theAngleY <= _vFov)
+			)
+			
+			_isVis --devuelve el resultado
+		),
+		
+		----------------------------------------------------------------------------------------
+		--@fn: boolean | isPointInCameraField | Consulta si la región delimitada por la boundingbox pasada por parametros es visible desde el punto de vista proporcionado.
+		--@gets: node | theBoundingBox | La bounding box que representa la región sobre la que realizar la consulta.
+		--@gets: (opt)node | camera | Si se le pasa un nodo de camara realiza los calculos de visibilidad en función del campo de la campara, sino lo realiza en función de la vision del viewport activo. Por defecto undefined.
+		--@gets: (opt)boolean | useBBfaces | Para el calculo de la visibilidad, si vale true se usan las caras de la bounding box. Por defecto True
+		--@gets: (opt)boolean | useBBcorners | Para el calculo de la visibilidad, si vale true se usan los corners de la bounding box. Por defecto False
+		--@gets: (opt)boolean | considerTransparency | Parámetro para el calculo de visibilidad. Si vale true se considera la transparencia del asset para el calculo de visibilidad. Por defecto True
+		--@gets: (opt)node | collisionBox | Variable para suministrarle una geometria (generalmente un cubo), para la construcción de la Caja de colisiones interna del proceso de visibilidad. Por defecto undefined.
+		--@gets: (opt)node | _theNode | Nodo que contiene la geometria de la cual se generará la bounding box de colisión. Si no es un nodo valido se usará la bounding box pasada por collisionBox
+		--@returns: boolean | _isVis | Devuelve true si la boundingBox es visible a camara.
+		----------------------------------------------------------------------------------------		
+		fn isBoundingBoxVisible theBoundingBox camera:undefined useBBfaces:true useBBcorners:false considerTransparency:true collisionBox:undefined _theNode:undefined =
+		(
+			_isVis = false
+			
+			--si hay camara coge su posicion y si no, coge la del viewport
+			_viewPointPos = if isValidNode camera then camera.pos else (inverse (viewport.getTM())).pos
+			
+			--obtiene los puntos desde los cuales comprobar la visibilidad del boundingBox
+			_bb = theBoundingBox
+			
+			_isVis = lb.geometry.isPointInBoundingBox _viewPointPos _bb
+			
+			if not _isVis then
+			(
+				_auxNode = _theNode
+				if not isValidNode _theNode then _auxNode = lb.geometry.createBoxFromBoundingBox _bb boxToUse:collisionBox
+					
+				_bbPoints = #()
+				if useBBfaces then _bbPoints = lb.geometry.getBoundingBoxFaceCenters _bb
+				if useBBcorners then _bbPoints += lb.geometry.getBoundingBoxCorners _bb offset:-0.01
+				if _bbPoints.count == 0 then _bbPoints = #(((_bb[1] + _bb[2])/2.0))
+					
+				--recorre las caras del boundingBox para ver si sus centros son visibles
+				for _point in _bbPoints where not _isVis and (lb.cameraFunctions.isPointInCameraField _point camera:camera) do
+				(
+					_dir = _point - _viewPointPos
+					_r = ray _viewPointPos _dir
+							
+					_intersections = intersectRayScene _r
+					qSort _intersections lb.cameraFunctions.compareDistanceToCamera camera:camera
+					
+					_firstIntersection = _intersections[1] --recopila la primera intersección
+					
+					--mientras la primera intersección tenga una visibilidad menor de 1, se deben buscar las siguientes intersecciones hasta encontrar una que sea opaca
+					_cont = 1
+					_stop = false
+					while not _stop and _cont <= _intersections.count do
+					(
+						if _firstIntersection[1] == _auxNode then --si es el propio bb no se busca más
+							_stop = true
+						else
+						(
+							if considerTransparency then --si hay que tener en cuenta la transparencia de las colisiones
+							(
+								--si el objeto es opaco, es válido como primera intersección
+								if _firstIntersection == undefined then _stop = true 
+								else if _firstIntersection[1][1].controller == undefined then _stop = true
+								else if _firstIntersection[1][1].controller.value == 1.0 then _stop = true
+								
+								--si lleva un material con opaciad diferente de 1 o con mapas de opacidad, no vale como interseccion
+								if _stop and _firstIntersection  != undefined then
+								(
+									_mat = _firstIntersection[1].material
+									case (classof _mat) of
+									(
+										Standardmaterial:
+										(
+											if _mat.opacity < 100 then _stop = false
+											else if _mat.opacityMap != undefined then _stop = false
+										)--Standardmaterial
+										
+										Arch___Design__mi:
+										(
+											if _mat.refr_weight > 0 then _stop = false
+											else if _mat.cutout_map != undefined then _stop = false
+										)--Arch___Design__mi
+									)--case
+								)--if
+							)
+							else --si no hay que tener en cuenta la transparencia de las colisiones
+							(
+								_stop = true
+							)
+							
+							if not _stop then _firstIntersection = _intersections[_cont]
+						)
+						
+						_cont += 1
+					)--while
+					
+					_isVis = (_firstIntersection != undefined and _firstIntersection[1] == _auxNode)
+				)--for
+				
+				if (not isValidNode _theNode) and (not isValidNode collisionBox) then delete _auxNode --elimina la caja auxiliar si ha habido que crearla
+			)--if
+			
+			_isVis
+		),
+			
+		----------------------------------------------------------------------------------------
+		--@fn: boolean | isPointInCameraField | Consulta si el nodo pasado por parametros es visible desde el punto de vista proporcionado.
+		--@gets: node | theNode | Geometria sobre la que realizar la consulta.
+		--@gets: (opt)node | camera | Si se le pasa un nodo de camara realiza los calculos de visibilidad en función del campo de la campara, sino lo realiza en función de la vision del viewport activo. Por defecto undefined.
+		--@gets: (opt)boolean | useBBfaces | Para el calculo de la visibilidad, si vale true se usan las caras de la bounding box. Por defecto True
+		--@gets: (opt)boolean | useBBcorners | Para el calculo de la visibilidad, si vale true se usan los corners de la bounding box. Por defecto False
+		--@gets: (opt)boolean | considerTransparency | Parámetro para el calculo de visibilidad. Si vale true se considera la transparencia del asset para el calculo de visibilidad. Por defecto True
+		--@gets: (opt)node | collisionBox | Variable para suministrarle una geometria (generalmente un cubo), para la construcción de la Caja de colisiones interna del proceso de visibilidad. Por defecto undefined.
+		--@gets: (opt)node | _theNode | Nodo que contiene la geometria de la cual se generará la bounding box de colisión. Si no es un nodo valido se usará la bounding box pasada por collisionBox
+		--@returns: boolean | _isVis | Devuelve true si el nodo es visible a camara.
+		----------------------------------------------------------------------------------------		
+		fn isNodeVisible theNode camera:undefined useBBfaces:true useBBcorners:false considerTransparency:true collisionBox:undefined =
+		(
+			_isVis = false
+			
+			--obtiene el bounding box respecto a la matriz del nodo pasado
+			_bb = (nodeGetBoundingBox theNode theNode.transform)--(matrix3 1))
+			
+			_theNode = theNode
+				
+			--si hay camara coge su posicion y si no, coge la del viewport
+			_viewPointPos = if isValidNode camera then camera.pos else (inverse (viewport.getTM())).pos
+			
+			--si la camara o el punto de vista están dentro del BB del asset, éste se considera visible.
+			_isVis = lb.geometry.isPointInBoundingBox _viewPointPos _bb refMatrix:(_theNode.transform)
+				
+			if not _isVis then
+			(
+				_auxNode = _theNode
+				if not isValidNode _theNode then _auxNode = lb.geometry.createBoxFromBoundingBox _bb boxToUse:collisionBox refMatrix:(_theNode.transform)
+				
+				--crea un array de points a comprobar si son visibles
+				_bbPoints = #(((_bb[1] + _bb[2])/2.0)) --primero comprueba si es visible el centro del asset			
+				if useBBcorners then _bbPoints += lb.geometry.getBoundingBoxCorners _bb offset:-0.01 --luego añade las esquinas
+				if useBBfaces then _bbPoints += lb.geometry.getBoundingBoxFaceCenters _bb --luego añade las caras
+				
+				--calcula la posicion real en el mundo de cada uno de esos points
+				_auxMatrix = Matrix3 1
+				for i=1 to _bbPoints.count do
+				(				
+					_auxMatrix.position = _bbPoints[i]
+					_bbPoints[i] = (_auxMatrix * _auxNode.transform).position
+				)--for
+				
+				--comprobación en viewport de la posicion de los points que vamos a comprobar como visibles.
+				/*(
+					_auxPoint = Point size:20 box:on
+					_auxPoint.wirecolor = color 0 255 0
+					for _point in _bbPoints do
+					(
+						_auxPoint.pos = _point
+						CompleteRedraw()
+						sleep 0.1				
+					)--for
+					delete _auxPoint
+				)--*/
+			
+				--recorre las caras del boundingBox para ver si sus centros son visibles
+				for _point in _bbPoints where not _isVis and (lb.cameraFunctions.isPointInCameraField _point camera:camera) do
+				(
+					--_strt = timeStamp()
+					
+					_dir = _point - _viewPointPos
+					_r = ray _viewPointPos _dir
+							
+					_intersections = intersectRayScene _r
+					qSort _intersections lb.cameraFunctions.compareDistanceToCamera camera:camera
+					
+					_firstIntersection = _intersections[1] --recopila la primera intersección
+					
+					--mientras la primera intersección tenga una visibilidad menor de 1, se deben buscar las siguientes intersecciones hasta encontrar una que sea opaca
+					_cont = 1
+					_stop = false
+					while not _stop and _cont <= _intersections.count do
+					(
+						if _firstIntersection[1] == _auxNode then --si es el propio bb no se busca más
+							_stop = true
+						else
+						(
+							if considerTransparency then --si hay que tener en cuenta la transparencia de las colisiones
+							(
+								--si el objeto es opaco, es válido como primera intersección
+								if _firstIntersection == undefined then _stop = true 
+								else if _firstIntersection[1][1].controller == undefined then _stop = true
+								else if _firstIntersection[1][1].controller.value == 1.0 then _stop = true
+								
+								--si lleva un material con opaciad diferente de 1 o con mapas de opacidad, no vale como interseccion
+								if _stop and _firstIntersection != undefined then
+								(
+									_mat = _firstIntersection[1].material
+									case (classof _mat) of
+									(
+										Standardmaterial:
+										(
+											if _mat.opacity < 100 then _stop = false
+											else if _mat.opacityMap != undefined then _stop = false
+										)--Standardmaterial
+										
+										Arch___Design__mi:
+										(
+											if _mat.refr_weight > 0 then _stop = false
+											else if _mat.cutout_map != undefined then _stop = false
+										)--Arch___Design__mi
+									)--case
+								)--if
+							)
+							else --si no hay que tener en cuenta la transparencia de las colisiones
+							(
+								_stop = true
+							) 
+							
+							if not _stop then _firstIntersection = _intersections[_cont]											
+						)--if else
+						
+						_cont += 1 --incrementa el contador de intersecciones
+					)--while
+					
+					--_end = timeStamp()
+					--_calcTime = (((_end - _strt)/1000.0) as string)				
+					--print _calcTime
+					--print "-_-_-_-_-"
+					
+					_isVis = (_firstIntersection != undefined and _firstIntersection[1] == _auxNode)
+				)--for
+				
+				if (not isValidNode _theNode) and (not isValidNode collisionBox) then delete _auxNode --elimina la caja auxiliar si ha habido que crearla
+			)--if
+			
+			_isVis
+		),
+
+		----------------------------------------------------------------------------------------
+		--@fn: array{array{nodes},array{nodes}} | checkSceneCamParents | Consulta todos los objetos que estan linkados directamente a camara, o tienen un pointConstraint a esta.
+		--@returns: array{array{nodes},array{nodes}} | _result | Devuelve una array con los nodos linkados a camara; que contiene el siguiente registro: #(#(Objetos linkados directamente),#(Objetos con point constraint))
+		----------------------------------------------------------------------------------------	
+		fn checkSceneCamParents = 
+		(
+			--seria mas rapido hacer la comprobación con los objetos animables de los assets y los helpers. En lugar de objects
+			_objsToConstraint = #()
+			_objsToLink = #()
+			for obj in objects do 
+			(
+				--Comprobaremos que no haya objetos linkados a camaras. 
+				if superClassOF obj.parent == camera do 
+				(
+					--Buscaremos que los objetos cumplan en naming convention, asi se excluyen los puntos creados por los pointConstraints.
+					if lb.nc.ncOk obj.name do 
+					(
+						--Si los hay los añadiremos al array de objs linkados.
+						appendIfUnique _objsToLink obj
+					)
+				)
+				--Comprobaremos los objetos que tengan PointConstraint.
+				if lb.links.pointConstraint.hasPCAttribute obj do 
+				(
+					_linkInfo = lb.links.pointConstraint.getPointData obj
+					for _link in _linkInfo.pointLinks do 
+					(
+						--Comprobaremos que no haya objetos con point constraints a camaras.
+						if matchpattern _link[2] pattern:("cam_???") do 
+						(
+							--Si los hay los añadiremos al array de objs con point constraint.
+							appendIfUnique _objsToConstraint obj
+						) 
+					)
+				)
+			)
+			_result = #(_objsToLink,_objsToConstraint)
+		),
+
+		----------------------------------------------------------------------------------------
+		--@fn: integer | getSceneCamParentIndex | Consulta indice mas alto de los objetos en escena de tipo cam_???_parent_X, donde el indice es X
+		--@returns: integer | index | Devuelve un indice mas, al indice mas alto de entre los objetos de la escena.
+		----------------------------------------------------------------------------------------			
+		fn getSceneCamParentIndex =
+		(
+			index = 0
+			for obj in helpers do 
+			(
+				if MatchPattern obj.name pattern: "*cam_???_parent_*" do 
+				(
+					_nameParts = FilterString obj.name "_"
+					_indextmp = _nameParts[_nameParts.count] as integer
+					if _indextmp > index do index = _indextmp
+				)
+			)
+			index + 1
+		),
+		----------------------------------------------------------------------------------------
+		--@fn: undefined | fixSceneCamParents | Consulta todos los objetos que estan linkados directamente a camara, o tienen un pointConstraint a esta.
+		--@gets: array{nodes}| _objsToLink | Array con los objetos que tienen links a camara
+		--@gets: array{nodes}| _objsToConstraint | Array con los objetos que tienen constraints a camara
+		----------------------------------------------------------------------------------------		
+		fn fixSceneCamParents _objsToLink _objsToConstraint = 
+		(
+			cam = cameras[1]
+			--Creamos el punto auxiliar para emparentarlo.
+			auxPoint = point()
+			--Construimos el nombre con el patron de padres.
+			auxPoint.name = cam.name + "_parent_" + (getSceneCamParentIndex()) as string
+			--Hacemos una copia de los controladores de la camara, (Sin instanciar)
+			copyPosController = copy cam.position.controller
+			copyRotController = copy cam.rotation.controller
+			copySclController = copy cam.scale.controller
+			--Le aplicamos los controladores al punto. Así se podran hacer fixes sobre la camara facilmente.
+			auxPoint.position.controller = copyPosController
+			auxPoint.rotation.controller = copyRotController
+			auxPoint.scale.controller = copySclController
+			--Si no existe la capa _auxObj_ la creamos y añadimos allí el punto.
+			_auxObjLayerName = "_auxObj_" 
+			_auxObjLayer = lb.layer.getLayerbyName _auxObjLayerName
+		    if _auxObjLayer == undefined do
+		  		_auxObjLayer = LayerManager.newLayerFromName _auxObjLayerName
+		  	_auxObjLayer.addNode auxPoint
+
+		  	--Operaciones para los objetos que tienen constraint.
+			if _objsToConstraint.count > 0 do 
+			(
+				for _objConstraint in _objsToConstraint do 
+				(
+					--Obtenemos la información de linkajes
+					_linkInfo = lb.links.pointConstraint.getPointData _objConstraint
+					for i = _linkInfo.pointLinks.count to 1 by -1 do 
+					(
+						--Si hay algun link a camara, lo borraremos y lo sustituiremos 
+						if matchpattern _linkInfo.pointLinks[i][2] pattern:("cam_???") do 
+						(
+							at time (_linkInfo.pointLinks[i][1] as time)
+							(
+								lb.links.pointConstraint.deleteTarget _objConstraint i
+								lb.links.pointConstraint.addTarget _objConstraint auxPoint 
+							)
+						) 
+					)
+				)
+			)
+			if _objsToLink.count>0 do 
+			(
+				for _linkObj in _objsToLink do 
+				(
+					_linkObj.parent = auxPoint
+				)
+			)
+		),
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+			
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addLibrary this --añade la libreria a la principal
+		)		
+	)--lib_cameraFunctions
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	
+	lib_cameraFunctions() --crea la libreria
+)

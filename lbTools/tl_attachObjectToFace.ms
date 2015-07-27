@@ -1,0 +1,972 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--@Desc: Herramienta attachObjectToFace.
+------------------------------------------------------------------------------------------------------------------------------------------------
+(
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@rollout: rollMainDef | Contiene la interfaz de la herramienta attachObjectToFace.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	rollout rollMainDef "Attach Object To Face"
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		local parent = lb.getTool (lb.getFileToolName (getThisScriptFilename() as string)) 		--@var: string | parent | Herramienta o rolllout del que depende y/o contiene el rollout actual
+		
+		local minRollWidth = 205																--@var: integer | minRollWidth | Ancho mínimo de la herramienta.
+		local minRollHeight = 205																--@var: integer | minRollHeight | Alto mínimo de la herramienta.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--CONTROLS
+		------------------------------------------------------------------------------------------------
+		
+		GroupBox grpAttachTo "Attach to:" pos:[5,5] width:195 height:50
+		pickbutton btnPickObject "Pick Object" pos:[10,25] width:165 height:25 filter:parent.meshFilter autoDisplay:true
+
+		GroupBox grpPosition "Position" pos:[5,60] width:195 height:95
+		checkbutton ckbPickFace "Pick Face" pos:[10,75] width:125 height:25
+		button btnDeleteAttachment "X" pos:[175,25] width:20 height:25
+		button btnRefresh "Refresh" pos:[135,75] width:60 height:25
+		checkbox chkkeepOffset "Keep Initial Offset" pos:[20,105] width:130 height:15 checked:true
+		checkbox chkInheritRotation "Inherit rotation" pos:[20,125] width:130 height:15 checked:false
+			
+		GroupBox grpOrientation "" pos:[5,155] width:195 height:45 enabled:false
+		checkbox chkAlignToSurface "Align To Surface" pos:[15,155] width:110 height:20 enabled:false
+		radiobuttons rdoAxisXYZ "" pos:[30,175] width:97 height:16 enabled:false labels:#("X", "Y", "Z") columns:3
+
+		checkbox chkFlipAxis "Flip" pos:[150,173] width:40 height:20 enabled:false
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		---------------------------------------------------------------------------------------------------------------
+		--@fn: undefined | getFaceFromRay | Se lanza un rayo desde la vista de cámara del viewport hasta la posición del ratón para cazar el el poligono con el cual ha colisionado y captura la información.
+		--@comment: En realidad no se trata de una funcicón, sino de una tool. El sistema antiguo de desarrollo, es funcional, pero deprecated.
+		---------------------------------------------------------------------------------------------------------------
+		tool getFaceFromRay
+		(
+			on mousePoint clickNo do
+			(	
+				suspendEditing()
+				lb.attachObjectToFace.addEditMeshModifier lb.attachObjectToFaceFunctions.attachPro.targetObj
+				
+				lb.attachObjectToFace.intRay = intersectRayEx lb.attachObjectToFaceFunctions.attachPro.targetObj (mapScreenToWorldRay viewPoint)
+				
+				if lb.attachObjectToFace.intRay != undefined then 
+				(
+					redrawViews()
+					
+					faceVerts = getFace lb.attachObjectToFaceFunctions.attachPro.targetObj.mesh lb.attachObjectToFace.intRay[2]
+					lb.attachObjectToFaceFunctions.attachPro.face = lb.attachObjectToFace.intRay[2]
+					lb.attachObjectToFaceFunctions.attachPro.vert1 = faceVerts[1]
+					lb.attachObjectToFaceFunctions.attachPro.vert2 = faceVerts[2]
+					lb.attachObjectToFaceFunctions.attachPro.vert3 = faceVerts[3]
+					lb.attachObjectToFaceFunctions.attachPro.barCoords = lb.attachObjectToFace.intRay[3]
+					
+					lb.attachObjectToFace.setAttachProData obj lb.attachObjectToFaceFunctions.attachPro
+					
+					stopTool getFaceFromRay
+				)
+			)
+			
+			on stop do
+			(
+				ckbPickFace.checked = false
+				lb.attachObjectToFace.deleteEditMeshModifier lb.attachObjectToFaceFunctions.attachPro.targetObj
+				resumeEditing()
+			)
+		)
+
+		---------------------------------------------------------------------------------------------------------------
+		--@fn: undefined | updateUi | Actualiza el ui del rollout segun las opciones.
+		---------------------------------------------------------------------------------------------------------------		
+		fn updateUi =
+		(
+			-- Sólo habilitamos los controles si hay un objeto seleccionado
+			if selection.count != 1 then
+				for c in rollMainDef.controls where classof  c != GroupBoxControl do c.enabled = false
+			else
+			(
+				lb.attachObjectToFaceFunctions.attachPro = lb.attachObjectToFaceFunctions.getAttachProInfo $
+				
+				btnPickObject.enabled = true
+				btnPickObject.object = lb.attachObjectToFaceFunctions.attachPro.targetObj
+				
+				enableControls = (btnPickObject.object != undefined)
+				
+				btnDeleteAttachment.enabled = \
+				btnRefresh.enabled = \
+				ckbPickFace.enabled =	\
+				chkkeepOffset.enabled = \
+				chkInheritRotation.enabled = enableControls
+				
+				ckbPickFace.caption = if lb.attachObjectToFaceFunctions.attachPro.face != -1 then "Pick Face" else ("Face: " + lb.attachObjectToFaceFunctions.attachPro.face as string)
+				
+				chkAlignToSurface.enabled = (lb.attachObjectToFaceFunctions.attachPro.posController != undefined and isProperty $ #rotation)
+				
+				chkkeepOffset.checked = lb.attachObjectToFaceFunctions.attachPro.keepOffset
+				chkInheritRotation.checked = lb.attachObjectToFaceFunctions.attachPro.inheritRotation
+				
+				chkAlignToSurface.checked = lb.attachObjectToFaceFunctions.attachPro.alignToFace
+				
+				if chkAlignToSurface.checked then
+				(
+					rdoAxisXYZ.enabled = true
+					chkFlipAxis.enabled = true
+					
+					rdoAxisXYZ.state = lb.attachObjectToFaceFunctions.attachPro.xAxis
+					chkFlipAxis.checked =  lb.attachObjectToFaceFunctions.attachPro.flipAxis
+				)
+				else
+				(
+					rdoAxisXYZ.enabled = false
+					chkFlipAxis.enabled = false
+				)
+			)
+		)
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: undefined | createSceneEvents | Crea los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn createSceneEvents =
+		(
+			_id = ((parent.className + "_" + (substituteString parent.rollMain.name "Def" "")) as name)
+			
+			callbacks.addscript #selectionSetChanged "lb.attachObjectToFace.rollMain.updateUI()" id:_id
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | removeSceneEvents | Destruye los callbacks relacionados con el rollout
+		------------------------------------------------
+		fn removeSceneEvents =
+		(
+			_id = ((parent.className + "_" + (substituteString parent.rollMain.name "Def" "")) as name)
+			callbacks.removescripts id:_id		
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | resize | Redimensiona el UI.
+		--@gets: point2 | size | Tamaño nuevo del rollout
+		------------------------------------------------
+		fn resize size =
+		(
+			------------------------------------------------------------------------------
+			--si la herramienta se redimensiona más pequeña que el mínimo, lo limita al minimo
+			if size.x < minRollWidth then (size.x = minRollWidth; rollMainDef.width = size.x)
+			if size.y < minRollHeight then (size.y = minRollHeight; rollMainDef.height = size.y)
+			------------------------------------------------------------------------------
+			
+			--calcula el incremento en ancho y alto, respecto al mínimo.
+			_increment = [size.x - minRollWidth, size.y - minRollHeight]
+			
+			------------------------------------------------------------------------------
+			--redimension en horizontal
+			if _increment.x != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+			
+			------------------------------------------------------------------------------
+			--redimension en vertical
+			if _increment.y != 0 then --si hay incremento
+			(
+				
+			)--if
+			------------------------------------------------------------------------------
+		)
+
+		------------------------------------------------
+		--@fn: undefined | saveSettings | Salva los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn saveSettings =
+		(
+			--almacena posicion
+			lb.xml.setAttribute parent.cfgFile ("rollMain/pos") "x" (((getDialogPos rollMainDef).x) as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/pos") "y" (((getDialogPos rollMainDef).y) as string)
+			
+			--almacena tamaño
+			lb.xml.setAttribute parent.cfgFile ("rollMain/size") "width" (rollMainDef.width as string)
+			lb.xml.setAttribute parent.cfgFile ("rollMain/size") "height" (rollMainDef.height as string)
+		)
+		
+		------------------------------------------------
+		--@fn: undefined | loadSettings | Carga los settings de la herramienta en el documento de configuración de la misma.
+		------------------------------------------------
+		fn loadSettings =
+		(
+			_width = (lb.xml.getAttribute parent.cfgFile ("rollMain/size") "width") as integer
+			_height = (lb.xml.getAttribute parent.cfgFile ("rollMain/size") "height") as integer
+				
+			--posicion
+			_posX = (lb.xml.getAttribute parent.cfgFile ("rollMain/pos") "x") as integer
+			_posY = (lb.xml.getAttribute parent.cfgFile ("rollMain/pos") "y") as integer
+				
+			--establece minimos
+			if _width < minRollWidth then _width = minRollWidth
+			if _height < minRollHeight then _height = minRollHeight
+			if _posX < 0 then _posX = 0
+			if _posY < 0 then _posY = 0
+				
+			--aplica los valores
+			rollMainDef.width = _width
+			rollMainDef.height = _height
+			setDialogPos rollMainDef [_posX,_posY]
+		)
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+
+		---------------------------------------------------------------------------
+		--@event: picked | Evento que se lanza al seleccionar un elemento con el pickbutton.
+		--@control: pickButton | btnPickObject | Orienta la pieza con la normal del poligno y o la deja ocomo estaba orientada.
+		---------------------------------------------------------------------------			
+		on btnPickObject picked targetObj do
+		(
+			with undo off
+			(
+				if targetObj != undefined then 
+				(
+					disableSceneRedraw()
+					
+					--	Apagamos todos los modificadores de subdivisión
+					modsToDisable = for m in targetObj.modifiers where (findItem lb.attachObjectToFaceFunctions.AOTFsubdivisionMods (classOf m) != 0) and m.enabledinviews collect #(m, m.enabled, m.enabledInViews)
+					
+					if modsToDisable.count > 0 then
+						for m in modsToDisable do m[1].enabled = false
+					
+					lb.attachObjectToFace.addAttachProControllers $ targetObj
+					lb.attachObjectToFaceFunctions.attachPro = lb.attachObjectToFaceFunctions.getAttachProInfo $
+					lb.attachObjectToFaceFunctions.attachPro.initialOffset = $.transform - targetObj.transform
+					
+					case lb.attachObjectToFaceFunctions.AOTFattachMode of 
+					(
+						#animBake:
+							lb.attachObjectToFaceFunctions.createAnimFromVertex $ lb.attachObjectToFaceFunctions.attachPro.targetObj lb.attachObjectToFaceFunctions.attachPro.face barCoords:lb.attachObjectToFaceFunctions.attachPro.barCoords initialOffset:lb.attachObjectToFaceFunctions.attachPro.initialOffset inheritRotation:chkInheritRotation.checked keepOffset:lb.attachObjectToFaceFunctions.attachPro.keepOffset alignToFace:lb.attachObjectToFaceFunctions.attachPro.alignToFace flipAxis:lb.attachObjectToFaceFunctions.attachPro.flipAxis xAxis:lb.attachObjectToFaceFunctions.attachPro.xAxis
+						
+						#attach:
+						(
+							lb.attachObjectToFaceFunctions.attachPro.posController.setConstant "_xAxis" state
+							lb.attachObjectToFaceFunctions.attachPro.posController.update()
+						)
+					)
+					
+					--	Volvemos a encender los modificadores de subdivisión
+					for m in modsToDisable do 
+					(
+						m[1].enabled = m[2]
+						m[1].enabledInViews = m[3]
+					)
+					
+					enableSceneRedraw()
+					gc()
+				)
+				
+				updateUI()
+			)
+		)
+		
+		---------------------------------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton.
+		--@control: button | btnRefresh | Refresca la ui, actualizando los controles.
+		---------------------------------------------------------------------------			
+		on btnRefresh pressed do
+		(
+			with undo off
+			(
+				case lb.attachObjectToFaceFunctions.AOTFattachMode of 
+				(
+					#animBake:
+						lb.attachObjectToFaceFunctions.createAnimFromVertex $ lb.attachObjectToFaceFunctions.attachPro.targetObj lb.attachObjectToFaceFunctions.attachPro.face barCoords:lb.attachObjectToFaceFunctions.attachPro.barCoords initialOffset:lb.attachObjectToFaceFunctions.attachPro.initialOffset inheritRotation:chkInheritRotation.checked keepOffset:lb.attachObjectToFaceFunctions.attachPro.keepOffset alignToFace:lb.attachObjectToFaceFunctions.attachPro.alignToFace flipAxis:lb.attachObjectToFaceFunctions.attachPro.flipAxis xAxis:lb.attachObjectToFaceFunctions.attachPro.xAxis
+					
+					#attach:
+						lb.attachObjectToFaceFunctions.attachPro.posController.update()
+				)
+			)
+		)
+		
+		---------------------------------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton.
+		--@control: button | btnDeleteAttachment | Elimina un control de attachment.
+		---------------------------------------------------------------------------	
+		on btnDeleteAttachment pressed do
+		(
+			with undo off
+			(
+				lb.attachObjectToFace.deleteAttachProControllers $
+				updateUI()
+			)
+		)
+		
+		---------------------------------------------------------------------------
+		--@event: pressed | Evento que se lanza al pulsar el boton.
+		--@control: button | ckbPickFace | Después de seleccionar una cara, le añade un attachment
+		---------------------------------------------------------------------------		
+		on ckbPickFace changed state do
+		(
+			with undo off
+			(
+				if state then
+				(
+					--	Apagamos todos los modificadores de subdivisión
+					modsToDisable = for m in lb.attachObjectToFaceFunctions.attachPro.targetObj.modifiers where (findItem lb.attachObjectToFaceFunctions.AOTFsubdivisionMods (classOf m) != 0) and m.enabledinviews collect #(m, m.enabled, m.enabledInViews)
+					
+					if modsToDisable.count > 0 then
+					(
+						lb.message.show "Subdivision modifiers like Turbosmooth will be temporary disabled in target object for this operation." type:#message pos:undefined size:[300,75] modal:true
+						for m in modsToDisable do m[1].enabled = false
+					)
+					
+					-- Iniciamos la tool para capturar el objeto target si no se caza
+					-- cancelamos todas las operaciones. 
+					startTool getFaceFromRay
+					
+					if lb.attachObjectToFaceFunctions.attachPro.face != -1 then
+					(
+						lb.attachObjectToFace.setAttachProData $ lb.attachObjectToFaceFunctions.attachPro
+						
+						case lb.attachObjectToFaceFunctions.AOTFattachMode of 
+						(
+							#animBake:
+							(
+								lb.attachObjectToFaceFunctions.createAnimFromVertex $ lb.attachObjectToFaceFunctions.attachPro.targetObj lb.attachObjectToFaceFunctions.attachPro.face barCoords:lb.attachObjectToFaceFunctions.attachPro.barCoords initialOffset:lb.attachObjectToFaceFunctions.attachPro.initialOffset inheritRotation:chkInheritRotation.checked keepOffset:chkkeepOffset.checked alignToFace:chkAlignToSurface.checked flipAxis:chkFlipAxis.checked xAxis:rdoAxisXYZ.state
+								gc()
+							)
+							
+							#attach:
+							(
+								
+							)
+						)
+					)
+					else
+						ckbPickFace.checked = false
+					
+					--	Volvemos a encender los modificadores de subdivisión
+					for m in modsToDisable do 
+					(
+						m[1].enabled = m[2]
+						m[1].enabledInViews = m[3]
+					)
+				)
+				
+				updateUI()
+			)
+		)
+		
+		---------------------------------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del checkbutton.
+		--@control: checkbutton | chkKeepOffset | Orienta la pieza con la normal del poligno y o la deja ocomo estaba orientada.
+		---------------------------------------------------------------------------				
+		on chkKeepOffset changed state do
+		(
+			with undo off
+			(
+				lb.attachObjectToFaceFunctions.attachPro.keepOffset = state
+				lb.attachObjectToFace.setAttachProData $ lb.attachObjectToFaceFunctions.attachPro
+				
+				case lb.attachObjectToFaceFunctions.AOTFattachMode of 
+				(
+					#animBake:
+					(
+						lb.attachObjectToFaceFunctions.createAnimFromVertex $ lb.attachObjectToFaceFunctions.attachPro.targetObj lb.attachObjectToFaceFunctions.attachPro.face barCoords:lb.attachObjectToFaceFunctions.attachPro.barCoords initialOffset:lb.attachObjectToFaceFunctions.attachPro.initialOffset inheritRotation:chkInheritRotation.checked keepOffset:chkkeepOffset.checked alignToFace:chkAlignToSurface.checked flipAxis:chkFlipAxis.checked xAxis:rdoAxisXYZ.state
+						gc()
+					)
+					
+					#attach:
+					(
+						lb.attachObjectToFaceFunctions.attachPro.posController.setConstant "_alignToFace" state
+						lb.attachObjectToFaceFunctions.attachPro.posController.update()
+					)
+				)
+				
+				updateUI()
+			)
+		)
+		
+		---------------------------------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del checkbutton.
+		--@control: checkbutton | chkInheritRotation | Realiza el proceso de attachment, heredando la rotación del objeto padre.
+		---------------------------------------------------------------------------				
+		on chkInheritRotation changed state do
+		(
+			with undo off
+			(
+				lb.attachObjectToFaceFunctions.attachPro.inheritRotation = state
+				lb.attachObjectToFace.setAttachProData $ lb.attachObjectToFaceFunctions.attachPro
+				
+				case lb.attachObjectToFaceFunctions.AOTFattachMode of 
+				(
+					#animBake:
+					(
+						lb.attachObjectToFaceFunctions.createAnimFromVertex $ lb.attachObjectToFaceFunctions.attachPro.targetObj lb.attachObjectToFaceFunctions.attachPro.face barCoords:lb.attachObjectToFaceFunctions.attachPro.barCoords initialOffset:lb.attachObjectToFaceFunctions.attachPro.initialOffset inheritRotation:chkInheritRotation.checked keepOffset:chkkeepOffset.checked alignToFace:chkAlignToSurface.checked flipAxis:chkFlipAxis.checked xAxis:rdoAxisXYZ.state
+						gc()
+					)
+					#attach:
+					(
+						lb.attachObjectToFaceFunctions.attachPro.posController.setConstant "_alignToFace" state
+						lb.attachObjectToFaceFunctions.attachPro.posController.update()
+					)
+				)
+				
+				updateUI()
+			)
+		)
+		
+		---------------------------------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del checkbutton.
+		--@control: checkbutton | chkAlignToSurface | Realiza el proceso de attachment, situando el objeto donde se proyecta el rayo lanzado sobre la superficie del padre.
+		---------------------------------------------------------------------------		
+		on chkAlignToSurface changed state do
+		(
+			with undo off
+			(
+				lb.attachObjectToFaceFunctions.attachPro.alignToFace = state
+				lb.attachObjectToFace.setAttachProData $ lb.attachObjectToFaceFunctions.attachPro
+				
+				case lb.attachObjectToFaceFunctions.AOTFattachMode of 
+				(
+					#animBake:
+					(
+						lb.attachObjectToFaceFunctions.createAnimFromVertex $ lb.attachObjectToFaceFunctions.attachPro.targetObj lb.attachObjectToFaceFunctions.attachPro.face barCoords:lb.attachObjectToFaceFunctions.attachPro.barCoords initialOffset:lb.attachObjectToFaceFunctions.attachPro.initialOffset inheritRotation:chkInheritRotation.checked keepOffset:lb.attachObjectToFaceFunctions.attachPro.keepOffset alignToFace:lb.attachObjectToFaceFunctions.attachPro.alignToFace flipAxis:lb.attachObjectToFaceFunctions.attachPro.flipAxis xAxis:lb.attachObjectToFaceFunctions.attachPro.xAxis
+						gc()
+					)
+					
+					#attach:
+					(
+						lb.attachObjectToFaceFunctions.attachPro.posController.setConstant "_alignToFace" state
+						lb.attachObjectToFaceFunctions.attachPro.posController.update()
+					)
+				)
+				
+				updateUI()
+			)
+		)
+		
+		---------------------------------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del radiobutton.
+		--@control: radiobutton | rdoAxisXYZ | Cambia los ejes segun las opciones que se le pasen.
+		---------------------------------------------------------------------------			
+		on rdoAxisXYZ changed state do
+		(
+			with undo off
+			(
+				lb.attachObjectToFaceFunctions.attachPro.xAxis = state
+				lb.attachObjectToFace.setAttachProData $ lb.attachObjectToFaceFunctions.attachPro
+				
+				case lb.attachObjectToFaceFunctions.AOTFattachMode of 
+				(
+					#animBake:
+					(
+						lb.attachObjectToFaceFunctions.createAnimFromVertex $ lb.attachObjectToFaceFunctions.attachPro.targetObj lb.attachObjectToFaceFunctions.attachPro.face barCoords:lb.attachObjectToFaceFunctions.attachPro.barCoords initialOffset:lb.attachObjectToFaceFunctions.attachPro.initialOffset inheritRotation:chkInheritRotation.checked keepOffset:lb.attachObjectToFaceFunctions.attachPro.keepOffset alignToFace:lb.attachObjectToFaceFunctions.attachPro.alignToFace flipAxis:lb.attachObjectToFaceFunctions.attachPro.flipAxis xAxis:lb.attachObjectToFaceFunctions.attachPro.xAxis
+						gc()
+					)
+					#attach:
+					(
+						lb.attachObjectToFaceFunctions.attachPro.posController.setConstant "_xAxis" state
+						lb.attachObjectToFaceFunctions.attachPro.posController.update()
+					)
+				)
+				
+				updateUI()
+			)
+		)
+				
+		---------------------------------------------------------------------------
+		--@event: changed | Evento que se lanza al cambiar el estado del checkbutton.
+		--@control: checkbutton | rdoAxisXYZ | Flipea el eje seleccionado según las opciones que le pasamos.
+		---------------------------------------------------------------------------			
+		on chkFlipAxis changed state do
+		(
+			with undo off
+			(
+				lb.attachObjectToFaceFunctions.attachPro.flipAxis = state
+				lb.attachObjectToFace.setAttachProData $ lb.attachObjectToFaceFunctions.attachPro
+				
+				case lb.attachObjectToFaceFunctions.AOTFattachMode of 
+				(
+					#animBake:
+					(
+						lb.attachObjectToFaceFunctions.createAnimFromVertex $ lb.attachObjectToFaceFunctions.attachPro.targetObj lb.attachObjectToFaceFunctions.attachPro.face barCoords:lb.attachObjectToFaceFunctions.attachPro.barCoords initialOffset:lb.attachObjectToFaceFunctions.attachPro.initialOffset inheritRotation:chkInheritRotation.checked keepOffset:lb.attachObjectToFaceFunctions.attachPro.keepOffset alignToFace:lb.attachObjectToFaceFunctions.attachPro.alignToFace flipAxis:lb.attachObjectToFaceFunctions.attachPro.flipAxis xAxis:lb.attachObjectToFaceFunctions.attachPro.xAxis
+						gc()
+					)
+					#attach:
+					(
+						lb.attachObjectToFaceFunctions.attachPro.posController.setConstant "_flipAxis" state
+						lb.attachObjectToFaceFunctions.attachPro.posController.update()
+					)
+				)
+				
+				updateUI()
+			)
+		)		
+		------------------------------------------------
+		--@event: resized | Evento que se lanza al redimensionar el rollout.
+		--@control: rollout | rollMain | El elemento que sufre la redimensión. El rollout principal de la herramienta.
+		--@gets: point2 | size | tamaño al que se ha redimensionado el rollout
+		------------------------------------------------
+		on rollMainDef resized size do
+		(
+			resize size
+		)
+		
+		------------------------------------------------
+		--@event: open | Evento que se lanza al abrir el rollout.
+		--@control: rollout | rollMain | El elemento que se abre. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollMainDef open do
+		(
+			loadSettings()
+			createSceneEvents() --crea los callbacks
+
+			updateUI()
+			if parent.rollMain != undefined then resize [parent.rollMain.width, parent.rollMain.height]
+		)
+		
+		------------------------------------------------
+		--@event: close | Evento que se lanza al cerrar el rollout.
+		--@control: rollout | rollMain | El elemento que se cierra. El rollout principal de la herramienta.
+		------------------------------------------------
+		on rollMainDef close do
+		(
+			removeSceneEvents() --elimina los callbacks
+			saveSettings()
+			
+			parent.opened = false --indica que la herramienta está cerrada.
+			updateToolbarButtons()
+		)
+	)--rollMainDef
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: attachObjectToFace | Contiene la herramienta attachObjectToFace.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct tl_attachObjectToFace
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),													--@var: string | def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),										--@var: string | defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,														--@var: name | category | Categoria de la tool.
+		className = lb.getFileToolName (getThisScriptFilename() as string),		--@var: string | className | Nombre de la tool.
+		description = "Attach Object To Face",									--@var: string | description | Descripcion de la tool.
+		
+		cfgFile = (lb.config.getToolsIniPath()) + (lb.getFileToolName (getThisScriptFilename() as string)) + ".cfg",	--@var: string | cfgFile | Archivo de configuracion de la tool.
+			
+		opened = false,															--@var: boolean | opened | Indica si la herramienta está abierta.
+			
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+
+		intRay = undefined, 													--@var: ray | intRay | variable que contendra el rayo que se lanza para intersecar con la superficie del objeto al que atachar.
+
+		attachPro = lb.attachObjectToFaceFunctions.attachPro, 					--@var: struct | attachPro | Objeto de tipo attachPro para guardar la información de attach del objeto.
+
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--ROLLOUTS
+		------------------------------------------------------------------------------------------------
+		
+		rollMain = rollMainDef,													--@var: rollout | rollMain | Almacena el rollout principal de la herramienta.
+			
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+
+		------------------------------------------------
+		--@fn: boolean | hasAttachProControllers | Consulta si el objeto tiene controladores attachPro
+		--@returns: boolean | undefined | Devuelve **TRUE** si el objeto tiene controladores attachPro
+		------------------------------------------------		
+		fn hasAttachProControllers obj = 
+		(
+			(getAttachProControllers obj)[3] != undefined
+		),
+
+		------------------------------------------------
+		--@fn: undefined | deleteAttachProControllers | Elimina los controladores de attachpro del objeto pasado por parametros.
+		--@gets: node | obj | El objeto al que eliminarle los controladores.
+		------------------------------------------------
+		fn deleteAttachProControllers obj = 
+		(
+			--	eliminamos el controlador de posición
+			if classOf obj.pos.controller == position_list then
+				for i = obj.pos.controller.count to 1 by -1 where getSubAnimName obj.pos.controller i == lb.attachObjectToFaceFunctions.attachProPosControllerName do
+					obj.pos.controller.delete i
+					
+			--	Eliminamos el controlador de rotación
+			if isProperty obj #rotation and classOf obj.rotation.controller == rotation_list then
+				for i = obj.rotation.controller.count to 1 by -1 where getSubAnimName obj.rotation.controller i == lb.attachObjectToFaceFunctions.attachProRotControllerName do
+					obj.rotation.controller.delete i
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | addAttachProControllers | Añade un controlador de attachPro al objeto pasado por parametros, 
+		--@gets: node | obj | El objeto al que añadirle el controlador attachPro
+		--@gets: node | targetObj | El objeto objetivo del attachment.
+		------------------------------------------------		
+		fn addAttachProControllers obj targetObj = 
+		(
+			_activePosController = undefined
+			_activeRotController = undefined
+			
+			-- Nos aseguramos de que no duplicamos dos attachments
+			this.deleteAttachProControllers obj
+			
+			--	Añadimos el controlador de posición. Es un position script.
+			if classOf obj.pos.controller != position_list then
+				obj.pos.controller = position_list()
+			
+			--	Añadimos el controlador de rotación. Es un euler_xyz que se controla desde el position script
+			if isProperty obj #rotation and classOf obj.rotation.controller != rotation_list then
+				obj.rotation.controller = rotation_list()
+			
+			_activePosController = obj.position.controller.getActive()
+			if isProperty obj #rotation then _activeRotController = obj.rotation.controller.getActive()
+			
+			case lb.attachObjectToFaceFunctions.AOTFattachMode of
+			(
+				#animBake:
+				(
+					numContPos = (obj.position.controller.getCount()) + 1
+					
+					--	Arrastramos todos los controladores una posición adelante para dejar el primero el attachPro
+					obj.position.controller[numContPos].controller = position_xyz()
+					
+					
+					--	Para identificar los controladores attachPro le ponemos un nombre identificable
+					obj.position.controller.setName numContPos lb.attachObjectToFaceFunctions.attachProPosControllerName
+					
+					--	Dejamos activo el controlador que teníamos antes de añadir el attachPro
+					obj.position.controller.setActive _activePosController
+						
+					--	 repetimos los pasos para rotación comprobando que podemos operar sobre ella (no se podría en los objetos con target
+					if isProperty obj #rotation then
+					(
+						numContRot = (obj.rotation.controller.getCount()) + 1
+						obj.rotation.controller[numContRot].controller = euler_xyz()
+						obj.rotation.controller.setName numContRot lb.attachObjectToFaceFunctions.attachProRotControllerName
+						obj.rotation.controller.setActive _activeRotController
+					)
+						
+					custAttributes.add obj.position.controller[numContPos].controller CA_attachPro
+					
+					obj.position.controller[numContPos].targetObj = targetObj.name
+				)
+				
+				#attach:
+				(
+					--	Arrastramos todos los controladores una posición adelante para dejar el primero el attachPro
+					for i = obj.pos.controller.count to 1 by -1 do 
+					(
+						obj.position.controller[i+1].controller = copy obj.position.controller[i].controller 
+						obj.position.controller.setName (i + 1) (obj.position.controller.getName i)
+					)
+					
+					for i = obj.rotation.controller.count to 1 by -1 do 
+					(
+						obj.rotation.controller[i+1].controller = copy obj.rotation.controller[i].controller 
+						obj.rotation.controller.setName (i + 1) (obj.rotation.controller.getName i)
+					)
+					
+					c = position_script()
+					obj.pos.controller[1].controller = c
+					
+					-- Añadimos todas las variables internas del script
+					c.AddNode "_targetObj" targetObj
+					c.AddNode "_selfNode" obj
+					c.AddConstant "_vert1" -1
+					c.AddConstant "_vert2" -1
+					c.AddConstant "_vert3" -1
+					c.AddConstant "_AlignToFace" false
+					c.AddConstant "_flipAxis" false
+					c.AddConstant "_xAxis" 1
+					c.AddConstant "_barCoords" [0,0,0]
+					
+					obj.rotation.controller[1].controller = euler_xyz()
+					
+					c.AddObject "_attachRotController" obj.rotation.controller[1]
+					
+					--	Para identificar los controladores attachPro le ponemos un nombre identificable
+					obj.position.controller.setName 1 lb.attachObjectToFaceFunctions.attachProPosControllerName
+					obj.rotation.controller.setName 1 lb.attachObjectToFaceFunctions.attachProRotControllerName
+					
+					--	Dejamos activo el controlador que teníamos antes de añadir el attachPro
+					obj.position.controller.setActive (_activePosController + 1)
+					obj.rotation.controller.setActive (_activeRotController + 1)
+				)
+			)
+		),
+
+		------------------------------------------------
+		--@fn: undefined | addEditMeshModifier | Funcion en la que añade un editMesh por encima de todo para operar antes de lanzar los rayos de colision ya que la funcion rayExt necesita que sea un editMesh.
+		--@gets: node | obj | El objeto al que añadirle el modificador.
+		------------------------------------------------		
+		fn addEditMeshModifier obj  =
+		(
+			modCheck = (Edit_Mesh ())
+			modCheck.name = lb.attachObjectToFaceFunctions.AOTFattachModName
+			
+			addmodifier obj modCheck
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | addEditMeshModifier | Funcion que elimina los modificadores auxiliares de edit_mesh, usados para poder calcular la intersección del rayo con 
+		--@gets: node | obj | El objeto al que borrar el modificador.
+		------------------------------------------------			
+		fn deleteEditMeshModifier obj  =
+		(
+			m = obj.modifiers[lb.attachObjectToFaceFunctions.AOTFattachModName]	-- capturamos el modificador auxiliar
+			
+			if m != undefined then
+				deleteModifier obj m
+		),
+
+		------------------------------------------------
+		--@fn: boolean | meshFilter | Consulta si el objeto pasado por parametros es geometría.
+		--@gets: node | obj | El objeto al que realizar la consulta.
+		--@returns: boolean | undefined | Devuelve **TRUE** si el objeto tiene la superclase geometryClass (si se trata de geometria)
+		------------------------------------------------		
+		fn meshFilter obj =
+		(
+			(superClassOf obj == geometryClass) and (obj != $)
+		),
+
+		------------------------------------------------
+		--@fn: boolean | meshFilter | Funcion la cual situa el objeto que se le ha pasado en la posicion donde hemos pinchado. Se le añade un tranformScript donde se calcula su posicion y orientación según la normal y la cara que le hemos pasado.
+		--@comment: Es necesario pasarle el objeto y opcional ALIGNTOFACE el cual añadira al script la parte de funcionalidad para que se oriente con la normal del poligono.
+		--@gets: node | obj | El objeto sobre el que configurar el attach.
+		--@gets: struct | attachProData | Sruct de tipo attachProdata donde se registrará la información del attach.
+		------------------------------------------------			
+		fn setAttachProData obj attachProData =
+		(
+			case lb.attachObjectToFaceFunctions.AOTFattachMode of
+			(
+				#animBake:
+				(
+					lb.attachObjectToFaceFunctions.attachPro.posController.targetObj 		= attachProData.targetObj.name
+					lb.attachObjectToFaceFunctions.attachPro.posController.alignToFace 	= attachProData.alignToFace
+					lb.attachObjectToFaceFunctions.attachPro.posController.face 				= attachProData.face
+					lb.attachObjectToFaceFunctions.attachPro.posController.keepOffset		= attachProData.keepOffset
+					if isProperty lb.attachObjectToFaceFunctions.attachPro.posController #inheritRotation then lb.attachObjectToFaceFunctions.attachPro.posController.inheritRotation = attachProData.inheritRotation
+					lb.attachObjectToFaceFunctions.attachPro.posController.initialOffset		= attachProData.initialOffset
+					lb.attachObjectToFaceFunctions.attachPro.posController.barCoords		= attachProData.barCoords
+					lb.attachObjectToFaceFunctions.attachPro.posController.xAxis				= attachProData.xAxis
+					lb.attachObjectToFaceFunctions.attachPro.posController.flipAxis			= attachProData.flipAxis
+				)
+				
+				#attach:
+				(
+					-- añadimos el transform script y creamos las variables y constantes que utilizaremos dentro.
+					script = position_script()
+					
+					-- Iniciamos todas las variables internas del script
+					lb.attachObjectToFaceFunctions.attachPro.posController.SetNode "_targetObj" attachProData.targetObj
+					lb.attachObjectToFaceFunctions.attachPro.posController.SetNode "_selfNode" obj
+					lb.attachObjectToFaceFunctions.attachPro.posController.SetConstant "_vert1" attachProData.vert1
+					lb.attachObjectToFaceFunctions.attachPro.posController.SetConstant "_vert2" attachProData.vert2
+					lb.attachObjectToFaceFunctions.attachPro.posController.SetConstant "_vert3" attachProData.vert3
+					lb.attachObjectToFaceFunctions.attachPro.posController.SetConstant "_barCoords" attachProData.barCoords
+					lb.attachObjectToFaceFunctions.attachPro.posController.SetConstant "_AlignToFace" attachProData.alignToFace
+					lb.attachObjectToFaceFunctions.attachPro.posController.SetConstant "_flipAxis" attachProData.flipAxis
+					lb.attachObjectToFaceFunctions.attachPro.posController.SetConstant "_xAxis" attachProData.xAxis
+					lb.attachObjectToFaceFunctions.attachPro.posController.SetObject "_attachRotController" attachProData.rotController
+					
+					--Montamos la expresion que luego añadiremos.
+					script = "dependsOn _targetObj\n\n" 
+					
+					-- Obtiene la posicion de los dos primeros vertices del triangulo capturado. y evitar que se calculen por cada frame 
+					-- y lo más importante, que la posicion del objeto atachado no varia respecto a la sudivision de la malla.
+					script += "p1 = getvert _targetObj.mesh _vert1 \n"
+					script += "p2 = getvert _targetObj.mesh _vert2 \n"
+					script += "p3 = getvert _targetObj.mesh _vert3 \n\n"
+					
+					-- Construimos los ejes de transformación
+					script += "-- Construimos los ejes de transformación \n"
+					script += "vX = normalize (p2 - p1)\n"
+					script += "vY = normalize (p3 - p1)\n\n"
+					script += "vZ = normalize (cross vX vY)\n"
+					script += "vY = normalize (cross vZ vX)\n\n"
+					
+					-- Montamos una matrix y una posicion por defecto.
+					script += "-- Montamos una matriz y una posicion por defecto.\n"
+					script += "pos = [0,0,0]\n\n"
+					
+					-- Solo se añade si tenemos la opción de alignToFace puesta.
+					script += "if _alignToFace then\n"
+					script += "(\n"
+					script += "	mTemp  = matrix3 1\n"
+					-- Cambia el tipo de eje segun el valor que le pasemos a xAxis, alineado con la normal, x, y o z.
+					script += "	-- Cambia el tipo de eje segun el valor que le pasemos a xAxis, alineado con la normal, x, y o z. \n"
+					script += "	case _xAxis of \n"
+					script += "	(\n"
+					script +=	"		1: mTemp = if not _flipAxis then (matrix3 vX vY vZ pos) else (matrix3 -vX -vY vZ pos) \n"
+					script += "		2: mTemp = if not _flipAxis then (matrix3 -vY vX vZ pos) else (matrix3 -vY -vX -vZ pos) \n"
+					script +=	"		3: mTemp = if not _flipAxis then (matrix3 vZ -vY vX pos) else (matrix3 -vZ -vY -vX pos) \n"
+					script += "	)\n\n"
+				
+					-- Como las posiciones de los vértices se devuelven en local 
+					-- se ignoran las transformaciones del objeto. Las restauramos.
+					script += "	-- Como las posiciones de los vértices se devuelven en local \n" 
+					script += "	-- se ignoran las transformaciones del objeto. Las restauramos.\n"
+					script += "	m = mTemp *  _targetObj.transform\n\n"	
+
+					-- Cogemos la rotacion de la matriz que hemos hecho y lo pasamos a quaternion para asignarlo a la rotación de si misma.
+					script += "	-- Cogemos la rotacion de la matriz que hemos hecho y lo pasamos a \n"
+					script += "	--	quaternion para asignarlo a la rotación de si misma.\n"
+					script += "	rot = (m as quat)\n"
+					script += "	_attachRotController.value = rot\n\n"
+					script += ")\n"
+					script += "else\n"
+					script += "	_attachRotController.value = quat 1\n"
+					
+					-- Establecemos la posicion y la multiplicamos por la tranformación del objeto para que sea absoluta.
+					script += "--Establecemos la posicion y la multiplicamos por la tranformación\n--del objeto para que sea absoluta\n"
+					script += "pos =  (_barCoords[1] * p1 + _barCoords[2] * p2 + _barCoords[3] * p3)  * _targetObj.transform \n"
+					script += "if  _selfNode.parent != undefined then pos = pos * inverse _selfNode.parent.transform\n\n"
+					
+					-- Devolvemos la posicion al script.
+					script += "pos" 
+					
+					-- Añadimos el script y la expresion montada.
+					lb.attachObjectToFaceFunctions.attachPro.posController.script = script
+				)
+			)
+		),
+
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+		
+		------------------------------------------------
+		--@fn: boolean | isOpen | Devuelve información true o false, si la herramienta está abierta o cerrada.
+		--@returns: boolean | undefined | Devuelve **TRUE** si la herramienta está abierta.
+		------------------------------------------------
+		fn isOpen =
+		(
+			this.opened
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | refreshInterface | Refresca el interface inicial de la herramienta
+		------------------------------------------------
+		fn refreshInterface =
+		(
+			--refresca el interface de la herramienta
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | createInterface | Crea el interface inicial de la herramienta
+		------------------------------------------------
+		fn createInterface =
+		(
+			--crea el interface, lo redimensiona y lo reposiciona
+			createDialog this.rollMain lockwidth:false lockheight:false pos:[-10000,0] style:#(#style_toolwindow, #style_titlebar, #style_sysmenu, #style_resizing)
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | destroyInterface | Destruye el interface de la herramienta.
+		------------------------------------------------
+		fn destroyInterface =
+		(
+			destroyDialog this.rollMain --cierra la herramienta.			
+		),--destroyInterface
+		
+		------------------------------------------------
+		--@fn: undefined | run | Lanza la herramienta.
+		------------------------------------------------
+		fn run =
+		(
+			this.createInterface() --crea el interface.
+			this.opened = true --indica que la herramienta está abierta
+		),--execute
+		
+		------------------------------------------------
+		--@fn: undefined | close | Cierra la herramienta.
+		------------------------------------------------
+		fn close =
+		(
+			this.destroyInterface() --destruye el interface.
+			this.opened = false --indica que la herramienta está cerrada.
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addTool this --añade la tool a la libreria principal	
+		)			
+	)--tl_attachObjectToFace
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------	
+	
+	tl_attachObjectToFace() --crea la herramienta
+)

@@ -1,0 +1,18 @@
+<settings>
+  <projectInfo>
+    <updateFromServer>true</updateFromServer>
+    <exe>R:\resource\technical\utilities\0023_getProjectInfo\getProjectInfo.exe</exe>
+    <destination>stdplugs\stdscripts\lbTools\cnfg\projectInfo\</destination>
+    <projectsIndex>projectInfo.xml</projectsIndex>
+  </projectInfo>
+  <tools>
+    <scripts>
+      <path>stdplugs\stdScripts\</path>
+      <folder>lbTools</folder>
+    </scripts>
+    <macros>
+      <path>MacroScripts\</path>
+      <folder>lbTools</folder>
+    </macros>
+  </tools>
+</settings>

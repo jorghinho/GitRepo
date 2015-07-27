@@ -1,0 +1,229 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--Descripcion: libreria de plantilla
+------------------------------------------------------------------------------------------------------------------------------------------------
+(	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--@struct: template | Contiene la libreria de plantilla.
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	struct lib_template
+	(
+		------------------------------------------------------------------------------------------------
+		--COMMON
+		------------------------------------------------------------------------------------------------
+		
+		def = (classof this),				--@var: def | Almacena la definicion del struct.
+		defFile = getThisScriptFilename(),	--@var: defFile | Almacena la ruta del propio archivo de script que contiene la definicion.
+		
+		category = #main,					--@var: category | Categoria de la libreria.
+		className = lb.getFileLibName (getThisScriptFilename() as string),	--@var: className | Nombre de la libreria.
+		description = "Libreria plantilla",	--@var: description | Descripcion de la libreria.
+		
+		------------------------------------------------------------------------------------------------
+		--VARIABLES
+		------------------------------------------------------------------------------------------------
+			
+		------------------------------------------------------------------------------------------------
+		--LIBRARIES
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------------------------------------------------------
+		--FUNCTIONS
+		------------------------------------------------------------------------------------------------
+		/*
+		*=====================================================
+		* Código de BLUR para obtener todos los bitmaps de la escena
+		*=====================================================
+		*/
+		fn trim_dups a = 
+		(
+			for i in a.count to 1 by -1 do 
+			(
+				idx = findItem a a[i]
+				if (idx != 0) AND (idx != i) do deleteItem a i
+			)
+			a
+		),
+		
+		fn lowercase instring =
+		(
+			upper="ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+			lower="abcdefghijklmnopqrstuvwxyz" 
+			outstring=copy instring 
+			for i = 1 to outstring.count do 
+			(
+				j=findString upper outstring[i]
+				if (j != undefined) do outstring[i]=lower[j]
+			)
+			outstring
+		),
+		
+		fn name_compare_case_insensitive s1 s2 = 
+		(
+			if (this.lowercase s1.name) < (this.lowercase s2.name) then return -1
+			else if (this.lowercase s1.name) > (this.lowercase s2.name) then return 1
+			else return 0
+		),
+		
+		fn get_maps_from_mat mat x = 
+		(
+			if mat.numsubs != 0 then
+			(
+				for i = 1 to mat.numsubs do
+				(
+					if mat[i] != undefined then
+					(
+						if classof mat[i] == SubAnim then
+						(
+							if superclassof mat[i].object == textureMap then
+							(
+								if mat[i].object != undefined then append x mat[i].object
+							)
+						)
+						this.get_maps_from_mat mat[i] x
+					)
+				)
+			)
+		),
+		
+		fn get_sub_materials mat x = 
+		(
+			if mat.numsubs != 0 then
+			(
+				for i = 1 to mat.numsubs do
+				(
+					if mat[i] != undefined then
+					(
+						if iskindof mat[i] material == true then 
+						(
+							if classof mat[i] == SubAnim then
+							(
+								if superclassof mat[i].object == material then 
+								(
+									if finditem x (mat[i].object) == 0 then append x (mat[i].object)
+								)
+							)
+							if superclassof mat[i] == material then 
+							(
+								if finditem x (mat[i]) == 0 then append x (mat[i])
+							)
+						)
+						this.get_sub_materials mat[i] x
+					)
+				)
+			)
+		),
+		
+		fn get_all_materials mat = 
+		(
+			aa = #()
+			x = #()
+			append aa mat
+			this.get_sub_materials mat x
+			for i in x do
+			(
+				if finditem aa i == 0 then append aa i
+			)
+			return aa
+		),
+		
+		fn get_all_scene_materials = 
+		(
+			a = #()
+			for i in $* do
+			(
+				if i.material != undefined then
+				(
+					for i in (this.get_all_materials i.material) do
+					(
+						if (finditem a i) == 0 then append a i
+					)
+				)
+			)
+			qsort a this.name_compare_case_insensitive
+			return a
+		),
+		
+		fn get_all_scene_maps = 
+		(
+			mats = this.get_all_scene_materials()
+			b = #()
+			for m in mats do
+			(
+				a = #()
+				this.get_maps_from_mat m a
+				join b a
+			)
+			trim_dups b
+			qsort b this.name_compare_case_insensitive
+			return b
+		),
+		
+		fn get_bitmaps_from_maps a = 
+		(
+			b = #()
+			for i in a do
+			(
+				if classof i == Bitmaptexture then append b i
+			)
+			return b
+		),
+		
+		/* 
+		final del código de BLUR 
+		=====================================================*/
+		
+		
+		------------------------------------------------
+		--GETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--SETS
+		------------------------------------------------
+		
+		------------------------------------------------
+		--OTHER
+		------------------------------------------------
+		
+		------------------------------------------------
+		--COMMON
+		------------------------------------------------
+			
+		------------------------------------------------
+		--@fn: undefined | initSubLibraries | Inicializa todas las sublibrerías en el orden establecido.
+		------------------------------------------------
+		fn initSubLibraries =
+		(
+			_subLibraries = #()
+			
+			for sl in _subLibraries do sl.init()
+		),
+		
+		------------------------------------------------
+		--@fn: undefined | init | Inicializa la librería.
+		------------------------------------------------
+		fn init =
+		(		
+			this.initSubLibraries() --inicialza las librerías hijas
+		),		
+		
+		------------------------------------------------------------------------------------------------
+		--EVENTS
+		------------------------------------------------------------------------------------------------
+		
+		------------------------------------------------
+		--@event: create | Ejecución al crearse la instancia del struct.
+		------------------------------------------------
+		on create do
+		(
+			lb.addLibrary this --añade la libreria a la principal
+		)
+		
+	)--lib_template
+	
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	--EXECUTION
+	------------------------------------------------------------------------------------------------------------------------------------------------
+	
+	lib_template() --crea la libreria
+)
